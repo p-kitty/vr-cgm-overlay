@@ -106,18 +106,11 @@ headset.
 Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning.
 
-## Not verified
+## Known limits
 
-**None of the VR behaviour has been tested on a headset.** The renderer
-(`tools/preview.py`) and the API client (`--dry-run`) are confirmed
-working; everything below needs a device.
-
-- Which way up `setOverlayRaw` wants the image (if inverted, set
-  `flip_vertical = true`)
-- Whether the default `offset` / `rotation_deg` land sensibly on a wrist
-- `triggerHapticPulse`. Devices on the newer input system, Index
-  controllers among them, may ignore it. **Haptics are a supplement;
-  colour is the real alert.**
+The low-glucose buzz does not work on Quest 3 controllers, and may be
+ignored by any device on the newer input system. **Haptics are a
+supplement; colour is the real alert.**
 
 ## Cautions
 

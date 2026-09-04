@@ -11,6 +11,15 @@ Glucose data comes from the unofficial LibreLinkUp API.
 Single Python process. See `README.md` for the architecture and for the
 list of LibreLinkUp API quirks the client works around.
 
+`NOTES.md` holds what is still open: unverified paths, limits that are
+not going away, decisions that still stand. Keep it out of `README.md`,
+which is for people running the thing.
+
+**Take an entry out once it is resolved.** A fixed bug belongs in its
+commit message and in a comment beside the code it bit, not in a file
+that grows until nobody reads it. `NOTES.md` records what is still true,
+never what happened.
+
 ## Language
 
 **Write everything in English.** This applies to:
