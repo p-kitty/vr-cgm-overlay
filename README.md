@@ -106,6 +106,17 @@ headset.
 Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning.
 
+`[thresholds]` sets the colour bands. All four are mg/dL and are used
+even in mmol/L mode, so changing the display unit cannot quietly change
+what counts as a low.
+
+| Reading | Colour |
+|---|---|
+| below `low_mgdl` (70) | red |
+| `low_mgdl` to `high_mgdl` (70-180) | green |
+| above `high_mgdl` to `very_high_mgdl` (181-240) | yellow |
+| above `very_high_mgdl` (240) | deep orange |
+
 ## Known limits
 
 The low-glucose buzz does not work on Quest 3 controllers, and may be

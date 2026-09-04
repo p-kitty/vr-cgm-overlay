@@ -33,8 +33,9 @@ To exercise the low path without waiting for a real low, set
 `thresholds.low_mgdl` above the current reading and restart: the first
 draw counts as a transition into a low, which colours the face red and
 fires the buzz. It has to stay under `high_mgdl`, because `_validate`
-rejects anything breaking `urgent_low < low < high`; raise `high_mgdl`
-too when the reading is already above it. Put both back afterwards.
+rejects anything breaking `low < high < very_high`; raise
+`high_mgdl` and `very_high_mgdl` too when the reading is already above
+them. Put them all back afterwards.
 
 ## Haptics do not work on Quest 3
 

@@ -36,9 +36,9 @@ class Config:
     flip_vertical: bool = False
     stale_after_min: float = 10.0
 
-    urgent_low_mgdl: float = 54.0
     low_mgdl: float = 70.0
     high_mgdl: float = 180.0
+    very_high_mgdl: float = 240.0
 
     poll_interval_sec: float = 60.0
     alert_on_low: bool = True
@@ -75,9 +75,9 @@ def load(path: Path) -> Config:
     cfg.flip_vertical = bool(display.get("flip_vertical", cfg.flip_vertical))
     cfg.stale_after_min = float(display.get("stale_after_min", cfg.stale_after_min))
 
-    cfg.urgent_low_mgdl = float(thresholds.get("urgent_low_mgdl", cfg.urgent_low_mgdl))
     cfg.low_mgdl = float(thresholds.get("low_mgdl", cfg.low_mgdl))
     cfg.high_mgdl = float(thresholds.get("high_mgdl", cfg.high_mgdl))
+    cfg.very_high_mgdl = float(thresholds.get("very_high_mgdl", cfg.very_high_mgdl))
 
     cfg.poll_interval_sec = float(polling.get("interval_sec", cfg.poll_interval_sec))
     cfg.alert_on_low = bool(polling.get("alert_on_low", cfg.alert_on_low))
@@ -102,10 +102,10 @@ def _validate(cfg: Config) -> None:
     if len(cfg.offset) != 3 or len(cfg.rotation_deg) != 3:
         raise ValueError("display.offset and rotation_deg must have three elements")
 
-    if not (cfg.urgent_low_mgdl < cfg.low_mgdl < cfg.high_mgdl):
+    if not (cfg.low_mgdl < cfg.high_mgdl < cfg.very_high_mgdl):
         raise ValueError(
-            "thresholds must satisfy urgent_low < low < high: "
-            f"{cfg.urgent_low_mgdl} / {cfg.low_mgdl} / {cfg.high_mgdl}"
+            "thresholds must satisfy low < high < very_high: "
+            f"{cfg.low_mgdl} / {cfg.high_mgdl} / {cfg.very_high_mgdl}"
         )
 
     # Polling harder than the official app risks being rate limited or cut
