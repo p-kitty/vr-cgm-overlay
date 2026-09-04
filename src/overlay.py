@@ -14,6 +14,7 @@ import logging
 import math
 
 import openvr
+from PIL import Image
 
 log = logging.getLogger(__name__)
 
@@ -83,9 +84,12 @@ class WristOverlay:
 
         # Index we last attached to, kept to detect changes.
         self._attached_index: int | None = None
-        # The buffer handed to setOverlayRaw has to outlive the call, so it
-        # is held on the instance rather than left to the garbage collector.
+        # The compositor reads this buffer after setOverlayRaw returns, so
+        # it is allocated once and overwritten in place. Handing over a
+        # fresh one each frame let the old one be freed mid-upload, which
+        # showed up in the headset as a flicker once a second.
         self._buffer = None
+        self._buffer_size: tuple[int, int] | None = None
 
         log.info("created overlay (hand=%s, width=%.3fm)", hand, width_m)
 
@@ -137,17 +141,33 @@ class WristOverlay:
     # -- drawing ------------------------------------------------------------
 
     def set_image(self, image) -> None:
-        """Use a PIL RGBA image as the overlay texture."""
+        """Use a PIL RGBA image as the overlay texture.
+
+        Does nothing when the pixels match what is already on screen. The
+        draw loop runs every second so the age readout stays current, but
+        the face itself only changes about once a minute, and every upload
+        is a chance for the compositor to show a torn frame.
+        """
         if image.mode != "RGBA":
             image = image.convert("RGBA")
         if self._flip_vertical:
-            image = image.transpose(3)  # Image.FLIP_TOP_BOTTOM
+            image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 
         data = image.tobytes()
-        self._buffer = (ctypes.c_char * len(data)).from_buffer_copy(data)
+        size = (image.width, image.height)
+
+        if self._buffer_size != size:
+            self._buffer = (ctypes.c_char * len(data))()
+            self._buffer_size = size
+        elif self._buffer.raw == data:
+            return
+
+        self._buffer.raw = data  # in place: the pointer must not move
+        # pyopenvr applies byref() to this itself, so hand it the ctypes
+        # array as-is; wrapping it here raises a TypeError on the way in.
         self._overlay.setOverlayRaw(
             self._handle,
-            ctypes.byref(self._buffer),
+            self._buffer,
             image.width,
             image.height,
             4,  # RGBA
