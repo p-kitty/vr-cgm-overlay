@@ -30,15 +30,28 @@ Nothing has exercised these yet. Each says how to check it.
   moves in VR. With the process running, edit `display.rotation_deg` and
   save: the log should print a `placement:` line and the face should
   turn within a second.
-- **Orbit mode.** The geometry is asserted by `tools/check_orbit.py`, but
-  nothing has judged it on an arm. With `display.orbit = true`, hold the
-  controller still and move your head around it: the face should slide
-  round the forearm to stay in front of you, easing rather than snapping,
-  and stop before it reaches the underside. Then hold your head still and
-  roll your wrist palm-up and palm-down: the face should stay put in the
-  room and never enter your arm. If it comes out sideways or upside down,
-  the axis convention here is wrong by a quarter or a half turn, and
-  `rotation_deg` Z will say which.
+- **Orbit mode.** `tools/check_orbit.py` asserts the geometry, but nothing
+  has judged it on an arm. `config.toml` is watched, so all of this is
+  done with the headset on, and `orbit = false` puts the old fixed
+  placement back at any point. With `display.orbit = true`:
+
+  1. **Move your head, not your hand.** Hold the controller still and
+     lean around it. The face should slide round the forearm to stay in
+     front of you, easing rather than snapping, and stop before it
+     reaches the underside of the arm.
+  2. **Move your hand, not your head.** Hold your head still and roll
+     your wrist palm-up and palm-down. The face should stay put in the
+     room and never enter your arm. This is the case a fixed placement
+     cannot do, so it is the one that says whether the mode works.
+  3. **Watch what it circles.** It should turn about the arm. A wide arc
+     swinging past your arm means `offset` X and Y are not on the
+     forearm's centreline. Y usually wants to be negative, the controller
+     origin sitting above the wrist.
+  4. **Read the digits.** Sideways or upside down means the axis
+     convention in `_orbit_transform` is out by a quarter or a half turn.
+     Put 90 or 180 into `rotation_deg` Z to find which, then correct the
+     basis: leaving it in the trim hides a wrong convention behind a
+     number that is supposed to be a nudge.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
@@ -50,6 +63,24 @@ fires the buzz. It has to stay under `high_mgdl`, because `_validate`
 rejects anything breaking `low < high < very_high`; raise
 `high_mgdl` and `very_high_mgdl` too when the reading is already above
 them. Put them all back afterwards.
+
+## Gaze fade would have to be a mode
+
+Desktop+ fades an overlay out when it is not being looked at, which
+suits something wanted glanceable but not permanently in view. The same
+trick fits here, and is cheap: orbit mode already works out where the
+head is relative to the face, and `setOverlayAlpha` is already called.
+
+It is not in. If it goes in it goes in switchable and off by default,
+because a glucose readout is not a desktop window, and two things would
+have to hold:
+
+- **A floor on the alpha, never zero.** Something that vanished outright
+  would look exactly like the process having died, which is the failure
+  this whole thing exists to avoid.
+- **No fading while low.** Colour is the alert. Dimming it at the moment
+  it matters most inverts the priority.
+
 
 ## Haptics do not work on Quest 3
 
