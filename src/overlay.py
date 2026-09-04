@@ -145,9 +145,11 @@ class WristOverlay:
 
         data = image.tobytes()
         self._buffer = (ctypes.c_char * len(data)).from_buffer_copy(data)
+        # pyopenvr applies byref() to this itself, so hand it the ctypes
+        # array as-is; wrapping it here raises a TypeError on the way in.
         self._overlay.setOverlayRaw(
             self._handle,
-            ctypes.byref(self._buffer),
+            self._buffer,
             image.width,
             image.height,
             4,  # RGBA
