@@ -14,6 +14,7 @@ import logging
 import math
 
 import openvr
+from PIL import Image
 
 log = logging.getLogger(__name__)
 
@@ -141,7 +142,7 @@ class WristOverlay:
         if image.mode != "RGBA":
             image = image.convert("RGBA")
         if self._flip_vertical:
-            image = image.transpose(3)  # Image.FLIP_TOP_BOTTOM
+            image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
 
         data = image.tobytes()
         self._buffer = (ctypes.c_char * len(data)).from_buffer_copy(data)
