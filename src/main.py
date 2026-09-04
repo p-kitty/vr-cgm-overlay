@@ -89,7 +89,7 @@ def build_theme(cfg: config_mod.Config) -> Theme:
     return Theme(
         low_mgdl=cfg.low_mgdl,
         high_mgdl=cfg.high_mgdl,
-        urgent_low_mgdl=cfg.urgent_low_mgdl,
+        very_high_mgdl=cfg.very_high_mgdl,
     )
 
 

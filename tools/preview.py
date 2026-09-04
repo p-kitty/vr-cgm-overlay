@@ -41,8 +41,8 @@ def main() -> int:
         renderer.render(reading(112, 3, 1)),      # in range, flat
         renderer.render(reading(88, 2, 2)),       # in range, falling
         renderer.render(reading(64, 1, 1)),       # low, falling fast
-        renderer.render(reading(48, 1, 0.5)),     # urgent low
         renderer.render(reading(214, 5, 3)),      # high, rising fast
+        renderer.render(reading(268, 4, 2)),      # very high
         renderer.render(reading(133, 4, 27)),     # stale
         renderer.render_message("NO CONNECTION", detail="no reading yet"),
         renderer.render_message("CONNECTING"),

@@ -38,20 +38,25 @@ class Theme:
 
     low_mgdl: float = 70.0
     high_mgdl: float = 180.0
-    urgent_low_mgdl: float = 54.0
+    very_high_mgdl: float = 240.0
 
     color_in_range: tuple[int, int, int] = (126, 231, 135)   # green
     color_low: tuple[int, int, int] = (255, 107, 107)        # red
-    color_urgent_low: tuple[int, int, int] = (255, 61, 61)   # deep red
-    color_high: tuple[int, int, int] = (255, 199, 89)        # amber
+    color_high: tuple[int, int, int] = (255, 230, 64)        # yellow
+    color_very_high: tuple[int, int, int] = (255, 143, 38)   # deep orange
     color_stale: tuple[int, int, int] = (150, 150, 155)      # grey
     color_bg: tuple[int, int, int, int] = (14, 16, 22, 225)  # translucent black
 
     def status_color(self, mgdl: float) -> tuple[int, int, int]:
-        if mgdl <= self.urgent_low_mgdl:
-            return self.color_urgent_low
+        """Pick the status colour for a reading.
+
+        High is split in two so "drifting over range" and "far over range"
+        do not look alike: yellow up to very_high, deep orange past it.
+        """
         if mgdl < self.low_mgdl:
             return self.color_low
+        if mgdl > self.very_high_mgdl:
+            return self.color_very_high
         if mgdl > self.high_mgdl:
             return self.color_high
         return self.color_in_range

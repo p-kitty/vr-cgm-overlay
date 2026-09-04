@@ -38,9 +38,11 @@ stale_after_min = 10.0  # readings older than this go grey
 
 [thresholds]
 # All mg/dL. These are used even when displaying mmol/L.
-urgent_low_mgdl = 54
+# The face is red below low, green up to high, yellow up to very_high,
+# and deep orange above it.
 low_mgdl = 70
 high_mgdl = 180
+very_high_mgdl = 240
 
 
 [polling]
