@@ -5,6 +5,11 @@ shows up over any SteamVR title with no mods.
 
 A controller's device index changes when it sleeps, wakes or re-pairs, so
 the overlay is re-attached when the index changes rather than every frame.
+
+Placement is either fixed in controller space or, in orbit mode, computed
+each pass so the face rides around the forearm towards the head. Both are
+device-relative transforms, so the compositor still applies the live
+controller pose at frame rate either way.
 """
 
 from __future__ import annotations
@@ -24,6 +29,12 @@ OVERLAY_NAME = "VR CGM Wrist Glucose"
 
 # How often to re-check for SteamVR while waiting for it to come up.
 CONNECT_RETRY_SEC = 3.0
+
+# How far the orbit direction moves towards its target each update. The
+# transform is recomputed at the loop rate rather than the frame rate, so
+# easing hides the steps; it also stops the face twitching when the head is
+# nearly in line with the arm and the target direction is ill-conditioned.
+ORBIT_EASE = 0.25
 
 
 def _connect(retry_sec: float = CONNECT_RETRY_SEC):
@@ -53,15 +64,8 @@ def _connect(retry_sec: float = CONNECT_RETRY_SEC):
         return system
 
 
-def _make_transform(
-    offset: tuple[float, float, float], rotation_deg: tuple[float, float, float]
-) -> openvr.HmdMatrix34_t:
-    """Build an OpenVR 3x4 transform from a translation and euler angles.
-
-    Rotations are applied X, then Y, then Z. In controller space -Z is the
-    direction the controller points, +Y is up and +X is right, so moving
-    towards the wrist means increasing Z and raising it means increasing Y.
-    """
+def _euler_matrix(rotation_deg: tuple[float, float, float]) -> list[list[float]]:
+    """Build a 3x3 rotation from euler angles, applied X, then Y, then Z."""
     rx, ry, rz = (math.radians(a) for a in rotation_deg)
 
     cx, sx = math.cos(rx), math.sin(rx)
@@ -69,18 +73,104 @@ def _make_transform(
     cz, sz = math.cos(rz), math.sin(rz)
 
     # R = Rz * Ry * Rx
-    r = [
+    return [
         [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx],
         [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx],
         [-sy, cy * sx, cy * cx],
     ]
 
+
+def _matmul(a: list[list[float]], b: list[list[float]]) -> list[list[float]]:
+    return [
+        [sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)] for i in range(3)
+    ]
+
+
+def _to_openvr(
+    rotation: list[list[float]], translation: tuple[float, float, float]
+) -> openvr.HmdMatrix34_t:
     matrix = openvr.HmdMatrix34_t()
     for row in range(3):
         for col in range(3):
-            matrix.m[row][col] = r[row][col]
-        matrix.m[row][3] = offset[row]
+            matrix.m[row][col] = rotation[row][col]
+        matrix.m[row][3] = translation[row]
     return matrix
+
+
+def _make_transform(
+    offset: tuple[float, float, float], rotation_deg: tuple[float, float, float]
+) -> openvr.HmdMatrix34_t:
+    """A fixed pose in controller space: the face is bolted to the controller.
+
+    In controller space -Z is the direction the controller points, +Y is up
+    and +X is right, so moving towards the wrist means increasing Z and
+    lifting it off the back of the hand means increasing Y.
+    """
+    return _to_openvr(_euler_matrix(rotation_deg), offset)
+
+
+def _orbit_transform(
+    centre: tuple[float, float, float],
+    radius: float,
+    limit_deg: float,
+    rotation_deg: tuple[float, float, float],
+    head: tuple[float, float, float],
+    previous: float | None,
+) -> tuple[openvr.HmdMatrix34_t, float]:
+    """Sit the face on the near side of the forearm, turned towards the head.
+
+    A fixed transform bolts the face to the controller, but the forearm is
+    not rigid relative to it. Rolling the wrist turns the hand roughly twice
+    as far as the forearm follows, so a placement that lies neatly on the arm
+    palm-down ends up buried inside it palm-up. Nor does it hide behind the
+    arm when that happens: an overlay is composited over the scene with no
+    depth test, so it visibly cuts through it.
+
+    The arm is modelled instead as a line through `centre` along the
+    controller's Z axis, and the face rides around that line to whichever
+    side the head is on, the way a watch slides round a wrist. It is then
+    outside the arm whatever the hand is doing, and square to the eye.
+
+    `previous` is the angle around the arm picked last time, eased away from
+    so a head turn does not snap the face across the arm. It is returned to
+    be passed back in on the next call.
+    """
+    # The arm axis is the controller's Z, so the perpendicular part of the
+    # direction to the head is just its X and Y. The whole choice is then a
+    # single angle around the arm, measured from the top of the wrist.
+    vx = head[0] - centre[0]
+    vy = head[1] - centre[1]
+    limit = math.radians(limit_deg)
+
+    if math.hypot(vx, vy) < 1e-4:
+        # The head is on the arm's axis: no side of it is nearer than any
+        # other, so stay where we are.
+        target = 0.0 if previous is None else previous
+    else:
+        # Hold it to the back of the wrist, where a watch lives. Unlimited,
+        # it follows the head round to the palm side and is read edge-on.
+        target = max(-limit, min(limit, math.atan2(vx, vy)))
+
+    if previous is None:
+        angle = target
+    else:
+        # Both ends are inside [-limit, limit], so easing between them stays
+        # inside it and sweeps over the top of the arm rather than under it.
+        # Only limit_deg = 180 has no forbidden side for that to matter.
+        angle = previous + (target - previous) * ORBIT_EASE
+
+    nx, ny = math.sin(angle), math.cos(angle)
+    position = (centre[0] + nx * radius, centre[1] + ny * radius, centre[2])
+
+    # Axes of the face in controller space, as columns: Z out of the face
+    # towards the head, Y up the texture towards the hand, X = Y x Z.
+    basis = [
+        [ny, 0.0, nx],
+        [-nx, 0.0, ny],
+        [0.0, -1.0, 0.0],
+    ]
+    # rotation_deg still applies, now as a trim in the face's own frame.
+    return _to_openvr(_matmul(basis, _euler_matrix(rotation_deg)), position), angle
 
 
 class WristOverlay:
@@ -100,11 +190,21 @@ class WristOverlay:
         rotation_deg: tuple[float, float, float] = (-40.0, 0.0, 0.0),
         opacity: float = 1.0,
         flip_vertical: bool = False,
+        orbit: bool = False,
+        orbit_radius_m: float = 0.06,
+        orbit_limit_deg: float = 120.0,
     ) -> None:
         self._hand = hand
         self._offset = offset
         self._rotation = rotation_deg
         self._flip_vertical = flip_vertical
+        self._orbit = orbit
+        self._orbit_radius = orbit_radius_m
+        self._orbit_limit = orbit_limit_deg
+        # Angle around the arm the face currently sits at, carried between
+        # updates so it can be eased rather than jumped. None means "no
+        # history yet", and the next update places it outright.
+        self._orbit_angle: float | None = None
 
         self._system = _connect()
         self._overlay = openvr.VROverlay()
@@ -121,6 +221,9 @@ class WristOverlay:
         # showed up in the headset as a flicker once a second.
         self._buffer = None
         self._buffer_size: tuple[int, int] | None = None
+        # Reused for every pose read: orbit mode reads poses on every pass
+        # of the loop, and a fresh array each time is pure churn.
+        self._poses = (openvr.TrackedDevicePose_t * openvr.k_unMaxTrackedDeviceCount)()
 
         log.info("created overlay (hand=%s, width=%.3fm)", hand, width_m)
 
@@ -137,26 +240,78 @@ class WristOverlay:
             return None
         return index
 
+    def _head_in_controller_space(self, index: int) -> tuple[float, float, float] | None:
+        """Where the headset is, in the controller's own frame.
+
+        None while either pose is missing, which happens for a moment around
+        a wake-up. Working in controller space is what lets orbit mode stay a
+        device-relative transform: the compositor keeps applying the live
+        controller pose at frame rate, and only the choice of which side of
+        the arm to sit on is left to this loop, where a little lag does not
+        show.
+        """
+        self._system.getDeviceToAbsoluteTrackingPose(
+            openvr.TrackingUniverseStanding, 0.0, self._poses
+        )
+        head = self._poses[openvr.k_unTrackedDeviceIndex_Hmd]
+        hand = self._poses[index]
+        if not (head.bPoseIsValid and hand.bPoseIsValid):
+            return None
+
+        h = head.mDeviceToAbsoluteTracking.m
+        c = hand.mDeviceToAbsoluteTracking.m
+        delta = [h[row][3] - c[row][3] for row in range(3)]
+        # The rotation block is orthonormal, so its transpose inverts it.
+        return tuple(
+            sum(c[row][col] * delta[row] for row in range(3)) for col in range(3)
+        )
+
+    def _apply_orbit(self, index: int) -> None:
+        head = self._head_in_controller_space(index)
+        if head is None:
+            return  # keep whatever is on screen until the poses come back
+        transform, self._orbit_angle = _orbit_transform(
+            self._offset,
+            self._orbit_radius,
+            self._orbit_limit,
+            self._rotation,
+            head,
+            self._orbit_angle,
+        )
+        self._overlay.setOverlayTransformTrackedDeviceRelative(
+            self._handle, index, transform
+        )
+
     def update_attachment(self) -> bool:
-        """Keep the controller attachment current.
+        """Keep the controller attachment, and in orbit mode the pose, current.
 
         True while a controller is present. False means there is nothing to
         attach to (powered off, for instance), which the caller can surface.
+
+        Call this on every pass of the loop, not only when redrawing: in
+        orbit mode it is what turns the face towards the head.
         """
         index = self._controller_index()
         if index is None:
             if self._attached_index is not None:
                 log.info("lost the %s controller", self._hand)
                 self._attached_index = None
+                self._orbit_angle = None
             return False
 
         if index != self._attached_index:
+            # The fixed transform goes on either way. In orbit mode it is
+            # what shows until a head pose can be read.
             transform = _make_transform(self._offset, self._rotation)
             self._overlay.setOverlayTransformTrackedDeviceRelative(
                 self._handle, index, transform
             )
             self._attached_index = index
+            self._orbit_angle = None
             log.info("attached to the %s controller (index=%d)", self._hand, index)
+
+        if self._orbit:
+            self._apply_orbit(index)
         return True
 
     def set_placement(
@@ -169,6 +324,10 @@ class WristOverlay:
         Re-attaching is how a transform is replaced: there is no separate
         "move it" call, so the index is cleared to make the next
         update_attachment set the new transform.
+
+        In orbit mode `offset` names a point on the forearm's centreline and
+        `rotation_deg` becomes a trim on the face's own axes; see
+        _orbit_transform.
         """
         if offset == self._offset and rotation_deg == self._rotation:
             return
@@ -179,6 +338,25 @@ class WristOverlay:
             "placement: offset=[%.3f, %.3f, %.3f] rotation=[%.1f, %.1f, %.1f]",
             *offset,
             *rotation_deg,
+        )
+
+    def set_orbit(self, enabled: bool, radius_m: float, limit_deg: float) -> None:
+        """Change orbit mode, applied on the next update_attachment."""
+        current = (self._orbit, self._orbit_radius, self._orbit_limit)
+        if current == (enabled, radius_m, limit_deg):
+            return
+        was_on = self._orbit
+        self._orbit = enabled
+        self._orbit_radius = radius_m
+        self._orbit_limit = limit_deg
+        self._orbit_angle = None
+        if was_on and not enabled:
+            self._attached_index = None  # force the fixed transform back on
+        log.info(
+            "orbit: %s (radius=%.3fm, limit=%.0f deg)",
+            "on" if enabled else "off",
+            radius_m,
+            limit_deg,
         )
 
     def set_width(self, width_m: float) -> None:

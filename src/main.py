@@ -1,9 +1,11 @@
 """Resident entry point.
 
-Two rates run against each other:
+Three rates run against each other:
   - fetch (60s default): hits the API. The sensor updates about once a
     minute, so going faster buys nothing.
-  - draw (1s): refreshes the age readout and keeps controller tracking up.
+  - draw (1s): refreshes the age readout.
+  - track (every pass, ~20/s): keeps the controller attachment current and,
+    in orbit mode, turns the face towards the head.
 
 A failed fetch keeps the last reading on screen. Its age keeps climbing,
 so it stays obvious the value is old; going silent mid-session would be
@@ -153,6 +155,7 @@ def apply_config(
 ) -> None:
     """Push a reloaded config onto the running overlay and poller."""
     overlay.set_placement(cfg.offset, cfg.rotation_deg)
+    overlay.set_orbit(cfg.orbit, cfg.orbit_radius_m, cfg.orbit_limit_deg)
     overlay.set_width(cfg.width_m)
     overlay.set_opacity(cfg.opacity)
     overlay.set_flip_vertical(cfg.flip_vertical)
@@ -186,17 +189,26 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
         rotation_deg=cfg.rotation_deg,
         opacity=cfg.opacity,
         flip_vertical=cfg.flip_vertical,
+        orbit=cfg.orbit,
+        orbit_radius_m=cfg.orbit_radius_m,
+        orbit_limit_deg=cfg.orbit_limit_deg,
     ) as overlay:
         overlay.set_image(renderer.render_message("CONNECTING"))
 
         last_draw = 0.0
         was_low = False
+        attached = False
 
         while True:
             now = time.monotonic()
 
             if overlay.should_quit():
                 return 0
+
+            # Tracking runs on every pass, not just when redrawing. In orbit
+            # mode this is what turns the face towards the head, and at the
+            # one second draw rate it would lag a head turn badly.
+            attached = overlay.update_attachment()
 
             if poller.due(now):
                 poller.poll(now)
@@ -213,8 +225,6 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
                     )
                     cfg = edited
                     log.info("reloaded %s", config_path)
-
-                attached = overlay.update_attachment()
 
                 if not attached:
                     # Nothing to attach to while the controller sleeps.
