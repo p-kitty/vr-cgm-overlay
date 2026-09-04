@@ -19,16 +19,24 @@ region = ""
 api_version = "4.16.0"
 
 
+# Everything in this section is re-read while the app runs, except
+# `hand`. Edit and save with the headset on and the face moves within a
+# second; see "Tuning" in README.md.
 [display]
 unit = "mgdl"        # "mgdl" or "mmol"
 hand = "left"        # which controller to follow; the off hand works best
 width_m = 0.14       # overlay width in metres
 
-# Position relative to the controller. +Z is towards the wrist, +Y is up,
-# +X is right. Expect to tune these while wearing the headset.
+# Position relative to the controller, in metres: 0.01 is one centimetre.
+# Point the controller away from you like a torch, then
+#   X: + right          Y: + up, off the back of the hand
+#   Z: + back towards the elbow
 offset = [0.0, 0.02, 0.10]
 
-# Tilt in degrees. Making X more negative stands the face up towards you.
+# Tilt in degrees, applied X, then Y, then Z.
+#   X: - stands the face up towards your eyes, + lays it flat on the arm
+#   Y: swings it left and right
+#   Z: spins it in place; try 90 or -90 if the digits run across the arm
 rotation_deg = [-40.0, 0.0, 0.0]
 
 opacity = 1.0
