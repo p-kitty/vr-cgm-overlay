@@ -1,0 +1,48 @@
+[account]
+# Email of the LibreLinkUp follower account (the one doing the watching).
+email = "you@example.com"
+
+# LibreLinkUp password.
+# Do not share this file or commit it; .gitignore already excludes it.
+password = ""
+
+# Leave empty when you follow exactly one person; it is detected then.
+# Set it only if you follow several.
+patient_id = ""
+
+# Leave empty to use whatever region login redirects to. "jp" for Japan.
+region = ""
+
+# Raise this when Abbott starts rejecting the version we send. A rejected
+# version shows up as a 4xx on login; match whatever the current release
+# of LibreLinkUpDesktop or pylibrelinkup sends.
+api_version = "4.16.0"
+
+
+[display]
+unit = "mgdl"        # "mgdl" or "mmol"
+hand = "left"        # which controller to follow; the off hand works best
+width_m = 0.14       # overlay width in metres
+
+# Position relative to the controller. +Z is towards the wrist, +Y is up,
+# +X is right. Expect to tune these while wearing the headset.
+offset = [0.0, 0.02, 0.10]
+
+# Tilt in degrees. Making X more negative stands the face up towards you.
+rotation_deg = [-40.0, 0.0, 0.0]
+
+opacity = 1.0
+flip_vertical = false   # set true if the face renders upside down
+stale_after_min = 10.0  # readings older than this go grey
+
+
+[thresholds]
+# All mg/dL. These are used even when displaying mmol/L.
+urgent_low_mgdl = 54
+low_mgdl = 70
+high_mgdl = 180
+
+
+[polling]
+interval_sec = 60    # must be at least 30; the sensor updates ~once a minute
+alert_on_low = true  # buzz the controller once when a low starts

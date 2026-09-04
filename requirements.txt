@@ -1,0 +1,4 @@
+requests>=2.31
+Pillow>=10.0
+openvr>=1.26.701
+tomli>=2.0 ; python_version < "3.11"
