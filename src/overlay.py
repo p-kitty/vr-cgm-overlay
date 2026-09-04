@@ -164,10 +164,33 @@ class WristOverlay:
         offset: tuple[float, float, float],
         rotation_deg: tuple[float, float, float],
     ) -> None:
-        """Change position and angle, applied on the next update_attachment."""
+        """Change position and angle, applied on the next update_attachment.
+
+        Re-attaching is how a transform is replaced: there is no separate
+        "move it" call, so the index is cleared to make the next
+        update_attachment set the new transform.
+        """
+        if offset == self._offset and rotation_deg == self._rotation:
+            return
         self._offset = offset
         self._rotation = rotation_deg
         self._attached_index = None  # force a re-attach
+        log.info(
+            "placement: offset=[%.3f, %.3f, %.3f] rotation=[%.1f, %.1f, %.1f]",
+            *offset,
+            *rotation_deg,
+        )
+
+    def set_width(self, width_m: float) -> None:
+        self._overlay.setOverlayWidthInMeters(self._handle, width_m)
+
+    def set_flip_vertical(self, flip: bool) -> None:
+        """Flip the texture from here on.
+
+        set_image skips uploads that match the current pixels, so the
+        change lands on the next draw, when the flipped bytes differ.
+        """
+        self._flip_vertical = flip
 
     # -- drawing ------------------------------------------------------------
 

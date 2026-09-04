@@ -8,6 +8,9 @@ Two rates run against each other:
 A failed fetch keeps the last reading on screen. Its age keeps climbing,
 so it stays obvious the value is old; going silent mid-session would be
 the dangerous failure.
+
+The draw loop also watches config.toml, so placement can be tuned with
+the headset still on.
 """
 
 from __future__ import annotations
@@ -30,6 +33,10 @@ log = logging.getLogger("vrcgm")
 DRAW_INTERVAL_SEC = 1.0
 MAX_BACKOFF_SEC = 600.0
 
+# Settings a reload cannot apply: the overlay picks its controller role
+# once, and the API client is built with the account.
+RESTART_ONLY = ("hand", "email", "password", "patient_id", "region", "api_version")
+
 
 class Poller:
     """Owns the fetch schedule and its backoff.
@@ -50,6 +57,10 @@ class Poller:
 
     def due(self, now: float) -> bool:
         return now >= self._next_at
+
+    def set_interval(self, interval: float) -> None:
+        """Change the fetch interval, effective from the next fetch."""
+        self._interval = interval
 
     def poll(self, now: float) -> bool:
         """Attempt one fetch. True when a new reading arrived."""
@@ -85,6 +96,47 @@ class Poller:
         return got_new
 
 
+class ConfigWatcher:
+    """Re-read config.toml whenever it changes on disk.
+
+    Placement is found by trial and error with the headset on, and there
+    is no way to judge a change without wearing it. Restarting for every
+    nudge means taking the headset off, so the file is watched instead
+    and edits land on the next draw.
+
+    A half-written file parses as garbage, and an edit can be plain
+    wrong. Neither may take down a resident process, so a bad read is
+    logged and the running config is kept.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._stamp = self._current_stamp()
+
+    def _current_stamp(self) -> tuple[float, int] | None:
+        try:
+            st = self._path.stat()
+        except OSError:
+            return None
+        # Size as well as mtime: editors can write twice within the
+        # timestamp resolution of the filesystem.
+        return (st.st_mtime, st.st_size)
+
+    def poll(self) -> config_mod.Config | None:
+        """Return the reloaded config once the file changes, else None."""
+        stamp = self._current_stamp()
+        if stamp is None or stamp == self._stamp:
+            return None
+        self._stamp = stamp
+
+        try:
+            return config_mod.load(self._path)
+        except (OSError, ValueError) as exc:
+            # TOMLDecodeError is a ValueError, so a partial write lands here.
+            log.warning("ignoring the edited config: %s", exc)
+            return None
+
+
 def build_theme(cfg: config_mod.Config) -> Theme:
     return Theme(
         low_mgdl=cfg.low_mgdl,
@@ -93,7 +145,25 @@ def build_theme(cfg: config_mod.Config) -> Theme:
     )
 
 
-def run(cfg: config_mod.Config) -> int:
+def apply_config(
+    cfg: config_mod.Config,
+    previous: config_mod.Config,
+    overlay,
+    poller: Poller,
+) -> None:
+    """Push a reloaded config onto the running overlay and poller."""
+    overlay.set_placement(cfg.offset, cfg.rotation_deg)
+    overlay.set_width(cfg.width_m)
+    overlay.set_opacity(cfg.opacity)
+    overlay.set_flip_vertical(cfg.flip_vertical)
+    poller.set_interval(cfg.poll_interval_sec)
+
+    changed = [k for k in RESTART_ONLY if getattr(cfg, k) != getattr(previous, k)]
+    if changed:
+        log.warning("restart to apply: %s", ", ".join(changed))
+
+
+def run(cfg: config_mod.Config, config_path: Path) -> int:
     # openvr is only needed for the VR path. Importing it lazily lets
     # --dry-run work on a machine without SteamVR installed.
     from overlay import WristOverlay
@@ -107,6 +177,7 @@ def run(cfg: config_mod.Config) -> int:
     )
     renderer = WatchFaceRenderer(theme=build_theme(cfg), unit=cfg.unit)
     poller = Poller(client, cfg.poll_interval_sec)
+    watcher = ConfigWatcher(config_path)
 
     with WristOverlay(
         hand=cfg.hand,
@@ -133,6 +204,16 @@ def run(cfg: config_mod.Config) -> int:
 
             if now - last_draw >= DRAW_INTERVAL_SEC:
                 last_draw = now
+
+                edited = watcher.poll()
+                if edited is not None:
+                    apply_config(edited, cfg, overlay, poller)
+                    renderer = WatchFaceRenderer(
+                        theme=build_theme(edited), unit=edited.unit
+                    )
+                    cfg = edited
+                    log.info("reloaded %s", config_path)
+
                 attached = overlay.update_attachment()
 
                 if not attached:
@@ -222,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.dry_run:
             return dry_run(cfg, args.out)
-        return run(cfg)
+        return run(cfg, args.config)
     except KeyboardInterrupt:
         log.info("shutting down")
         return 0

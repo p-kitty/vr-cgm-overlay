@@ -25,6 +25,11 @@ Nothing has exercised these yet. Each says how to check it.
 - **A long session.** Play for an hour or two, then check the log still
   shows `fetched:` about once a minute, with no `fetch failed` streak
   stretching the interval out.
+- **Live config reload in the headset.** The watcher and the reload are
+  covered off-headset, but nothing has yet confirmed the overlay really
+  moves in VR. With the process running, edit `display.rotation_deg` and
+  save: the log should print a `placement:` line and the face should
+  turn within a second.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
