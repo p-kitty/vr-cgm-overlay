@@ -12,6 +12,7 @@ from __future__ import annotations
 import ctypes
 import logging
 import math
+import time
 
 import openvr
 from PIL import Image
@@ -20,6 +21,36 @@ log = logging.getLogger(__name__)
 
 OVERLAY_KEY = "jp.local.vrcgm.wristglucose"
 OVERLAY_NAME = "VR CGM Wrist Glucose"
+
+# How often to re-check for SteamVR while waiting for it to come up.
+CONNECT_RETRY_SEC = 3.0
+
+
+def _connect(retry_sec: float = CONNECT_RETRY_SEC):
+    """Block until SteamVR is up, then return the IVRSystem.
+
+    A background app cannot start SteamVR, so openvr.init fails outright
+    when vrserver is not running. This process is meant to sit resident,
+    and requiring it to be started after SteamVR every time is a poor
+    trade for the few lines it takes to wait.
+
+    Only "no server" is waited on. Every other init error is a real fault
+    and is raised straight away.
+    """
+    waiting = False
+    while True:
+        try:
+            system = openvr.init(openvr.VRApplication_Background)
+        except openvr.error_code.InitError_Init_NoServerForBackgroundApp:
+            if not waiting:
+                log.info("SteamVR is not running; waiting for it")
+                waiting = True
+            time.sleep(retry_sec)
+            continue
+
+        if waiting:
+            log.info("SteamVR came up")
+        return system
 
 
 def _make_transform(
@@ -75,7 +106,7 @@ class WristOverlay:
         self._rotation = rotation_deg
         self._flip_vertical = flip_vertical
 
-        self._system = openvr.init(openvr.VRApplication_Background)
+        self._system = _connect()
         self._overlay = openvr.VROverlay()
         self._handle = self._overlay.createOverlay(OVERLAY_KEY, OVERLAY_NAME)
         self._overlay.setOverlayWidthInMeters(self._handle, width_m)
