@@ -12,6 +12,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from librelink import MIN_FIT_SPAN_MIN
+
 log = logging.getLogger(__name__)
 
 
@@ -40,6 +42,10 @@ class Config:
     high_mgdl: float = 180.0
     very_high_mgdl: float = 240.0
 
+    trend_window_min: float = 15.0
+    trend_flat_mgdl_min: float = 1.0
+    trend_fast_mgdl_min: float = 2.0
+
     poll_interval_sec: float = 60.0
     alert_on_low: bool = True
 
@@ -55,6 +61,7 @@ def load(path: Path) -> Config:
     account = raw.get("account", {})
     display = raw.get("display", {})
     thresholds = raw.get("thresholds", {})
+    trend = raw.get("trend", {})
     polling = raw.get("polling", {})
 
     cfg = Config()
@@ -82,6 +89,14 @@ def load(path: Path) -> Config:
     cfg.low_mgdl = float(thresholds.get("low_mgdl", cfg.low_mgdl))
     cfg.high_mgdl = float(thresholds.get("high_mgdl", cfg.high_mgdl))
     cfg.very_high_mgdl = float(thresholds.get("very_high_mgdl", cfg.very_high_mgdl))
+
+    cfg.trend_window_min = float(trend.get("window_min", cfg.trend_window_min))
+    cfg.trend_flat_mgdl_min = float(
+        trend.get("flat_mgdl_min", cfg.trend_flat_mgdl_min)
+    )
+    cfg.trend_fast_mgdl_min = float(
+        trend.get("fast_mgdl_min", cfg.trend_fast_mgdl_min)
+    )
 
     cfg.poll_interval_sec = float(polling.get("interval_sec", cfg.poll_interval_sec))
     cfg.alert_on_low = bool(polling.get("alert_on_low", cfg.alert_on_low))
@@ -119,6 +134,21 @@ def _validate(cfg: Config) -> None:
         raise ValueError(
             "thresholds must satisfy low < high < very_high: "
             f"{cfg.low_mgdl} / {cfg.high_mgdl} / {cfg.very_high_mgdl}"
+        )
+
+    # A window shorter than the fit's own span floor can never hold
+    # enough spread to fit, so the arrow would silently fall back to the
+    # API's five buckets forever rather than failing where it was set.
+    if cfg.trend_window_min < MIN_FIT_SPAN_MIN:
+        raise ValueError(
+            f"trend.window_min must be at least {MIN_FIT_SPAN_MIN:.0f}; below "
+            "that there is never enough history to fit a slope: "
+            f"{cfg.trend_window_min}"
+        )
+    if not (0 < cfg.trend_flat_mgdl_min < cfg.trend_fast_mgdl_min):
+        raise ValueError(
+            "trend thresholds must satisfy 0 < flat < fast: "
+            f"{cfg.trend_flat_mgdl_min} / {cfg.trend_fast_mgdl_min}"
         )
 
     # Polling harder than the official app risks being rate limited or cut

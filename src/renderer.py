@@ -130,7 +130,50 @@ STATUS_MARKERS = {
 # TrendArrow value -> arrow angle in degrees. 0 points right, positive up.
 # Arrows are drawn rather than typeset: Segoe UI and the other stock
 # Windows fonts have no U+2197/U+2198 glyphs and render tofu boxes.
+#
+# This is the fallback only. When there is enough history to fit a slope
+# the angle comes from TrendTuning instead, and is not restricted to
+# these five.
 TREND_ANGLES = {1: -90.0, 2: -45.0, 3: 0.0, 4: 45.0, 5: 90.0}
+
+
+@dataclass
+class TrendTuning:
+    """How a fitted rate of change becomes an arrow angle.
+
+    Abbott's TrendArrow is five buckets on thresholds it does not
+    publish and nothing here can adjust. The slope behind it can be
+    fitted from the history the same response already carries, and the
+    arrow is drawn as a vector anyway, so it can point anywhere rather
+    than snapping to five positions -- a reading climbing gently and one
+    climbing hard both come out as the same arrow otherwise.
+
+    The two thresholds keep the familiar angles meaningful: a slope of
+    flat_mgdl_min lands exactly on 45 degrees and fast_mgdl_min on 90,
+    and the angle slides between them. Nothing steeper than 90 exists to
+    draw, so faster than fast_mgdl_min is where the scale stops.
+
+    This lives with the renderer rather than the API client because the
+    fit is cheap and `config.toml` is re-read while running: computing
+    the angle at draw time is what lets a tuning edit land within a
+    second, the same as placement does.
+    """
+
+    window_min: float = 15.0
+    flat_mgdl_min: float = 1.0
+    fast_mgdl_min: float = 2.0
+
+    def angle_for_slope(self, slope: float) -> float:
+        """Map mg/dL per minute onto an angle, 0 flat and +/-90 vertical."""
+        rate = abs(slope)
+        if rate >= self.fast_mgdl_min:
+            degrees = 90.0
+        elif rate >= self.flat_mgdl_min:
+            span = self.fast_mgdl_min - self.flat_mgdl_min
+            degrees = 45.0 + 45.0 * (rate - self.flat_mgdl_min) / span
+        else:
+            degrees = 45.0 * rate / self.flat_mgdl_min
+        return math.copysign(degrees, slope)
 
 
 def _draw_arrow(
@@ -191,9 +234,15 @@ class WatchFaceRenderer:
     every later frame.
     """
 
-    def __init__(self, theme: Theme | None = None, unit: str = "mgdl") -> None:
+    def __init__(
+        self,
+        theme: Theme | None = None,
+        unit: str = "mgdl",
+        trend: TrendTuning | None = None,
+    ) -> None:
         self.theme = theme or Theme()
         self.unit = unit
+        self.trend = trend or TrendTuning()
         self._font_value = _load_font(150)
         self._font_small = _load_font(38)
         self._font_message = _load_font(52)
@@ -227,7 +276,7 @@ class WatchFaceRenderer:
         value_right = 44 + draw.textlength(value_text, font=self._font_value)
 
         # The arrow sits right next to the number to minimise eye travel.
-        angle = TREND_ANGLES.get(reading.trend)
+        angle = self._trend_angle(reading)
         if angle is not None:
             _draw_arrow(draw, (value_right + 66, 116), angle, 84, color)
 
@@ -271,6 +320,19 @@ class WatchFaceRenderer:
         return img
 
     # -- internals ----------------------------------------------------------
+
+    def _trend_angle(self, reading) -> float | None:
+        """Angle for the arrow, preferring the locally fitted slope.
+
+        The API's own TrendArrow is the fallback, for a fresh sensor or
+        a scanning gap that leaves too little history to fit a line
+        through. While it is in use the arrow snaps back to the five
+        official positions, which is what the face drew before.
+        """
+        slope = reading.slope_mgdl_per_min(self.trend.window_min)
+        if slope is not None:
+            return self.trend.angle_for_slope(slope)
+        return TREND_ANGLES.get(reading.trend)
 
     def _new_canvas(self, accent: tuple[int, int, int], marker: str):
         """Rounded background card with the status marker on one edge."""

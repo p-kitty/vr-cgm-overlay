@@ -70,6 +70,20 @@ high_mgdl = 180
 very_high_mgdl = 240
 
 
+# How the trend arrow is worked out. The arrow is fitted from the recent
+# history rather than taken from Abbott's own TrendArrow, whose
+# thresholds are undocumented and only ever give five positions. The
+# API value is still the fallback when there is too little history.
+[trend]
+window_min = 15.0    # how far back the slope is fitted over; at least 5
+
+# All mg/dL per minute. flat is where the arrow reaches 45 degrees and
+# fast is where it stands fully vertical; between them it slides.
+# Lower them to make the arrow react harder to a slow drift.
+flat_mgdl_min = 1.0
+fast_mgdl_min = 2.0
+
+
 [polling]
 interval_sec = 60    # must be at least 30; the sensor updates ~once a minute
 alert_on_low = true  # buzz the controller once when a low starts
