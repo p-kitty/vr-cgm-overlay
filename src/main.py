@@ -212,7 +212,6 @@ def build_trend(cfg: config_mod.Config) -> TrendTuning:
     return TrendTuning(
         local=cfg.trend_local,
         window_min=cfg.trend_window_min,
-        flat_mgdl_min=cfg.trend_flat_mgdl_min,
         fast_mgdl_min=cfg.trend_fast_mgdl_min,
     )
 

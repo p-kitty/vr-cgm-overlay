@@ -89,17 +89,14 @@ class Loading(ConfigTestCase):
         cfg = self.load()
         self.assertTrue(cfg.trend_local)
         self.assertEqual(cfg.trend_window_min, 15.0)
-        self.assertEqual(cfg.trend_flat_mgdl_min, 1.0)
         self.assertEqual(cfg.trend_fast_mgdl_min, 2.0)
 
     def test_trend_settings_are_read(self):
         cfg = self.load(
-            "\n[trend]\nlocal = false\nwindow_min = 30\nflat_mgdl_min = 0.5\n"
-            "fast_mgdl_min = 1.5\n"
+            "\n[trend]\nlocal = false\nwindow_min = 30\nfast_mgdl_min = 1.5\n"
         )
         self.assertFalse(cfg.trend_local)
         self.assertEqual(cfg.trend_window_min, 30.0)
-        self.assertEqual(cfg.trend_flat_mgdl_min, 0.5)
         self.assertEqual(cfg.trend_fast_mgdl_min, 1.5)
 
     def test_a_blank_patient_id_means_unset(self):
@@ -197,23 +194,15 @@ class Validation(ConfigTestCase):
         # here. A value only rejected once the fit is switched on is
         # rejected at the worst possible moment.
         self.assertRejected("\n[trend]\nlocal = false\nwindow_min = 1\n")
-        self.assertRejected("\n[trend]\nlocal = false\nflat_mgdl_min = 0\n")
+        self.assertRejected("\n[trend]\nlocal = false\nfast_mgdl_min = 0\n")
 
-    def test_trend_thresholds_must_be_ordered(self):
-        # flat is where the arrow reaches 45 degrees and fast where it
-        # stands upright. Reversed, the angle between them would run
-        # backwards; equal, there would be nothing between them at all.
-        message = self.assertRejected(
-            "\n[trend]\nflat_mgdl_min = 3\nfast_mgdl_min = 2\n"
-        )
-        self.assertIn("0 < flat < fast", message)
-        self.assertRejected("\n[trend]\nflat_mgdl_min = 2\nfast_mgdl_min = 2\n")
-
-    def test_a_zero_flat_threshold_is_rejected(self):
-        # It is a divisor: zero would take the draw loop down on the
-        # first reading rather than at startup.
-        self.assertRejected("\n[trend]\nflat_mgdl_min = 0\n")
-        self.assertRejected("\n[trend]\nflat_mgdl_min = -1\n")
+    def test_the_fast_rate_must_be_positive(self):
+        # It divides the slope, so zero would take the draw loop down on
+        # the first reading rather than at startup. Negative would draw
+        # every arrow backwards, which is worse than crashing.
+        message = self.assertRejected("\n[trend]\nfast_mgdl_min = 0\n")
+        self.assertIn("fast_mgdl_min", message)
+        self.assertRejected("\n[trend]\nfast_mgdl_min = -2\n")
 
     def test_polling_floor_is_thirty_seconds(self):
         # The sensor updates about once a minute. Anything faster returns

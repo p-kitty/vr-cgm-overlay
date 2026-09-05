@@ -44,7 +44,6 @@ class Config:
 
     trend_local: bool = True
     trend_window_min: float = 15.0
-    trend_flat_mgdl_min: float = 1.0
     trend_fast_mgdl_min: float = 2.0
 
     poll_interval_sec: float = 60.0
@@ -93,9 +92,6 @@ def load(path: Path) -> Config:
 
     cfg.trend_local = bool(trend.get("local", cfg.trend_local))
     cfg.trend_window_min = float(trend.get("window_min", cfg.trend_window_min))
-    cfg.trend_flat_mgdl_min = float(
-        trend.get("flat_mgdl_min", cfg.trend_flat_mgdl_min)
-    )
     cfg.trend_fast_mgdl_min = float(
         trend.get("fast_mgdl_min", cfg.trend_fast_mgdl_min)
     )
@@ -152,10 +148,12 @@ def _validate(cfg: Config) -> None:
             "that there is never enough history to fit a slope: "
             f"{cfg.trend_window_min}"
         )
-    if not (0 < cfg.trend_flat_mgdl_min < cfg.trend_fast_mgdl_min):
+    # It divides the slope, so zero is a crash on the first reading
+    # rather than a wrong angle.
+    if cfg.trend_fast_mgdl_min <= 0:
         raise ValueError(
-            "trend thresholds must satisfy 0 < flat < fast: "
-            f"{cfg.trend_flat_mgdl_min} / {cfg.trend_fast_mgdl_min}"
+            "trend.fast_mgdl_min must be positive: "
+            f"{cfg.trend_fast_mgdl_min}"
         )
 
     # Polling harder than the official app risks being rate limited or cut

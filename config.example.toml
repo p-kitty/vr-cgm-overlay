@@ -83,11 +83,10 @@ local = true
 
 window_min = 15.0    # how far back the slope is fitted over; at least 5
 
-# All mg/dL per minute, and ignored while local = false. flat is where
-# the arrow reaches 45 degrees and fast is where it stands fully
-# vertical; between them it slides. Lower them to make the arrow react
-# harder to a slow drift.
-flat_mgdl_min = 1.0
+# The rate, in mg/dL per minute, at which the arrow stands straight up.
+# Everything slower is in proportion, so half of this is the 45 degree
+# diagonal. Lower it to make the arrow react harder to a slow drift.
+# Ignored while local = false.
 fast_mgdl_min = 2.0
 
 

@@ -148,10 +148,10 @@ class TrendTuning:
     than snapping to five positions -- a reading climbing gently and one
     climbing hard both come out as the same arrow otherwise.
 
-    The two thresholds keep the familiar angles meaningful: a slope of
-    flat_mgdl_min lands exactly on 45 degrees and fast_mgdl_min on 90,
-    and the angle slides between them. Nothing steeper than 90 exists to
-    draw, so faster than fast_mgdl_min is where the scale stops.
+    One number sets the whole scale: fast_mgdl_min is the rate at which
+    the arrow stands straight up, and everything below it is in
+    proportion -- half that rate is the familiar 45 degree diagonal.
+    Nothing steeper than 90 exists to draw, so that is where it stops.
 
     This lives with the renderer rather than the API client because the
     fit is cheap and `config.toml` is re-read while running: computing
@@ -163,7 +163,6 @@ class TrendTuning:
 
     local: bool = True
     window_min: float = 15.0
-    flat_mgdl_min: float = 1.0
     fast_mgdl_min: float = 2.0
 
     def slope_for(self, reading) -> float | None:
@@ -178,16 +177,9 @@ class TrendTuning:
         return reading.slope_mgdl_per_min(self.window_min)
 
     def angle_for_slope(self, slope: float) -> float:
-        """Map mg/dL per minute onto an angle, 0 flat and +/-90 vertical."""
-        rate = abs(slope)
-        if rate >= self.fast_mgdl_min:
-            degrees = 90.0
-        elif rate >= self.flat_mgdl_min:
-            span = self.fast_mgdl_min - self.flat_mgdl_min
-            degrees = 45.0 + 45.0 * (rate - self.flat_mgdl_min) / span
-        else:
-            degrees = 45.0 * rate / self.flat_mgdl_min
-        return math.copysign(degrees, slope)
+        """Map mg/dL per minute onto an angle, 0 level and +/-90 vertical."""
+        fraction = slope / self.fast_mgdl_min
+        return 90.0 * max(-1.0, min(1.0, fraction))
 
 
 def _draw_arrow(

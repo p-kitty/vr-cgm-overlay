@@ -285,13 +285,12 @@ because each one becomes a real failure.
 |---|---|
 | `local` (true) | `true` fits the slope here; `false` uses Abbott's own `TrendArrow`, so the face and the phone show the same five arrows |
 | `window_min` (15) | How far back the slope is fitted over. Longer is steadier and slower to react; it must be at least 5, or there is never enough history to fit |
-| `flat_mgdl_min` (1.0) | The rate at which the arrow reaches 45 degrees |
-| `fast_mgdl_min` (2.0) | The rate at which it stands fully vertical |
+| `fast_mgdl_min` (2.0) | The rate at which the arrow stands straight up. Everything slower is in proportion, so half of it is the 45 degree diagonal |
 
-Both rates are mg/dL per minute, and like the colour bands they stay in
-mg/dL in mmol/L mode. Between the two the angle slides rather than
-stepping, so a slow drift and a hard climb do not draw the same arrow.
-Lower them both to make the arrow react harder.
+The rate is mg/dL per minute, and like the colour bands it stays in
+mg/dL in mmol/L mode. The angle slides rather than stepping, so a slow
+drift and a hard climb do not draw the same arrow. Lower it to make the
+arrow react harder.
 
 When there is too little history to fit — a fresh sensor, or a stretch
 where the phone was not scanning — the arrow falls back to the API's own

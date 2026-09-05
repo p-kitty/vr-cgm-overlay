@@ -131,22 +131,23 @@ class StatusMarkers(unittest.TestCase):
 class TrendAngle(unittest.TestCase):
     """Slope to arrow angle: 0 is level, +90 straight up.
 
-    The five official buckets become a continuous scale here, so what
-    has to hold is that the familiar angles still land where they always
-    did -- otherwise a face that used to read at a glance now needs
-    measuring.
+    The five official buckets become one continuous scale here, set by
+    a single rate. What has to hold is that the familiar angles still
+    land where they always did -- otherwise a face that used to read at
+    a glance now needs measuring.
     """
 
     def test_flat_is_level(self):
         self.assertEqual(TREND.angle_for_slope(0.0), 0.0)
 
-    def test_the_flat_threshold_is_the_diagonal(self):
-        # The boundary the API would have called "rising": same angle
-        # here, so the scale is anchored to the arrows people know.
-        self.assertAlmostEqual(TREND.angle_for_slope(TREND.flat_mgdl_min), 45.0)
-
-    def test_the_fast_threshold_is_vertical(self):
+    def test_the_fast_rate_is_vertical(self):
+        # The one number the scale is built from.
         self.assertAlmostEqual(TREND.angle_for_slope(TREND.fast_mgdl_min), 90.0)
+
+    def test_half_the_fast_rate_is_the_diagonal(self):
+        # Where the API would have said "rising": the same angle here,
+        # so the scale stays anchored to the arrows people know.
+        self.assertAlmostEqual(TREND.angle_for_slope(TREND.fast_mgdl_min / 2), 45.0)
 
     def test_nothing_points_past_vertical(self):
         # There is no steeper arrow to draw, and one wrapping past the
@@ -163,17 +164,18 @@ class TrendAngle(unittest.TestCase):
                     TREND.angle_for_slope(-slope), -TREND.angle_for_slope(slope)
                 )
 
-    def test_a_drift_below_flat_is_visible_but_shallow(self):
+    def test_a_slow_drift_is_visible_but_shallow(self):
         # The whole point of fitting the slope: the API rounds this to a
-        # level arrow, and a third of the way to the flat threshold
-        # should look like a third of the way to the diagonal.
-        self.assertAlmostEqual(TREND.angle_for_slope(0.33), 45.0 * 0.33)
+        # level arrow. A sixth of the fast rate is a sixth of the way up.
+        self.assertAlmostEqual(TREND.angle_for_slope(0.33), 90.0 * 0.33 / 2.0)
 
-    def test_between_the_thresholds_the_angle_slides(self):
-        # Halfway from flat to fast is halfway from 45 to 90. Without
-        # this the two thresholds would just be buckets again.
-        midpoint = (TREND.flat_mgdl_min + TREND.fast_mgdl_min) / 2
-        self.assertAlmostEqual(TREND.angle_for_slope(midpoint), 67.5)
+    def test_the_angle_is_in_proportion_throughout(self):
+        # One rate sets the scale, so every angle below it is simply its
+        # share of 90 degrees. There is no second threshold to bend it.
+        for fraction in (0.1, 0.25, 0.5, 0.75, 1.0):
+            with self.subTest(fraction=fraction):
+                slope = TREND.fast_mgdl_min * fraction
+                self.assertAlmostEqual(TREND.angle_for_slope(slope), 90.0 * fraction)
 
     def test_the_angle_never_goes_backwards(self):
         # A faster rise must never draw a shallower arrow, at any of the
@@ -181,10 +183,10 @@ class TrendAngle(unittest.TestCase):
         angles = [TREND.angle_for_slope(i / 20) for i in range(0, 61)]
         self.assertEqual(angles, sorted(angles))
 
-    def test_configured_thresholds_move_the_scale(self):
+    def test_a_configured_rate_moves_the_whole_scale(self):
         # Someone who wants the arrow to react harder to a slow drift
-        # lowers these, and the angles have to follow.
-        tuning = TrendTuning(flat_mgdl_min=0.5, fast_mgdl_min=1.0)
+        # lowers this, and every angle has to follow.
+        tuning = TrendTuning(fast_mgdl_min=1.0)
         self.assertAlmostEqual(tuning.angle_for_slope(0.5), 45.0)
         # The same slope the default scale draws as a gentle 45 now
         # stands the arrow fully upright.
