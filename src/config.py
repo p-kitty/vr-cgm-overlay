@@ -8,13 +8,9 @@ it).
 from __future__ import annotations
 
 import logging
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # 3.10 and earlier
-    import tomli as tomllib  # type: ignore[no-redef]
 
 log = logging.getLogger(__name__)
 

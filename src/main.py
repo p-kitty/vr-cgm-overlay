@@ -28,6 +28,15 @@ import sys
 import time
 from pathlib import Path
 
+# config.py imports tomllib unguarded, and the floors in
+# requirements.txt assume 3.14. Say what is wrong in a sentence rather
+# than letting an import blow up further down.
+if sys.version_info < (3, 14):
+    raise SystemExit(
+        "vr-cgm-overlay needs Python 3.14 or newer; this is "
+        f"{sys.version.split()[0]}."
+    )
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 import config as config_mod
