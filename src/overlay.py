@@ -22,6 +22,8 @@ import time
 import openvr
 from PIL import Image
 
+from armguide import ArmGuide
+
 log = logging.getLogger(__name__)
 
 OVERLAY_KEY = "jp.local.vrcgm.wristglucose"
@@ -35,6 +37,8 @@ CONNECT_RETRY_SEC = 3.0
 # easing hides the steps; it also stops the face twitching when the head is
 # nearly in line with the arm and the target direction is ill-conditioned.
 ORBIT_EASE = 0.25
+
+_IDENTITY = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 
 
 def _connect(retry_sec: float = CONNECT_RETRY_SEC):
@@ -193,6 +197,7 @@ class WristOverlay:
         orbit: bool = False,
         orbit_radius_m: float = 0.06,
         orbit_limit_deg: float = 120.0,
+        arm_guide: bool = False,
     ) -> None:
         self._hand = hand
         self._offset = offset
@@ -221,11 +226,14 @@ class WristOverlay:
         # showed up in the headset as a flicker once a second.
         self._buffer = None
         self._buffer_size: tuple[int, int] | None = None
+        # The tuning guides, or None. See armguide.
+        self._guide: ArmGuide | None = None
         # Reused for every pose read: orbit mode reads poses on every pass
         # of the loop, and a fresh array each time is pure churn.
         self._poses = (openvr.TrackedDevicePose_t * openvr.k_unMaxTrackedDeviceCount)()
 
         log.info("created overlay (hand=%s, width=%.3fm)", hand, width_m)
+        self.set_arm_guide(arm_guide)
 
     # -- controller tracking ------------------------------------------------
 
@@ -266,10 +274,7 @@ class WristOverlay:
             sum(c[row][col] * delta[row] for row in range(3)) for col in range(3)
         )
 
-    def _apply_orbit(self, index: int) -> None:
-        head = self._head_in_controller_space(index)
-        if head is None:
-            return  # keep whatever is on screen until the poses come back
+    def _apply_orbit(self, index: int, head: tuple[float, float, float]) -> None:
         transform, self._orbit_angle = _orbit_transform(
             self._offset,
             self._orbit_radius,
@@ -281,6 +286,20 @@ class WristOverlay:
         self._overlay.setOverlayTransformTrackedDeviceRelative(
             self._handle, index, transform
         )
+
+    def _apply_guide(self, index: int, head: tuple[float, float, float]) -> None:
+        """Draw the arm the placement is currently modelling.
+
+        The line is the centreline itself, so it sits at radius zero and is
+        only turned towards the head to stop it vanishing edge-on. The ring
+        lies in the plane across the arm, which is the controller's own XY
+        plane, so it needs no rotation at all.
+        """
+        axis, _ = _orbit_transform(
+            self._offset, 0.0, 180.0, (0.0, 0.0, 0.0), head, None
+        )
+        ring = _to_openvr(_IDENTITY, self._offset)
+        self._guide.update(index, axis, ring, self._orbit_radius)
 
     def update_attachment(self) -> bool:
         """Keep the controller attachment, and in orbit mode the pose, current.
@@ -310,8 +329,13 @@ class WristOverlay:
             self._orbit_angle = None
             log.info("attached to the %s controller (index=%d)", self._hand, index)
 
-        if self._orbit:
-            self._apply_orbit(index)
+        if self._orbit or self._guide is not None:
+            head = self._head_in_controller_space(index)
+            if head is not None:  # else keep what is on screen until it returns
+                if self._orbit:
+                    self._apply_orbit(index, head)
+                if self._guide is not None:
+                    self._apply_guide(index, head)
         return True
 
     def set_placement(
@@ -358,6 +382,18 @@ class WristOverlay:
             radius_m,
             limit_deg,
         )
+
+    def set_arm_guide(self, enabled: bool) -> None:
+        """Show or hide the tuning guides, creating them the first time."""
+        if enabled == (self._guide is not None):
+            return
+        if enabled:
+            self._guide = ArmGuide(self._overlay, OVERLAY_KEY)
+            if not self._orbit:
+                log.info("the guides describe orbit mode, which is off")
+        else:
+            self._guide.close()
+            self._guide = None
 
     def set_width(self, width_m: float) -> None:
         self._overlay.setOverlayWidthInMeters(self._handle, width_m)
@@ -447,6 +483,9 @@ class WristOverlay:
 
     def close(self) -> None:
         try:
+            if self._guide is not None:
+                self._guide.close()
+                self._guide = None
             if self._handle is not None:
                 self._overlay.destroyOverlay(self._handle)
                 self._handle = None

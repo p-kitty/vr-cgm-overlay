@@ -52,6 +52,11 @@ Nothing has exercised these yet. Each says how to check it.
      Put 90 or 180 into `rotation_deg` Z to find which, then correct the
      basis: leaving it in the trim hides a wrong convention behind a
      number that is supposed to be a nudge.
+- **The arm guides.** `display.arm_guide = true` should draw a cyan line
+  down the modelled forearm and a magenta ring around it. Neither has
+  been seen in a headset. The line is symmetric on purpose, so it cannot
+  look upside down; if the ring is an ellipse rather than a circle when
+  seen down the arm, its transform is not square to the arm.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.

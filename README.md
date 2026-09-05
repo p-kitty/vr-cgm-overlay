@@ -178,19 +178,37 @@ Two of the settings change meaning when it is on:
 | `offset` | where the face sits | a point on your forearm's centreline: X and Y say where the arm runs relative to the controller, Z how far back along it |
 | `rotation_deg` | how the face is aimed | a trim on top of the aiming, which is now automatic |
 
-So tune it in this order:
-
-1. `offset` X and Y until the face circles your arm rather than swinging
-   around beside it. Y usually wants to be negative, since the
-   controller origin sits above your wrist.
-2. `offset` Z to slide it along the arm, and `orbit_radius_m` until it
-   clears your sleeve without floating away from you.
-3. `rotation_deg` Z by 90 or 180 only if the digits come out sideways or
-   upside down.
-
 `orbit_limit_deg` is how far round the arm it may travel from the top,
 either way. At `120` it stops before it reaches the underside; `180`
 lets it go anywhere.
+
+### Tuning it with the guides
+
+Both the line and the circle orbit mode works from are invisible, which
+is what makes `offset` hard to set by nudging: you are moving something
+you cannot see and judging it by how the face ends up behaving. So draw
+them instead.
+
+```toml
+arm_guide = true
+```
+
+A **cyan line** appears down the modelled centreline of your forearm and
+a **magenta ring** on the circle the face travels. Now the settings are
+things you look at:
+
+1. **`offset` X and Y** until the cyan line runs down the middle of your
+   arm and stays there as you turn your hand. This is the one that was
+   guesswork; with the line drawn it is not. Y usually wants to be
+   negative, the controller origin sitting above your wrist.
+2. **`offset` Z** until the magenta ring is around the part of your arm
+   you want the face on.
+3. **`orbit_radius_m`** until the ring sits just clear of your sleeve.
+4. **`rotation_deg` Z** by 90 or 180, only if the digits come out
+   sideways or upside down.
+
+Then set `arm_guide = false`. The guides are a tuning aid, not part of
+the display.
 
 `[thresholds]` sets the colour bands. All four are mg/dL and are used
 even in mmol/L mode, so changing the display unit cannot quietly change

@@ -156,6 +156,7 @@ def apply_config(
     """Push a reloaded config onto the running overlay and poller."""
     overlay.set_placement(cfg.offset, cfg.rotation_deg)
     overlay.set_orbit(cfg.orbit, cfg.orbit_radius_m, cfg.orbit_limit_deg)
+    overlay.set_arm_guide(cfg.arm_guide)
     overlay.set_width(cfg.width_m)
     overlay.set_opacity(cfg.opacity)
     overlay.set_flip_vertical(cfg.flip_vertical)
@@ -192,6 +193,7 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
         orbit=cfg.orbit,
         orbit_radius_m=cfg.orbit_radius_m,
         orbit_limit_deg=cfg.orbit_limit_deg,
+        arm_guide=cfg.arm_guide,
     ) as overlay:
         overlay.set_image(renderer.render_message("CONNECTING"))
 

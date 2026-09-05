@@ -37,6 +37,7 @@ class Config:
     orbit: bool = False
     orbit_radius_m: float = 0.06
     orbit_limit_deg: float = 120.0
+    arm_guide: bool = False
     stale_after_min: float = 10.0
 
     low_mgdl: float = 70.0
@@ -79,6 +80,7 @@ def load(path: Path) -> Config:
     cfg.orbit = bool(display.get("orbit", cfg.orbit))
     cfg.orbit_radius_m = float(display.get("orbit_radius_m", cfg.orbit_radius_m))
     cfg.orbit_limit_deg = float(display.get("orbit_limit_deg", cfg.orbit_limit_deg))
+    cfg.arm_guide = bool(display.get("arm_guide", cfg.arm_guide))
     cfg.stale_after_min = float(display.get("stale_after_min", cfg.stale_after_min))
 
     cfg.low_mgdl = float(thresholds.get("low_mgdl", cfg.low_mgdl))

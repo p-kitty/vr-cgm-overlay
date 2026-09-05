@@ -35,6 +35,11 @@ orbit = false
 orbit_radius_m = 0.06    # how far off the arm's centreline the face floats
 orbit_limit_deg = 120.0  # how far round the arm it may travel from the top
 
+# Draw the arm orbit mode is aiming at: a cyan line down the modelled
+# centreline and a magenta ring on the circle the face travels. Turn it on
+# while setting offset, off once it is right. See "Orbit mode" in README.md.
+arm_guide = false
+
 # Position relative to the controller, in metres: 0.01 is one centimetre.
 # Point the controller away from you like a torch, then
 #   X: + right          Y: + up, off the back of the hand
