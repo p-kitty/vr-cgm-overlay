@@ -25,6 +25,12 @@ Nothing has exercised these yet. Each says how to check it.
 - **A long session.** Play for an hour or two, then check the log still
   shows `fetched:` about once a minute, with no `fetch failed` streak
   stretching the interval out.
+- **Running on Python 3.14 at all.** The move off 3.10 was settled from
+  package metadata: `requests` and `Pillow` publish 3.14 support, and
+  `pyopenvr` 2.12.1401 dropped the `pkg_resources` import that would
+  have broken there. No interpreter past 3.10 exists on the development
+  machine, though, so nothing has actually run. Install 3.14, reinstall
+  the requirements, then work through the checks in `CLAUDE.md`.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.

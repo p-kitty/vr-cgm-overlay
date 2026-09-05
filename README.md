@@ -73,6 +73,10 @@ have actually been reported against existing clients.
 
 ## Setup
 
+Needs **Python 3.14 or newer** — any 3.14.x, nothing here cares which
+patch release. An older interpreter is turned away at startup rather
+than failing halfway through an import.
+
 ```bash
 pip install -r requirements.txt
 cp config.example.toml config.toml
