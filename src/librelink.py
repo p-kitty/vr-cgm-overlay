@@ -12,6 +12,9 @@ existing clients:
      of the user id.
   4. Age is computed from FactoryTimestamp (UTC). Timestamp is local time
      with no zone attached, so using it would skew by the UTC offset.
+  5. TrendArrow is five buckets on thresholds Abbott does not document,
+     so the trend is fitted from graphData instead and TrendArrow is
+     kept only as the fallback.
 """
 
 from __future__ import annotations
@@ -19,7 +22,8 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from typing import NamedTuple
 
 import requests
 
@@ -49,6 +53,14 @@ REGION_URLS = {
 # 1=falling fast 2=falling 3=flat 4=rising 5=rising fast
 TREND_ARROWS = {1: "↓", 2: "↘", 3: "→", 4: "↗", 5: "↑"}
 
+# A least-squares fit needs points, spread over time, before it means
+# anything. The sensor's own jitter is a couple of mg/dL, so two samples
+# a minute apart can show a 2 mg/dL/min slope out of pure noise -- which
+# is the whole width of the arrow's range. Below either floor the fit is
+# refused and TrendArrow is used instead.
+MIN_FIT_POINTS = 3
+MIN_FIT_SPAN_MIN = 5.0
+
 
 class LibreLinkError(Exception):
     """Any error originating from the LibreLinkUp API."""
@@ -62,9 +74,22 @@ class TokenExpired(LibreLinkError):
     """Token expired. Logging in again recovers."""
 
 
+class GlucosePoint(NamedTuple):
+    """One measurement in the history series: when, and how much."""
+
+    at: datetime
+    mgdl: float
+
+
 @dataclass
 class Reading:
-    """A single glucose measurement."""
+    """A single glucose measurement, with the history behind it.
+
+    `history` is the recent series the same response carried, oldest
+    first and ending on this measurement. It costs no extra request:
+    the graph endpoint returns roughly twelve hours of samples
+    alongside the current value, and they used to be discarded.
+    """
 
     value_mgdl: float
     value_mmol: float
@@ -72,10 +97,22 @@ class Reading:
     timestamp_utc: datetime
     is_high: bool
     is_low: bool
+    history: tuple[GlucosePoint, ...] = ()
 
     @property
     def arrow(self) -> str:
         return TREND_ARROWS.get(self.trend, "")
+
+    def slope_mgdl_per_min(self, window_min: float) -> float | None:
+        """Rate of change fitted over the last `window_min` of history.
+
+        None when the history is too thin to fit -- a fresh sensor, or a
+        gap in scanning -- which is what `trend` remains the fallback
+        for. The window ends at this reading rather than at the wall
+        clock, so a stale reading's trend describes when it was taken
+        rather than sliding towards zero as it ages.
+        """
+        return fit_slope(self.history, window_min, now=self.timestamp_utc)
 
     def age_minutes(self, now: datetime | None = None) -> float:
         """Minutes since the measurement, used to decide staleness."""
@@ -100,6 +137,76 @@ def _parse_factory_timestamp(raw: str) -> datetime:
         except ValueError:
             continue
     raise LibreLinkError(f"cannot parse FactoryTimestamp: {raw!r}")
+
+
+def fit_slope(
+    points: tuple[GlucosePoint, ...],
+    window_min: float,
+    *,
+    now: datetime | None = None,
+) -> float | None:
+    """Least-squares slope in mg/dL per minute, or None if unfittable.
+
+    A straight line through the recent points, rather than the
+    difference between the last two: the sensor's own noise is of the
+    same order as the change being measured over a few minutes, and
+    subtracting two samples hands that noise straight to the arrow. The
+    fit averages it out over the window instead.
+    """
+    if not points:
+        return None
+
+    now = now or max(p.at for p in points)
+    cutoff = now - timedelta(minutes=window_min)
+    recent = [p for p in points if cutoff <= p.at <= now]
+    if len(recent) < MIN_FIT_POINTS:
+        return None
+
+    # Minutes before `now`, so the fit is anchored where the reading is.
+    xs = [(p.at - now).total_seconds() / 60.0 for p in recent]
+    ys = [p.mgdl for p in recent]
+    if max(xs) - min(xs) < MIN_FIT_SPAN_MIN:
+        return None
+
+    n = len(xs)
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    sxx = sum((x - mean_x) ** 2 for x in xs)
+    if sxx == 0:
+        # Every sample landed on the same instant; there is no slope to
+        # fit. The span check above will normally have caught this.
+        return None
+    sxy = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    return sxy / sxx
+
+
+def _parse_graph_data(
+    entries: list[dict] | None, latest: GlucosePoint
+) -> tuple[GlucosePoint, ...]:
+    """Turn the graphData array into a series, oldest first.
+
+    Entries that will not parse are dropped rather than fatal. The
+    series is supplementary -- the number is what the request was made
+    for -- so one malformed sample must not cost the reading too.
+
+    `latest` is folded in because graphData stops short of the current
+    measurement, and a trend has to be anchored on the newest value
+    there is.
+    """
+    by_time: dict[datetime, float] = {}
+    dropped = 0
+    for entry in entries or []:
+        try:
+            at = _parse_factory_timestamp(entry["FactoryTimestamp"])
+            by_time[at] = float(entry["ValueInMgPerDl"])
+        except (KeyError, LibreLinkError, TypeError, ValueError):
+            dropped += 1
+
+    if dropped:
+        log.debug("dropped %d unparseable graphData entries", dropped)
+
+    by_time[latest.at] = latest.mgdl
+    return tuple(GlucosePoint(at, by_time[at]) for at in sorted(by_time))
 
 
 class LibreLinkUp:
@@ -278,11 +385,19 @@ class LibreLinkUp:
                 "or the phone app may not have scanned it recently"
             )
 
+        latest = GlucosePoint(
+            _parse_factory_timestamp(measurement["FactoryTimestamp"]),
+            float(measurement["ValueInMgPerDl"]),
+        )
+        history = _parse_graph_data((body.get("data") or {}).get("graphData"), latest)
+        log.debug("history: %d points", len(history))
+
         return Reading(
-            value_mgdl=float(measurement["ValueInMgPerDl"]),
+            value_mgdl=latest.mgdl,
             value_mmol=float(measurement["Value"]),
             trend=int(measurement.get("TrendArrow") or 3),
-            timestamp_utc=_parse_factory_timestamp(measurement["FactoryTimestamp"]),
+            timestamp_utc=latest.at,
             is_high=bool(measurement.get("isHigh")),
             is_low=bool(measurement.get("isLow")),
+            history=history,
         )
