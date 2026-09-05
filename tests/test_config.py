@@ -65,6 +65,25 @@ class Loading(ConfigTestCase):
         self.assertEqual(cfg.offset, (0.0, -0.02, 0.1))
         self.assertEqual(cfg.rotation_deg, (-40, 0, 90))
 
+    def test_orbit_defaults_to_off(self):
+        # Fixed placement is what has been tuned on a real arm, so orbit
+        # is opt in and its own settings still have to have values.
+        cfg = self.load()
+        self.assertFalse(cfg.orbit)
+        self.assertFalse(cfg.arm_guide)
+        self.assertEqual(cfg.orbit_radius_m, 0.06)
+        self.assertEqual(cfg.orbit_limit_deg, 120.0)
+
+    def test_orbit_settings_are_read(self):
+        cfg = self.load(
+            "\n[display]\norbit = true\norbit_radius_m = 0.05\n"
+            "orbit_limit_deg = 100\narm_guide = true\n"
+        )
+        self.assertTrue(cfg.orbit)
+        self.assertTrue(cfg.arm_guide)
+        self.assertEqual(cfg.orbit_radius_m, 0.05)
+        self.assertEqual(cfg.orbit_limit_deg, 100.0)
+
     def test_a_blank_patient_id_means_unset(self):
         # An empty string would be sent as a patient id and 404; absent
         # means "work it out from the connections list".
@@ -107,6 +126,29 @@ class Validation(ConfigTestCase):
     def test_placement_needs_three_numbers(self):
         self.assertRejected("\n[display]\noffset = [0.0, 0.1]\n")
         self.assertRejected("\n[display]\nrotation_deg = [0, 0, 0, 0]\n")
+
+    def test_orbit_radius_must_be_positive(self):
+        # A zero radius puts the face on the arm's own centreline, where
+        # there is no outward direction to turn it towards.
+        self.assertRejected("\n[display]\norbit_radius_m = 0\n")
+        self.assertRejected("\n[display]\norbit_radius_m = -0.06\n")
+
+    def test_orbit_limit_must_be_within_half_a_turn(self):
+        message = self.assertRejected("\n[display]\norbit_limit_deg = 181\n")
+        self.assertIn("(0, 180]", message)
+        self.assertRejected("\n[display]\norbit_limit_deg = 0\n")
+        self.assertRejected("\n[display]\norbit_limit_deg = -20\n")
+
+    def test_half_a_turn_either_way_is_allowed(self):
+        # 180 each way is the whole circle: the most travel that can be
+        # asked for, rather than one degree too much.
+        cfg = self.load("\n[display]\norbit_limit_deg = 180\n")
+        self.assertEqual(cfg.orbit_limit_deg, 180.0)
+
+    def test_orbit_is_checked_even_when_it_is_switched_off(self):
+        # Orbit is turned on from inside the headset. A radius that is
+        # only rejected at that point is rejected at the worst moment.
+        self.assertRejected("\n[display]\norbit = false\norbit_radius_m = 0\n")
 
     def test_thresholds_must_be_ordered(self):
         message = self.assertRejected(
