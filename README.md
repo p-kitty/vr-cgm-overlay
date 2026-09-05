@@ -236,18 +236,32 @@ the display.
 even in mmol/L mode, so changing the display unit cannot quietly change
 what counts as a low.
 
-| Reading | Colour |
-|---|---|
-| below `low_mgdl` (70) | red |
-| `low_mgdl` to `high_mgdl` (70-180) | green |
-| above `high_mgdl` to `very_high_mgdl` (181-240) | yellow |
-| above `very_high_mgdl` (240) | deep orange |
+| Reading | Colour | Marker |
+|---|---|---|
+| below `low_mgdl` (70) | light blue | bottom edge |
+| `low_mgdl` to `high_mgdl` (70-180) | near-white | left edge |
+| above `high_mgdl` to `very_high_mgdl` (181-240) | yellow | top edge |
+| above `very_high_mgdl` (240) | deep orange | top edge, heavier |
+| older than `stale_after_min` | grey | full outline |
+
+Status is carried twice over. The colour gives severity, and a marker on
+one edge of the card gives direction — above range lights the top, below
+range the bottom. The marker is there because colour alone does not
+reach everyone: red-green colour vision deficiency affects roughly 1 in
+20 men, and it flattens most warm palettes onto a single olive band.
+Position survives it, so the two states that call for opposite responses
+never depend on telling two hues apart.
+
+The palette avoids the red-green axis for the same reason. Checking it
+by eye is not possible for someone who sees colour normally, so
+`tools/check_palette.py` simulates it under protanopia and deuteranopia
+and fails if any pair gets too close. Run it if you change the colours.
 
 ## Known limits
 
 The low-glucose buzz does not work on Quest 3 controllers, and may be
 ignored by any device on the newer input system. **Haptics are a
-supplement; colour is the real alert.**
+supplement; the face itself is the real alert.**
 
 ## Cautions
 

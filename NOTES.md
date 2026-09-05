@@ -28,6 +28,14 @@ Nothing has exercised these yet. Each says how to check it.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
+- **The palette against real colour vision deficiency.** It is validated
+  by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
+  and asserts the separations. That model is dichromacy — full absence of
+  one cone type — and the anomalous trichromacies, which are far more
+  common, are only approximated by it. Nobody with a deficiency has
+  looked at the face. If someone can, the question is whether low and
+  very high read as different states at a glance, not whether the
+  individual colours are nameable.
 
 To exercise the low path without waiting for a real low, set
 `thresholds.low_mgdl` above the current reading and restart: the first

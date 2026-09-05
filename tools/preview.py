@@ -37,6 +37,10 @@ def reading(mgdl: float, trend: int, age_min: float) -> Reading:
 def main() -> int:
     renderer = WatchFaceRenderer()
 
+    # Every status appears once, because each one now has a marker edge of
+    # its own and the point of the sheet is to see them side by side: left
+    # for in range, top for high, a heavier top for very high, bottom for
+    # low, and the full outline for stale.
     tiles = [
         renderer.render(reading(112, 3, 1)),      # in range, flat
         renderer.render(reading(88, 2, 2)),       # in range, falling
@@ -44,6 +48,9 @@ def main() -> int:
         renderer.render(reading(214, 5, 3)),      # high, rising fast
         renderer.render(reading(268, 4, 2)),      # very high
         renderer.render(reading(133, 4, 27)),     # stale
+        # A stale low: the outline has to win over the bottom edge, or an
+        # hour-old reading would still be claiming the arm is dropping now.
+        renderer.render(reading(58, 2, 41)),
         renderer.render_message("NO CONNECTION", detail="no reading yet"),
         renderer.render_message("CONNECTING"),
     ]
