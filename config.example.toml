@@ -56,6 +56,15 @@ offset = [0.0, 0.02, 0.10]
 # these only to trim.
 rotation_deg = [-40.0, 0.0, 0.0]
 
+# Dim the face while you are not looking at it, so a number you want
+# glanceable is not also permanently in the corner of your eye. Off by
+# default; see "Gaze mode" in README.md. It never fades to nothing, and
+# never at all while a reading is low.
+gaze_fade = false
+gaze_full_deg = 20.0    # within this of the centre of view: full opacity
+gaze_fade_deg = 45.0    # past this: gaze_min_alpha, with a fade between
+gaze_min_alpha = 0.25   # how much is left when you look away; at least 0.1
+
 opacity = 1.0
 flip_vertical = false   # set true if the face renders upside down
 stale_after_min = 10.0  # readings older than this go grey

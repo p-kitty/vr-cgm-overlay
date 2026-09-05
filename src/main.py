@@ -197,6 +197,9 @@ def apply_config(
     """Push a reloaded config onto the running overlay and poller."""
     overlay.set_placement(cfg.offset, cfg.rotation_deg)
     overlay.set_orbit(cfg.orbit, cfg.orbit_radius_m, cfg.orbit_limit_deg)
+    overlay.set_gaze(
+        cfg.gaze_fade, cfg.gaze_full_deg, cfg.gaze_fade_deg, cfg.gaze_min_alpha
+    )
     overlay.set_arm_guide(cfg.arm_guide)
     overlay.set_width(cfg.width_m)
     overlay.set_opacity(cfg.opacity)
@@ -235,6 +238,10 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
         orbit_radius_m=cfg.orbit_radius_m,
         orbit_limit_deg=cfg.orbit_limit_deg,
         arm_guide=cfg.arm_guide,
+        gaze_fade=cfg.gaze_fade,
+        gaze_full_deg=cfg.gaze_full_deg,
+        gaze_fade_deg=cfg.gaze_fade_deg,
+        gaze_min_alpha=cfg.gaze_min_alpha,
     ) as overlay:
         overlay.set_image(renderer.render_message("CONNECTING"))
 
@@ -297,10 +304,17 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
                     if cfg.alert_on_low and is_low and not was_low:
                         overlay.pulse()
                     was_low = is_low
+                    # The buzz is once; this lasts. A gaze fade must not
+                    # dim the one state the colour is there to shout.
+                    overlay.set_alert(is_low)
                 else:
                     image = renderer.render_message(
                         poller.error or "WAITING", detail="no reading yet"
                     )
+                    # No reading has ever arrived: there is no low on the
+                    # face to protect. A failed fetch does not land here,
+                    # because the last reading stays up.
+                    overlay.set_alert(False)
 
                 overlay.set_image(image)
 

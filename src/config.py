@@ -14,6 +14,12 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
+# The lowest display.gaze_min_alpha that may be asked for. A face that
+# faded to nothing would look exactly like the process having died, which
+# is the failure this whole thing exists to avoid, so the floor is a rule
+# rather than a default: it has to survive someone turning the dial down.
+GAZE_ALPHA_FLOOR = 0.1
+
 
 @dataclass
 class Config:
@@ -34,6 +40,10 @@ class Config:
     orbit_radius_m: float = 0.06
     orbit_limit_deg: float = 120.0
     arm_guide: bool = False
+    gaze_fade: bool = False
+    gaze_full_deg: float = 20.0
+    gaze_fade_deg: float = 45.0
+    gaze_min_alpha: float = 0.25
     stale_after_min: float = 10.0
 
     low_mgdl: float = 70.0
@@ -77,6 +87,10 @@ def load(path: Path) -> Config:
     cfg.orbit_radius_m = float(display.get("orbit_radius_m", cfg.orbit_radius_m))
     cfg.orbit_limit_deg = float(display.get("orbit_limit_deg", cfg.orbit_limit_deg))
     cfg.arm_guide = bool(display.get("arm_guide", cfg.arm_guide))
+    cfg.gaze_fade = bool(display.get("gaze_fade", cfg.gaze_fade))
+    cfg.gaze_full_deg = float(display.get("gaze_full_deg", cfg.gaze_full_deg))
+    cfg.gaze_fade_deg = float(display.get("gaze_fade_deg", cfg.gaze_fade_deg))
+    cfg.gaze_min_alpha = float(display.get("gaze_min_alpha", cfg.gaze_min_alpha))
     cfg.stale_after_min = float(display.get("stale_after_min", cfg.stale_after_min))
 
     cfg.low_mgdl = float(thresholds.get("low_mgdl", cfg.low_mgdl))
@@ -113,6 +127,22 @@ def _validate(cfg: Config) -> None:
     if not (0 < cfg.orbit_limit_deg <= 180):
         raise ValueError(
             f"display.orbit_limit_deg must be in (0, 180]: {cfg.orbit_limit_deg}"
+        )
+
+    # 180 is the whole hemisphere behind you, so a fade that only ever
+    # reaches its floor when the face is directly at your back is legal,
+    # if pointless. full == fade is not: it would step rather than fade.
+    if not (0 <= cfg.gaze_full_deg < cfg.gaze_fade_deg <= 180):
+        raise ValueError(
+            "display.gaze_full_deg and gaze_fade_deg must satisfy "
+            f"0 <= full < fade <= 180: {cfg.gaze_full_deg} / {cfg.gaze_fade_deg}"
+        )
+    if not (GAZE_ALPHA_FLOOR <= cfg.gaze_min_alpha <= 1):
+        raise ValueError(
+            f"display.gaze_min_alpha must be between {GAZE_ALPHA_FLOOR} and 1: "
+            f"{cfg.gaze_min_alpha}. A face that fades to nothing looks exactly "
+            "like the process having died, which is the failure this exists to "
+            "avoid, so it always leaves something on screen"
         )
 
     if not (cfg.low_mgdl < cfg.high_mgdl < cfg.very_high_mgdl):
