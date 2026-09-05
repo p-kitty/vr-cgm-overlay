@@ -42,6 +42,7 @@ class Config:
     high_mgdl: float = 180.0
     very_high_mgdl: float = 240.0
 
+    trend_local: bool = True
     trend_window_min: float = 15.0
     trend_flat_mgdl_min: float = 1.0
     trend_fast_mgdl_min: float = 2.0
@@ -90,6 +91,7 @@ def load(path: Path) -> Config:
     cfg.high_mgdl = float(thresholds.get("high_mgdl", cfg.high_mgdl))
     cfg.very_high_mgdl = float(thresholds.get("very_high_mgdl", cfg.very_high_mgdl))
 
+    cfg.trend_local = bool(trend.get("local", cfg.trend_local))
     cfg.trend_window_min = float(trend.get("window_min", cfg.trend_window_min))
     cfg.trend_flat_mgdl_min = float(
         trend.get("flat_mgdl_min", cfg.trend_flat_mgdl_min)
@@ -136,6 +138,11 @@ def _validate(cfg: Config) -> None:
             f"{cfg.low_mgdl} / {cfg.high_mgdl} / {cfg.very_high_mgdl}"
         )
 
+    # These are checked whether or not the fit is switched on. `local`
+    # is flipped from inside the headset like everything else here, and
+    # a setting that is only rejected at the moment it starts being used
+    # is rejected at the worst possible moment.
+    #
     # A window shorter than the fit's own span floor can never hold
     # enough spread to fit, so the arrow would silently fall back to the
     # API's five buckets forever rather than failing where it was set.

@@ -156,12 +156,26 @@ class TrendTuning:
     This lives with the renderer rather than the API client because the
     fit is cheap and `config.toml` is re-read while running: computing
     the angle at draw time is what lets a tuning edit land within a
-    second, the same as placement does.
+    second, the same as placement does. `local` rides on the same
+    reload, so the two arrows can be compared by switching between them
+    with the headset on rather than by restarting twice.
     """
 
+    local: bool = True
     window_min: float = 15.0
     flat_mgdl_min: float = 1.0
     fast_mgdl_min: float = 2.0
+
+    def slope_for(self, reading) -> float | None:
+        """The slope to draw from, or None to defer to the API's arrow.
+
+        The one place that choice is made. The face and the fetch log
+        both ask here, so the log cannot end up claiming a source the
+        face is not using.
+        """
+        if not self.local:
+            return None
+        return reading.slope_mgdl_per_min(self.window_min)
 
     def angle_for_slope(self, slope: float) -> float:
         """Map mg/dL per minute onto an angle, 0 flat and +/-90 vertical."""
@@ -324,12 +338,13 @@ class WatchFaceRenderer:
     def _trend_angle(self, reading) -> float | None:
         """Angle for the arrow, preferring the locally fitted slope.
 
-        The API's own TrendArrow is the fallback, for a fresh sensor or
-        a scanning gap that leaves too little history to fit a line
-        through. While it is in use the arrow snaps back to the five
-        official positions, which is what the face drew before.
+        The API's own TrendArrow is used instead when the fit is turned
+        off, and as the fallback when it is on but there is too little
+        history to fit -- a fresh sensor, or a gap in scanning. Either
+        way the arrow snaps back to the five official positions, which
+        is what the face drew before any of this.
         """
-        slope = reading.slope_mgdl_per_min(self.trend.window_min)
+        slope = self.trend.slope_for(reading)
         if slope is not None:
             return self.trend.angle_for_slope(slope)
         return TREND_ANGLES.get(reading.trend)

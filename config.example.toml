@@ -70,16 +70,23 @@ high_mgdl = 180
 very_high_mgdl = 240
 
 
-# How the trend arrow is worked out. The arrow is fitted from the recent
-# history rather than taken from Abbott's own TrendArrow, whose
-# thresholds are undocumented and only ever give five positions. The
-# API value is still the fallback when there is too little history.
+# How the trend arrow is worked out. Re-read while running, like
+# [display], so the two can be compared with the headset on.
 [trend]
+# true:  fit the slope from the recent history this app already
+#        receives, so the arrow points at the actual rate of change.
+# false: use Abbott's own TrendArrow, the same five positions the phone
+#        app shows. Pick this to have both screens agree exactly.
+# Even with this on, the API value is the fallback whenever there is too
+# little history to fit -- a fresh sensor, or a gap in scanning.
+local = true
+
 window_min = 15.0    # how far back the slope is fitted over; at least 5
 
-# All mg/dL per minute. flat is where the arrow reaches 45 degrees and
-# fast is where it stands fully vertical; between them it slides.
-# Lower them to make the arrow react harder to a slow drift.
+# All mg/dL per minute, and ignored while local = false. flat is where
+# the arrow reaches 45 degrees and fast is where it stands fully
+# vertical; between them it slides. Lower them to make the arrow react
+# harder to a slow drift.
 flat_mgdl_min = 1.0
 fast_mgdl_min = 2.0
 
