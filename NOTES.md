@@ -25,12 +25,11 @@ Nothing has exercised these yet. Each says how to check it.
 - **A long session.** Play for an hour or two, then check the log still
   shows `fetched:` about once a minute, with no `fetch failed` streak
   stretching the interval out.
-- **Running on Python 3.14 at all.** The move off 3.10 was settled from
-  package metadata: `requests` and `Pillow` publish 3.14 support, and
-  `pyopenvr` 2.12.1401 dropped the `pkg_resources` import that would
-  have broken there. No interpreter past 3.10 exists on the development
-  machine, though, so nothing has actually run. Install 3.14, reinstall
-  the requirements, then work through the checks in `CLAUDE.md`.
+- **3.14 in real use.** The headless checks pass on 3.14.7 with Pillow
+  12.3.0 and pyopenvr 2.12.1401, and `preview-states.png` regenerates
+  byte-identical, but nothing has hit the live API or a headset on it
+  yet. `src/main.py --dry-run` covers the first; the second needs the
+  headset on.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
