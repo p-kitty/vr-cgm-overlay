@@ -87,15 +87,17 @@ class Loading(ConfigTestCase):
 
     def test_trend_defaults_to_a_quarter_hour_window(self):
         cfg = self.load()
+        self.assertTrue(cfg.trend_local)
         self.assertEqual(cfg.trend_window_min, 15.0)
         self.assertEqual(cfg.trend_flat_mgdl_min, 1.0)
         self.assertEqual(cfg.trend_fast_mgdl_min, 2.0)
 
     def test_trend_settings_are_read(self):
         cfg = self.load(
-            "\n[trend]\nwindow_min = 30\nflat_mgdl_min = 0.5\n"
+            "\n[trend]\nlocal = false\nwindow_min = 30\nflat_mgdl_min = 0.5\n"
             "fast_mgdl_min = 1.5\n"
         )
+        self.assertFalse(cfg.trend_local)
         self.assertEqual(cfg.trend_window_min, 30.0)
         self.assertEqual(cfg.trend_flat_mgdl_min, 0.5)
         self.assertEqual(cfg.trend_fast_mgdl_min, 1.5)
@@ -189,6 +191,13 @@ class Validation(ConfigTestCase):
     def test_the_span_floor_itself_is_allowed(self):
         cfg = self.load(f"\n[trend]\nwindow_min = {MIN_FIT_SPAN_MIN}\n")
         self.assertEqual(cfg.trend_window_min, MIN_FIT_SPAN_MIN)
+
+    def test_trend_settings_are_checked_even_when_the_fit_is_off(self):
+        # local is flipped from inside the headset like everything else
+        # here. A value only rejected once the fit is switched on is
+        # rejected at the worst possible moment.
+        self.assertRejected("\n[trend]\nlocal = false\nwindow_min = 1\n")
+        self.assertRejected("\n[trend]\nlocal = false\nflat_mgdl_min = 0\n")
 
     def test_trend_thresholds_must_be_ordered(self):
         # flat is where the arrow reaches 45 degrees and fast where it

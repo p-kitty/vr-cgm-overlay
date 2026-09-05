@@ -220,6 +220,21 @@ class TrendSource(unittest.TestCase):
         angle = self.renderer._trend_angle(reading(trend=9, slope=-2.0))
         self.assertEqual(angle, -90.0)
 
+    def test_switching_the_fit_off_returns_to_the_api_arrow(self):
+        # For anyone who would rather the face and the phone show the
+        # same five arrows. The history is still there and still
+        # fittable; it is simply not asked.
+        renderer = WatchFaceRenderer(trend=TrendTuning(local=False))
+        entry = reading(trend=4, slope=-2.0)
+        self.assertEqual(renderer._trend_angle(entry), TREND_ANGLES[4])
+
+    def test_the_fit_being_off_is_decided_in_one_place(self):
+        # The face and the fetch log both read this, so a disagreement
+        # between them would show as a log line describing an arrow that
+        # was never drawn.
+        self.assertIsNone(TrendTuning(local=False).slope_for(reading(slope=1.5)))
+        self.assertAlmostEqual(TREND.slope_for(reading(slope=1.5)), 1.5, places=6)
+
 
 class FormatAge(unittest.TestCase):
     def test_under_a_minute_reads_now(self):

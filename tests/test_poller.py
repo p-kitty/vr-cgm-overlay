@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 
 from librelink import AuthError, GlucosePoint, LibreLinkError, Reading
 from main import MAX_BACKOFF_SEC, Poller
+from renderer import TrendTuning
 
 INTERVAL = 60.0
 
@@ -205,8 +206,8 @@ class FetchLog(unittest.TestCase):
     was used, and it has to not raise while saying it.
     """
 
-    def log_line(self, entry: Reading) -> str:
-        poller = Poller(FakeClient(entry), INTERVAL)
+    def log_line(self, entry: Reading, trend: TrendTuning | None = None) -> str:
+        poller = Poller(FakeClient(entry), INTERVAL, trend)
         with self.assertLogs("vrcgm", level="INFO") as caught:
             poller.poll(0.0)
         return caught.output[0]
@@ -221,6 +222,14 @@ class FetchLog(unittest.TestCase):
         # Otherwise a session where the fit never once succeeded would
         # look exactly like one where it always did.
         self.assertIn("(API)", self.log_line(reading()))
+
+    def test_switching_the_fit_off_is_logged_as_the_api_arrow(self):
+        # The reading can be fitted; the config says not to. The log has
+        # to follow the config, or it describes an arrow the face is not
+        # drawing.
+        line = self.log_line(reading(slope=1.5), TrendTuning(local=False))
+        self.assertIn("(API)", line)
+        self.assertNotIn("mg/dL/min", line)
 
 
 if __name__ == "__main__":
