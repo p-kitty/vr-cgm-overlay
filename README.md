@@ -84,7 +84,7 @@ already-open terminal resolves.
 
 ```bash
 py -3.14 -m venv .venv
-.venv\Scripts\activate
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp config.example.toml config.toml
 ```
