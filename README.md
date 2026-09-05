@@ -236,18 +236,40 @@ the display.
 even in mmol/L mode, so changing the display unit cannot quietly change
 what counts as a low.
 
-| Reading | Colour |
-|---|---|
-| below `low_mgdl` (70) | red |
-| `low_mgdl` to `high_mgdl` (70-180) | green |
-| above `high_mgdl` to `very_high_mgdl` (181-240) | yellow |
-| above `very_high_mgdl` (240) | deep orange |
+| Reading | Colour | Marker |
+|---|---|---|
+| below `low_mgdl` (70) | red | bottom edge |
+| `low_mgdl` to `high_mgdl` (70-180) | green | left edge |
+| above `high_mgdl` to `very_high_mgdl` (181-240) | yellow | top edge |
+| above `very_high_mgdl` (240) | deep orange | top edge, heavier |
+| older than `stale_after_min` | grey | full outline |
+
+Status is carried twice over. The colour gives severity, and a marker on
+one edge of the card gives direction — above range lights the top, below
+range the bottom, and stale outlines the whole card rather than pointing
+anywhere.
+
+The marker is there because colour alone does not reach everyone.
+Red-green colour vision deficiency affects roughly 1 in 20 men and
+flattens green, red and orange onto one olive band. Green and red are
+kept because they are what the official Libre app uses, and a value that
+means "fine" in one colour on the phone and another here would be worse
+than either — but that choice is only safe because position is carrying
+the distinction underneath it. Position does not depend on seeing colour
+at all.
+
+Someone with normal colour vision cannot check this by eye, so
+`tools/check_palette.py` simulates the palette under protanopia and
+deuteranopia. It fails on any pair that colour alone has to carry and
+cannot, and warns on the pairs the markers are covering. Run it if you
+change the colours — and if you remove a marker, read its warnings,
+because each one becomes a real failure.
 
 ## Known limits
 
 The low-glucose buzz does not work on Quest 3 controllers, and may be
 ignored by any device on the newer input system. **Haptics are a
-supplement; colour is the real alert.**
+supplement; the face itself is the real alert.**
 
 ## Cautions
 

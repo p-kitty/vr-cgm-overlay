@@ -28,6 +28,44 @@ Nothing has exercised these yet. Each says how to check it.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
+- **The palette against real colour vision deficiency.** It is validated
+  by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
+  and asserts the separations. That model is dichromacy — full absence of
+  one cone type — and the anomalous trichromacies, which are far more
+  common, are only approximated by it. Nobody with a deficiency has
+  looked at the face. If someone can, the question to ask is whether in
+  range and low read as different states at a glance, not whether the
+  individual colours are nameable.
+
+## In range and low are green and red on purpose, and that costs something
+
+They match the official Libre app, because the phone is the other place
+these numbers get read and having "fine" be green there and something
+else here is its own hazard. It also puts the two most important states
+on the axis red-green deficiency removes: simulated under deuteranopia
+they are dE 13.9 apart, the closest pair on the face by some way.
+
+What makes that survivable is that the direction is not in the colour.
+In range lights the left edge and low lights the bottom one, so the two
+are told apart by where the marker is even when the hues collapse.
+`tools/check_palette.py` prints this as a warning rather than hiding it,
+and the same pair becomes a hard failure the moment anything gives those
+two statuses the same edge.
+
+The obvious-looking fixes do not work, so do not spend the time again:
+
+- **A more saturated red is unavailable, not merely undesirable.** Under
+  protanopia `(255, 0, 0)` has 2.78 contrast against the card, well under
+  the 4.5 legibility floor, because protanopes lose sensitivity to those
+  wavelengths. The red in use is already about as red as stays readable.
+- **Tuning within "still reads as red" is a losing trade.** The best
+  available lifts the worst pair from dE 13.9 to only 22.7 — still under
+  the floor — while dropping the redness from 148 to 95, which is a
+  muted brick that no longer matches the app. It gives up the entire
+  reason for being red and does not buy a pass.
+
+Changing this means choosing to break with the app's colours, which is a
+product decision, not a contrast one. Raise it as such.
 
 To exercise the low path without waiting for a real low, set
 `thresholds.low_mgdl` above the current reading and restart: the first

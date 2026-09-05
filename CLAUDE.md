@@ -86,8 +86,9 @@ access:
 
 ```bash
 python -m unittest discover -s tests -t .  # the logic that runs headless
-python tools/preview.py      # renders every watch face state to a PNG
-python tools/check_orbit.py  # asserts the orbit placement geometry
+python tools/preview.py                    # every watch face state, to a PNG
+python tools/check_orbit.py                # the orbit placement geometry
+python tools/check_palette.py              # the palette under colour blindness
 python -m compileall -q src tools tests
 ```
 
