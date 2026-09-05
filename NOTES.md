@@ -25,11 +25,6 @@ Nothing has exercised these yet. Each says how to check it.
 - **A long session.** Play for an hour or two, then check the log still
   shows `fetched:` about once a minute, with no `fetch failed` streak
   stretching the interval out.
-- **Live config reload in the headset.** The watcher and the reload are
-  covered off-headset, but nothing has yet confirmed the overlay really
-  moves in VR. With the process running, edit `display.rotation_deg` and
-  save: the log should print a `placement:` line and the face should
-  turn within a second.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
@@ -41,6 +36,44 @@ fires the buzz. It has to stay under `high_mgdl`, because `_validate`
 rejects anything breaking `low < high < very_high`; raise
 `high_mgdl` and `very_high_mgdl` too when the reading is already above
 them. Put them all back afterwards.
+
+## The modelled arm drifts from the real one towards the elbow
+
+Orbit mode takes the forearm to run along the controller's Z axis. That
+is very nearly right at the wrist and wrong at the elbow, and turning the
+hand is what separates them. The carpals rotate with the radius, so the
+hand and the wrist joint move as one lump, while the far end of the
+forearm barely rotates at all. A line fixed in controller space therefore
+holds its place where it meets the wrist and swings away from the arm
+further down it.
+
+This is not going away, and measuring the axis instead of assuming it
+would not help: the error is a rotation that happens as the hand turns,
+not a fixed misalignment to calibrate out.
+
+What it does is bound where the face can sensibly sit. Keep `offset` Z
+near the wrist, around 0.08 to 0.12, where the model is close to exact.
+The guide line is 40cm long and will always splay off the arm near the
+elbow; it is meant to be judged where it passes the markers.
+
+
+## Gaze fade would have to be a mode
+
+Desktop+ fades an overlay out when it is not being looked at, which
+suits something wanted glanceable but not permanently in view. The same
+trick fits here, and is cheap: orbit mode already works out where the
+head is relative to the face, and `setOverlayAlpha` is already called.
+
+It is not in. If it goes in it goes in switchable and off by default,
+because a glucose readout is not a desktop window, and two things would
+have to hold:
+
+- **A floor on the alpha, never zero.** Something that vanished outright
+  would look exactly like the process having died, which is the failure
+  this whole thing exists to avoid.
+- **No fading while low.** Colour is the alert. Dimming it at the moment
+  it matters most inverts the priority.
+
 
 ## Haptics do not work on Quest 3
 
@@ -60,3 +93,14 @@ alert and haptics were only ever a supplement.
 `offset` and `rotation_deg` have only ever been tried on Quest 3
 controllers. Controller origins differ between Index, Touch and Vive, so
 a first run on anything else should expect to tune them.
+
+Orbit mode narrows this without closing it: the aiming is computed, so
+`rotation_deg` is only a trim, but `offset` still has to say where the
+forearm runs relative to the controller, and that is per device.
+
+`IVRRenderModels.getComponentState` would settle it. Every controller
+model carries a `handgrip` component whose pose the driver normalises to
+a neutral grip, so reading it and composing it with `offset` would give
+the same placement across devices. Not done: it needs the render model
+name and a component state per device, and one line in `config.toml` has
+covered it so far.

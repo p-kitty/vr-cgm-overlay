@@ -85,6 +85,7 @@ headset or network access:
 
 ```bash
 python tools/preview.py      # renders every watch face state to a PNG
+python tools/check_orbit.py  # asserts the orbit placement geometry
 python -m compileall -q src tools
 ```
 
