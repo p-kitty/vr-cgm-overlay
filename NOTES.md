@@ -28,6 +28,14 @@ Nothing has exercised these yet. Each says how to check it.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
+- **The gaze fade.** Set `display.gaze_fade = true`, look at your
+  wrist and then away from it. The face should sink to
+  `gaze_min_alpha` over about a second and come back as you look at
+  it. What no amount of arithmetic can answer is whether the defaults
+  are the right numbers: whether 20 and 45 degrees match where a glance
+  actually lands, and whether 0.25 is still reassuring against a bright
+  scene or already effectively gone. `tools/check_gaze.py` covers
+  everything about it that is not a judgement.
 - **The palette against real colour vision deficiency.** It is validated
   by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
   and asserts the separations. That model is dichromacy — full absence of
@@ -93,24 +101,6 @@ What it does is bound where the face can sensibly sit. Keep `offset` Z
 near the wrist, around 0.08 to 0.12, where the model is close to exact.
 The guide line is 40cm long and will always splay off the arm near the
 elbow; it is meant to be judged where it passes the markers.
-
-
-## Gaze fade would have to be a mode
-
-Desktop+ fades an overlay out when it is not being looked at, which
-suits something wanted glanceable but not permanently in view. The same
-trick fits here, and is cheap: orbit mode already works out where the
-head is relative to the face, and `setOverlayAlpha` is already called.
-
-It is not in. If it goes in it goes in switchable and off by default,
-because a glucose readout is not a desktop window, and two things would
-have to hold:
-
-- **A floor on the alpha, never zero.** Something that vanished outright
-  would look exactly like the process having died, which is the failure
-  this whole thing exists to avoid.
-- **No fading while low.** Colour is the alert. Dimming it at the moment
-  it matters most inverts the priority.
 
 
 ## Haptics do not work on Quest 3
