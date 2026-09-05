@@ -4,8 +4,10 @@ Three rates run against each other:
   - fetch (60s default): hits the API. The sensor updates about once a
     minute, so going faster buys nothing.
   - draw (1s): refreshes the age readout.
-  - track (every pass, ~20/s): keeps the controller attachment current and,
-    in orbit mode, turns the face towards the head.
+  - track (90/s): keeps the controller attachment current and, in orbit
+    mode, turns the face towards the head. It runs at headset rate because
+    anything slower shows as the face stepping around the arm rather than
+    sliding, and Windows will not schedule it there without being asked.
 
 A failed fetch keeps the last reading on screen. Its age keeps climbing,
 so it stays obvious the value is old; going silent mid-session would be
@@ -18,6 +20,8 @@ the headset still on.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import ctypes
 import logging
 import random
 import sys
@@ -33,11 +37,38 @@ from renderer import Theme, WatchFaceRenderer
 log = logging.getLogger("vrcgm")
 
 DRAW_INTERVAL_SEC = 1.0
+TRACK_INTERVAL_SEC = 1.0 / 90.0
 MAX_BACKOFF_SEC = 600.0
 
 # Settings a reload cannot apply: the overlay picks its controller role
 # once, and the API client is built with the account.
 RESTART_ONLY = ("hand", "email", "password", "patient_id", "region", "api_version")
+
+
+@contextlib.contextmanager
+def fine_timer():
+    """Ask Windows for a 1ms scheduling tick for as long as the loop runs.
+
+    Sleeps are rounded up to the system tick, which is 15.6ms by default.
+    That caps the loop near 64Hz however short a sleep it asks for, and the
+    old 0.05 sleep was really taking 62ms, so tracking ran at 16Hz and the
+    orbit stepped visibly. Measured here: sleep(1/90) takes 15.5ms as
+    standard and 11.1ms with the period set.
+
+    It is a system wide setting and costs power, so it is given back on the
+    way out. On anything but Windows this does nothing.
+    """
+    try:
+        winmm = ctypes.WinDLL("winmm")
+    except (AttributeError, OSError):
+        yield
+        return
+
+    winmm.timeBeginPeriod(1)
+    try:
+        yield
+    finally:
+        winmm.timeEndPeriod(1)
 
 
 class Poller:
@@ -183,7 +214,7 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
     poller = Poller(client, cfg.poll_interval_sec)
     watcher = ConfigWatcher(config_path)
 
-    with WristOverlay(
+    with fine_timer(), WristOverlay(
         hand=cfg.hand,
         width_m=cfg.width_m,
         offset=cfg.offset,
@@ -200,9 +231,13 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
         last_draw = 0.0
         was_low = False
         attached = False
+        # perf_counter, not monotonic: on Windows monotonic comes off
+        # GetTickCount64 and only moves in 15.6ms steps, which is coarser
+        # than the interval being paced here.
+        next_tick = time.perf_counter()
 
         while True:
-            now = time.monotonic()
+            now = time.perf_counter()
 
             if overlay.should_quit():
                 return 0
@@ -251,7 +286,14 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
 
                 overlay.set_image(image)
 
-            time.sleep(0.05)
+            # Sleep to the next tick rather than for a fixed span, so the
+            # work above does not stretch the interval it was meant to keep.
+            next_tick += TRACK_INTERVAL_SEC
+            delay = next_tick - time.perf_counter()
+            if delay > 0:
+                time.sleep(delay)
+            else:
+                next_tick = time.perf_counter()  # fell behind; do not chase it
 
 
 def dry_run(cfg: config_mod.Config, out: Path) -> int:

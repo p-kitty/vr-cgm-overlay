@@ -32,11 +32,13 @@ OVERLAY_NAME = "VR CGM Wrist Glucose"
 # How often to re-check for SteamVR while waiting for it to come up.
 CONNECT_RETRY_SEC = 3.0
 
-# How far the orbit direction moves towards its target each update. The
-# transform is recomputed at the loop rate rather than the frame rate, so
-# easing hides the steps; it also stops the face twitching when the head is
-# nearly in line with the arm and the target direction is ill-conditioned.
-ORBIT_EASE = 0.25
+# Time constant for the orbit easing: the angle closes about 63% of the gap
+# to where it is aiming in this long. Expressed as a time rather than a
+# fraction per update so the motion does not change when the loop rate does,
+# and so an uneven tick does not show as an uneven slide. It also stops the
+# face twitching when the head is nearly in line with the arm and the target
+# direction is ill-conditioned.
+ORBIT_SMOOTH_SEC = 0.12
 
 _IDENTITY = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 
@@ -159,6 +161,7 @@ def _orbit_transform(
     rotation_deg: tuple[float, float, float],
     head: tuple[float, float, float],
     previous: float | None,
+    elapsed: float,
 ) -> tuple[openvr.HmdMatrix34_t, float]:
     """Sit the face on the near side of the forearm, turned towards the head.
 
@@ -176,7 +179,8 @@ def _orbit_transform(
 
     `previous` is the angle around the arm picked last time, eased away from
     so a head turn does not snap the face across the arm. It is returned to
-    be passed back in on the next call.
+    be passed back in on the next call. `elapsed` is the time since that
+    call, and is unused on the first one, when there is nothing to ease.
     """
     # The arm axis is the controller's Z, so the perpendicular part of the
     # direction to the head is just its X and Y. The whole choice is then a
@@ -200,7 +204,8 @@ def _orbit_transform(
         # Both ends are inside [-limit, limit], so easing between them stays
         # inside it and sweeps over the top of the arm rather than under it.
         # Only limit_deg = 180 has no forbidden side for that to matter.
-        angle = previous + (target - previous) * ORBIT_EASE
+        eased = 1.0 - math.exp(-max(0.0, elapsed) / ORBIT_SMOOTH_SEC)
+        angle = previous + (target - previous) * eased
 
     nx, ny = math.sin(angle), math.cos(angle)
     position = (centre[0] + nx * radius, centre[1] + ny * radius, centre[2])
@@ -249,6 +254,8 @@ class WristOverlay:
         # updates so it can be eased rather than jumped. None means "no
         # history yet", and the next update places it outright.
         self._orbit_angle: float | None = None
+        # When that angle was last worked out, so the easing can be a rate.
+        self._orbit_at: float | None = None
 
         self._system = _connect()
         self._overlay = openvr.VROverlay()
@@ -314,6 +321,14 @@ class WristOverlay:
         )
 
     def _apply_orbit(self, index: int, head: tuple[float, float, float]) -> None:
+        # perf_counter, not monotonic: monotonic is GetTickCount64 on
+        # Windows and steps in 15.6ms, which would quantise the easing.
+        now = time.perf_counter()
+        # A long gap, from a stall or a controller coming back, should land
+        # where it is aiming rather than crawl there from wherever it was.
+        elapsed = now - (self._orbit_at or now)
+        self._orbit_at = now
+
         transform, self._orbit_angle = _orbit_transform(
             self._offset,
             self._orbit_radius,
@@ -321,6 +336,7 @@ class WristOverlay:
             self._rotation,
             head,
             self._orbit_angle,
+            elapsed,
         )
         self._overlay.setOverlayTransformTrackedDeviceRelative(
             self._handle, index, transform
@@ -335,7 +351,7 @@ class WristOverlay:
         them shows orbit_radius_m and orbit_limit_deg at once.
         """
         axis, _ = _orbit_transform(
-            self._offset, 0.0, 180.0, (0.0, 0.0, 0.0), head, None
+            self._offset, 0.0, 180.0, (0.0, 0.0, 0.0), head, None, 0.0
         )
 
         cx, cy, cz = self._offset
@@ -368,6 +384,7 @@ class WristOverlay:
                 log.info("lost the %s controller", self._hand)
                 self._attached_index = None
                 self._orbit_angle = None
+                self._orbit_at = None
             return False
 
         if index != self._attached_index:
@@ -379,6 +396,7 @@ class WristOverlay:
             )
             self._attached_index = index
             self._orbit_angle = None
+            self._orbit_at = None
             log.info("attached to the %s controller (index=%d)", self._hand, index)
 
         if self._orbit or self._guide is not None:
@@ -426,6 +444,7 @@ class WristOverlay:
         self._orbit_radius = radius_m
         self._orbit_limit = limit_deg
         self._orbit_angle = None
+        self._orbit_at = None
         if was_on and not enabled:
             self._attached_index = None  # force the fixed transform back on
         log.info(

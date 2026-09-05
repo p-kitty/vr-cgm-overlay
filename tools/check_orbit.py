@@ -56,6 +56,9 @@ NO_TRIM = (0.0, 0.0, 0.0)
 # are compared far more tightly.
 TOL = 1e-5
 
+# One update at the loop rate, for the easing to be measured against.
+TICK = 1.0 / 90.0
+
 
 def _dot(a, b):
     return sum(p * q for p, q in zip(a, b))
@@ -89,7 +92,7 @@ def _assert_frame(axes, where):
 def place(head, previous, limit_deg=LIMIT):
     """Run one update and assert everything that must always hold."""
     matrix, angle = _orbit_transform(
-        CENTRE, RADIUS, limit_deg, NO_TRIM, head, previous
+        CENTRE, RADIUS, limit_deg, NO_TRIM, head, previous, TICK
     )
     axes = _axes(matrix)
     _, y_axis, z_axis = axes
@@ -182,6 +185,23 @@ def main() -> int:
             facing = _dot(axes[2], [c / span for c in to_head])
             assert facing > 1 - TOL, f"marker {step} is turned {facing:.4f} from the head"
     print(f"  {'markers face the head':26} {MARKERS * len(heads):+7d} cases")
+
+    # The easing is a rate, not a step, so the same span of time has to get
+    # to the same place whatever the loop rate was. This is what stops the
+    # motion changing character when the loop is sped up or stutters.
+    span = 0.3
+    settled = []
+    for tick in (1.0 / 90.0, 1.0 / 30.0, 1.0 / 20.0, 1.0 / 10.0):
+        angle, elapsed = 0.0, 0.0
+        while elapsed < span - 1e-9:
+            angle = _orbit_transform(
+                CENTRE, RADIUS, LIMIT, NO_TRIM, (0.5, -0.02, 0.10), angle, tick
+            )[1]
+            elapsed += tick
+        settled.append(math.degrees(angle))
+    spread = max(settled) - min(settled)
+    assert spread < 0.01, f"easing depends on the loop rate: {settled}"
+    print(f"  {'easing is rate based':26} {spread:+7.4f} deg spread")
 
     print("orbit geometry OK")
     return 0
