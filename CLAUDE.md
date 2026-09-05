@@ -81,14 +81,25 @@ Two ways to supply one password was confusing with no real benefit.
 ## Verification
 
 Before committing, confirm the code still runs, on Python 3.14 — the
-version the project targets. Neither check needs a VR headset or network
+version the project targets. None of these need a VR headset or network
 access:
 
 ```bash
+python -m unittest discover -s tests -t .  # the logic that runs headless
 python tools/preview.py      # renders every watch face state to a PNG
 python tools/check_orbit.py  # asserts the orbit placement geometry
-python -m compileall -q src tools
+python -m compileall -q src tools tests
 ```
+
+`tests/` covers what can be asserted without a device: timestamp
+parsing, the fetch schedule and its backoff, config validation and the
+live reload, and the colour thresholds. It deliberately does not mock
+the LibreLinkUp HTTP calls — the real risk there is the unofficial API
+changing shape, which only `--dry-run` can see — and it does not touch
+`src/overlay.py`.
+
+`-t .` is needed: `tests` is a package, and its `__init__.py` is what
+puts `src` on the path.
 
 To check the API client against the live service (needs `config.toml`):
 
