@@ -1,4 +1,8 @@
-requests>=2.31
-Pillow>=10.0
-openvr>=1.26.701
-tomli>=2.0 ; python_version < "3.11"
+# Needs Python 3.14 or newer. Every floor here is the first release that
+# actually runs on 3.14. Below them the install still succeeds and the
+# import is what fails.
+requests>=2.33
+Pillow>=11.3
+# 2.12.1401 replaced pkg_resources with importlib.resources. Earlier
+# releases import pkg_resources, which 3.14 no longer ships.
+openvr>=2.12.1401
