@@ -28,9 +28,9 @@ import sys
 import time
 from pathlib import Path
 
-# The dependency floors in requirements.txt are the first releases that
-# run on 3.14, and config.py imports tomllib unguarded. Say so in a
-# sentence rather than letting an import blow up further down.
+# config.py imports tomllib unguarded, and the floors in
+# requirements.txt assume 3.14. Say what is wrong in a sentence rather
+# than letting an import blow up further down.
 if sys.version_info < (3, 14):
     raise SystemExit(
         "vr-cgm-overlay needs Python 3.14 or newer; this is "
