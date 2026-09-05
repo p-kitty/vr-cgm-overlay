@@ -4,9 +4,9 @@ Three rates run against each other:
   - fetch (60s default): hits the API. The sensor updates about once a
     minute, so going faster buys nothing.
   - draw (1s): refreshes the age readout.
-  - track (90/s): keeps the controller attachment current and, in orbit
-    mode, turns the face towards the head. It runs at headset rate because
-    anything slower shows as the face stepping around the arm rather than
+  - track (the headset's own refresh rate): keeps the controller attachment
+    current and, in orbit mode, turns the face towards the head. Anything
+    much slower shows as the face stepping around the arm rather than
     sliding, and Windows will not schedule it there without being asked.
 
 A failed fetch keeps the last reading on screen. Its age keeps climbing,
@@ -37,7 +37,8 @@ from renderer import Theme, WatchFaceRenderer
 log = logging.getLogger("vrcgm")
 
 DRAW_INTERVAL_SEC = 1.0
-TRACK_INTERVAL_SEC = 1.0 / 90.0
+# Used only when the headset will not say what it refreshes at.
+FALLBACK_TRACK_HZ = 90.0
 MAX_BACKOFF_SEC = 600.0
 
 # Settings a reload cannot apply: the overlay picks its controller role
@@ -228,6 +229,14 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
     ) as overlay:
         overlay.set_image(renderer.render_message("CONNECTING"))
 
+        # Pace against the headset rather than a rate picked here: 72 on a
+        # Quest 3, 144 on an Index. Only the orbit angle is computed in this
+        # loop -- the compositor applies the live controller pose to it every
+        # frame regardless -- so matching is about not stepping and not
+        # burning work, rather than about being in phase with anything.
+        track_interval = 1.0 / overlay.display_hz(FALLBACK_TRACK_HZ)
+        log.info("tracking at %.0fHz", 1.0 / track_interval)
+
         last_draw = 0.0
         was_low = False
         attached = False
@@ -288,7 +297,7 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
 
             # Sleep to the next tick rather than for a fixed span, so the
             # work above does not stretch the interval it was meant to keep.
-            next_tick += TRACK_INTERVAL_SEC
+            next_tick += track_interval
             delay = next_tick - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)

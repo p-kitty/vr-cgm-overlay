@@ -32,6 +32,10 @@ OVERLAY_NAME = "VR CGM Wrist Glucose"
 # How often to re-check for SteamVR while waiting for it to come up.
 CONNECT_RETRY_SEC = 3.0
 
+# Refresh rates outside this are taken as a driver reporting nonsense
+# rather than as a real headset.
+DISPLAY_HZ_RANGE = (30.0, 360.0)
+
 # Time constant for the orbit easing: the angle closes about 63% of the gap
 # to where it is aiming in this long. Expressed as a time rather than a
 # fraction per update so the motion does not change when the loop rate does,
@@ -280,6 +284,28 @@ class WristOverlay:
 
         log.info("created overlay (hand=%s, width=%.3fm)", hand, width_m)
         self.set_arm_guide(arm_guide)
+
+    def display_hz(self, fallback: float) -> float:
+        """What the headset refreshes at, to pace the tracking loop against.
+
+        Quest 3 runs at 72 by default and an Index goes to 144, so a rate
+        fixed in the source is either wasted work or visible steps depending
+        on whose headset it lands on. Read at startup only: changing the
+        refresh rate mid-session is rare and needs a restart to take.
+        """
+        try:
+            hz = self._system.getFloatTrackedDeviceProperty(
+                openvr.k_unTrackedDeviceIndex_Hmd, openvr.Prop_DisplayFrequency_Float
+            )
+        except Exception as exc:  # not every driver fills this in
+            log.debug("no display frequency reported: %s", exc)
+            return fallback
+
+        low, high = DISPLAY_HZ_RANGE
+        if not low <= hz <= high:
+            log.warning("ignoring a reported display rate of %.1fHz", hz)
+            return fallback
+        return hz
 
     # -- controller tracking ------------------------------------------------
 
