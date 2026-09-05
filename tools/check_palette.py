@@ -65,12 +65,20 @@ MIN_DELTA_E = 25.0
 MIN_LUMINANCE_CONTRAST = 2.00
 
 # "Well above range" and "below range" call for opposite responses, so the
-# pair gets both floors regardless of what the markers do. This is the one
-# that failed worst before: deep orange and red used to land on the same
-# olive under both deficiency types.
+# pair is called out by name even though the markers separate it.
 CRITICAL_PAIRS = {frozenset(("very high", "low"))}
-MIN_CRITICAL_DELTA_E = 60.0
-MIN_CRITICAL_LUMINANCE = 1.50
+
+# Whether a pair below MIN_DELTA_E is a failure or a warning depends on
+# whether anything else is carrying it:
+#
+#   - both statuses on the same marker edge -> colour is alone -> FAIL
+#   - different edges -> position carries the distinction -> WARN
+#
+# The warnings are not decoration. in range and low are green and red to
+# match the official Libre app, which puts them on the axis red-green
+# deficiency removes, and that pair is the closest on the face. It is
+# accepted, not fixed: the markers are what make it safe, so the warning
+# stays visible rather than being tuned away or silenced.
 
 # Text and markers are drawn on the card, so each has to be legible there
 # too. WCAG's floor for large text.
@@ -163,43 +171,56 @@ def main() -> int:
         print(f"  {name:10}  {STATUS_MARKERS[key]:10}  {cells}")
 
     failures: list[str] = []
+    warnings: list[str] = []
 
     print("\nSeparation per pair (dE, then luminance contrast)")
     header = "  ".join(f"{v[:6]:>6}" for v in VISION_TYPES)
-    print(f"  {'pair':24}  {header}   floor   {header}   floor")
+    print(f"  {'pair':24}  {header}   floor   {header}  floor  carried by")
     for a, b in combinations(palette, 2):
         key_a, rgb_a = palette[a]
         key_b, rgb_b = palette[b]
-        critical = frozenset((a, b)) in CRITICAL_PAIRS
 
         des = {v: delta_e(simulate(rgb_a, v), simulate(rgb_b, v)) for v in VISION_TYPES}
         lums = {v: contrast(simulate(rgb_a, v), simulate(rgb_b, v)) for v in VISION_TYPES}
 
-        de_floor = MIN_CRITICAL_DELTA_E if critical else MIN_DELTA_E
-        # Position separates the pair unless both light the same edge.
-        needs_luminance = critical or _shares_marker_edge(key_a, key_b)
-        lum_floor = (
-            MIN_CRITICAL_LUMINANCE if critical else MIN_LUMINANCE_CONTRAST
-        ) if needs_luminance else 0.0
+        # Colour is alone only when both statuses light the same edge.
+        colour_alone = _shares_marker_edge(key_a, key_b)
+        edges = f"{STATUS_MARKERS[key_a]}/{STATUS_MARKERS[key_b]}"
+        carried_by = "colour only" if colour_alone else edges
 
         de_cells = "  ".join(f"{des[v]:6.1f}" for v in VISION_TYPES)
         lum_cells = "  ".join(f"{lums[v]:6.2f}" for v in VISION_TYPES)
-        lum_floor_text = f"{lum_floor:5.2f}" if needs_luminance else "    -"
+        lum_floor_text = (
+            f"{MIN_LUMINANCE_CONTRAST:5.2f}" if colour_alone else "    -"
+        )
+
         marks = ""
-        if min(des.values()) < de_floor:
+        short = min(des.values()) < MIN_DELTA_E
+        if short and colour_alone:
             failures.append(
-                f"{a} vs {b}: dE {min(des.values()):.1f} < {de_floor:.1f}"
+                f"{a} vs {b}: dE {min(des.values()):.1f} < {MIN_DELTA_E:.1f} "
+                "and nothing else separates them"
             )
-            marks += " dE"
-        if needs_luminance and min(lums.values()) < lum_floor:
+            marks = "  <- FAIL"
+        elif short:
+            note = " (the pair meaning opposite things)" if (
+                frozenset((a, b)) in CRITICAL_PAIRS
+            ) else ""
+            warnings.append(
+                f"{a} vs {b}: dE {min(des.values()):.1f} < {MIN_DELTA_E:.1f}; "
+                f"resting on the {edges} markers{note}"
+            )
+            marks = "  <- position"
+        if colour_alone and min(lums.values()) < MIN_LUMINANCE_CONTRAST:
             failures.append(
-                f"{a} vs {b}: luminance {min(lums.values()):.2f} < {lum_floor:.2f}"
+                f"{a} vs {b}: luminance {min(lums.values()):.2f} "
+                f"< {MIN_LUMINANCE_CONTRAST:.2f} and nothing else separates them"
             )
-            marks += " lum"
-        suffix = f"  <- FAIL{marks}" if marks else ""
+            marks = "  <- FAIL"
+
         print(
-            f"  {a + ' vs ' + b:24}  {de_cells}  {de_floor:6.1f}   "
-            f"{lum_cells}  {lum_floor_text}{suffix}"
+            f"  {a + ' vs ' + b:24}  {de_cells}  {MIN_DELTA_E:6.1f}   "
+            f"{lum_cells}  {lum_floor_text}  {carried_by}{marks}"
         )
 
     print("\nLuminance contrast against the card background")
@@ -213,13 +234,25 @@ def main() -> int:
         if worst < MIN_BACKGROUND_CONTRAST:
             failures.append(f"{name} vs background: {worst:.2f} < {MIN_BACKGROUND_CONTRAST:.2f}")
 
+    if warnings:
+        print("\nResting on the markers, not on colour:")
+        for line in warnings:
+            print(f"  WARN: {line}")
+        print(
+            "\n  These are accepted, not overlooked. in range and low are the\n"
+            "  Libre app's green and red so the two screens agree, which puts\n"
+            "  them on the axis red-green deficiency removes. Deleting a\n"
+            "  marker, or giving two of these statuses the same edge, turns\n"
+            "  each of these lines into a failure."
+        )
+
     if failures:
         print()
         for line in failures:
             print(f"FAIL: {line}")
         return 1
 
-    print("\nOK: every pair stays apart under both red-green deficiency types.")
+    print("\nOK: nothing is separated by colour alone that colour cannot carry.")
     return 0
 
 

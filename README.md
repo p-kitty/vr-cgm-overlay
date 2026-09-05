@@ -238,24 +238,32 @@ what counts as a low.
 
 | Reading | Colour | Marker |
 |---|---|---|
-| below `low_mgdl` (70) | light blue | bottom edge |
-| `low_mgdl` to `high_mgdl` (70-180) | near-white | left edge |
+| below `low_mgdl` (70) | red | bottom edge |
+| `low_mgdl` to `high_mgdl` (70-180) | green | left edge |
 | above `high_mgdl` to `very_high_mgdl` (181-240) | yellow | top edge |
 | above `very_high_mgdl` (240) | deep orange | top edge, heavier |
 | older than `stale_after_min` | grey | full outline |
 
 Status is carried twice over. The colour gives severity, and a marker on
 one edge of the card gives direction — above range lights the top, below
-range the bottom. The marker is there because colour alone does not
-reach everyone: red-green colour vision deficiency affects roughly 1 in
-20 men, and it flattens most warm palettes onto a single olive band.
-Position survives it, so the two states that call for opposite responses
-never depend on telling two hues apart.
+range the bottom, and stale outlines the whole card rather than pointing
+anywhere.
 
-The palette avoids the red-green axis for the same reason. Checking it
-by eye is not possible for someone who sees colour normally, so
-`tools/check_palette.py` simulates it under protanopia and deuteranopia
-and fails if any pair gets too close. Run it if you change the colours.
+The marker is there because colour alone does not reach everyone.
+Red-green colour vision deficiency affects roughly 1 in 20 men and
+flattens green, red and orange onto one olive band. Green and red are
+kept because they are what the official Libre app uses, and a value that
+means "fine" in one colour on the phone and another here would be worse
+than either — but that choice is only safe because position is carrying
+the distinction underneath it. Position does not depend on seeing colour
+at all.
+
+Someone with normal colour vision cannot check this by eye, so
+`tools/check_palette.py` simulates the palette under protanopia and
+deuteranopia. It fails on any pair that colour alone has to carry and
+cannot, and warns on the pairs the markers are covering. Run it if you
+change the colours — and if you remove a marker, read its warnings,
+because each one becomes a real failure.
 
 ## Known limits
 

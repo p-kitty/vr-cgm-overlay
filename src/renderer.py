@@ -44,26 +44,38 @@ FONT_CANDIDATES = [
 class Theme:
     """Colours and thresholds. Thresholds are mg/dL even in mmol mode.
 
-    The palette deliberately avoids putting two statuses on the red-green
-    axis, because that is the axis the common colour vision deficiencies
-    remove: a red/green/amber set collapses onto one olive band for
-    roughly 1 in 20 men, which is exactly the fast path this face is
-    built on. Instead the out-of-range states run yellow -> orange for
-    severity above range and blue below it, which is the split that
-    survives every deficiency type, and in range is left achromatic so
-    "not white" is itself the signal.
+    Green for in range and red for low match the official FreeStyle
+    Libre app. That is deliberate: the phone is the other place these
+    numbers are read, and a value that means "fine" in one colour there
+    and another colour here is its own hazard. The colour language is
+    shared on purpose.
+
+    It is not, however, a safe palette on its own. Green against red is
+    the axis the common colour vision deficiencies remove, and under
+    simulation the pair is closer than any other on the face. Abbott's
+    own answer to that is voice accessibility, which a VR overlay cannot
+    borrow -- there is no screen reader here, and the whole point is to
+    not have to read the digits. So the direction is carried by the
+    marker position in STATUS_MARKERS instead, and colour is the
+    redundant channel for the pairs that share a marker edge.
+
+    The one part that is not free to move is how light these are. A
+    saturated red is unusable here: under protanopia (255, 0, 0) sits at
+    2.78 contrast against the card, well under the 4.5 legibility floor,
+    because protanopes lose sensitivity to exactly those wavelengths.
+    The red below is already about as red as stays legible.
 
     Do not retune these by eye. tools/check_palette.py simulates the
-    palette under protanopia and deuteranopia and asserts every pair
-    stays apart; run it after any change here.
+    palette under protanopia and deuteranopia; run it after any change
+    here, and read its warnings as well as its exit code.
     """
 
     low_mgdl: float = 70.0
     high_mgdl: float = 180.0
     very_high_mgdl: float = 240.0
 
-    color_in_range: tuple[int, int, int] = (236, 240, 247)   # near-white
-    color_low: tuple[int, int, int] = (140, 200, 255)        # light blue
+    color_in_range: tuple[int, int, int] = (126, 231, 135)   # green
+    color_low: tuple[int, int, int] = (255, 107, 107)        # red
     color_high: tuple[int, int, int] = (255, 214, 70)        # yellow
     color_very_high: tuple[int, int, int] = (238, 104, 32)   # deep orange
     color_stale: tuple[int, int, int] = (126, 131, 143)      # grey
