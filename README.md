@@ -270,6 +270,13 @@ than either — but that choice is only safe because position is carrying
 the distinction underneath it. Position does not depend on seeing colour
 at all.
 
+Someone with normal colour vision cannot check this by eye, so
+`tools/check_palette.py` simulates the palette under protanopia and
+deuteranopia. It fails on any pair that colour alone has to carry and
+cannot, and warns on the pairs the markers are covering. Run it if you
+change the colours — and if you remove a marker, read its warnings,
+because each one becomes a real failure.
+
 `[trend]` sets how the arrow is worked out.
 
 | Setting | What it does |
@@ -287,13 +294,6 @@ When there is too little history to fit — a fresh sensor, or a stretch
 where the phone was not scanning — the arrow falls back to the API's own
 value and snaps to the five official positions. `--dry-run` prints which
 of the two is in use, and so does the log line on every fetch.
-
-Someone with normal colour vision cannot check this by eye, so
-`tools/check_palette.py` simulates the palette under protanopia and
-deuteranopia. It fails on any pair that colour alone has to carry and
-cannot, and warns on the pairs the markers are covering. Run it if you
-change the colours — and if you remove a marker, read its warnings,
-because each one becomes a real failure.
 
 ## Known limits
 
