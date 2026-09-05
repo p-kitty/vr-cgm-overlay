@@ -25,40 +25,6 @@ Nothing has exercised these yet. Each says how to check it.
 - **A long session.** Play for an hour or two, then check the log still
   shows `fetched:` about once a minute, with no `fetch failed` streak
   stretching the interval out.
-- **Live config reload in the headset.** The watcher and the reload are
-  covered off-headset, but nothing has yet confirmed the overlay really
-  moves in VR. With the process running, edit `display.rotation_deg` and
-  save: the log should print a `placement:` line and the face should
-  turn within a second.
-- **Orbit mode.** `tools/check_orbit.py` asserts the geometry, but nothing
-  has judged it on an arm. `config.toml` is watched, so all of this is
-  done with the headset on, and `orbit = false` puts the old fixed
-  placement back at any point. With `display.orbit = true`:
-
-  1. **Move your head, not your hand.** Hold the controller still and
-     lean around it. The face should slide round the forearm to stay in
-     front of you, easing rather than snapping, and stop before it
-     reaches the underside of the arm.
-  2. **Move your hand, not your head.** Hold your head still and roll
-     your wrist palm-up and palm-down. The face should stay put in the
-     room and never enter your arm. This is the case a fixed placement
-     cannot do, so it is the one that says whether the mode works.
-  3. **Watch what it circles.** It should turn about the arm. A wide arc
-     swinging past your arm means `offset` X and Y are not on the
-     forearm's centreline. Y usually wants to be negative, the controller
-     origin sitting above the wrist.
-  4. **Read the digits.** Sideways or upside down means the axis
-     convention in `_orbit_transform` is out by a quarter or a half turn.
-     Put 90 or 180 into `rotation_deg` Z to find which, then correct the
-     basis: leaving it in the trim hides a wrong convention behind a
-     number that is supposed to be a nudge.
-- **The arm guides.** `display.arm_guide = true` should draw a cyan line
-  down the modelled forearm and nine magenta dots around it, the wide one
-  at the top of the wrist. Neither has been seen in a headset. The line
-  is symmetric on purpose, so it cannot look upside down. Every dot is
-  turned to the head separately, so all nine should stay visible from any
-  angle; one going missing means its billboard basis is degenerate rather
-  than that it is edge-on.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
