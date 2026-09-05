@@ -1,9 +1,13 @@
 """Resident entry point.
 
-Two rates run against each other:
+Three rates run against each other:
   - fetch (60s default): hits the API. The sensor updates about once a
     minute, so going faster buys nothing.
-  - draw (1s): refreshes the age readout and keeps controller tracking up.
+  - draw (1s): refreshes the age readout.
+  - track (the headset's own refresh rate): keeps the controller attachment
+    current and, in orbit mode, turns the face towards the head. Anything
+    much slower shows as the face stepping around the arm rather than
+    sliding, and Windows will not schedule it there without being asked.
 
 A failed fetch keeps the last reading on screen. Its age keeps climbing,
 so it stays obvious the value is old; going silent mid-session would be
@@ -16,11 +20,22 @@ the headset still on.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import ctypes
 import logging
 import random
 import sys
 import time
 from pathlib import Path
+
+# config.py imports tomllib unguarded, and the floors in
+# requirements.txt assume 3.14. Say what is wrong in a sentence rather
+# than letting an import blow up further down.
+if sys.version_info < (3, 14):
+    raise SystemExit(
+        "vr-cgm-overlay needs Python 3.14 or newer; this is "
+        f"{sys.version.split()[0]}."
+    )
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -31,11 +46,39 @@ from renderer import Theme, WatchFaceRenderer
 log = logging.getLogger("vrcgm")
 
 DRAW_INTERVAL_SEC = 1.0
+# Used only when the headset will not say what it refreshes at.
+FALLBACK_TRACK_HZ = 90.0
 MAX_BACKOFF_SEC = 600.0
 
 # Settings a reload cannot apply: the overlay picks its controller role
 # once, and the API client is built with the account.
 RESTART_ONLY = ("hand", "email", "password", "patient_id", "region", "api_version")
+
+
+@contextlib.contextmanager
+def fine_timer():
+    """Ask Windows for a 1ms scheduling tick for as long as the loop runs.
+
+    Sleeps are rounded up to the system tick, which is 15.6ms by default.
+    That caps the loop near 64Hz however short a sleep it asks for, and the
+    old 0.05 sleep was really taking 62ms, so tracking ran at 16Hz and the
+    orbit stepped visibly. Measured here: sleep(1/90) takes 15.5ms as
+    standard and 11.1ms with the period set.
+
+    It is a system wide setting and costs power, so it is given back on the
+    way out. On anything but Windows this does nothing.
+    """
+    try:
+        winmm = ctypes.WinDLL("winmm")
+    except (AttributeError, OSError):
+        yield
+        return
+
+    winmm.timeBeginPeriod(1)
+    try:
+        yield
+    finally:
+        winmm.timeEndPeriod(1)
 
 
 class Poller:
@@ -153,6 +196,8 @@ def apply_config(
 ) -> None:
     """Push a reloaded config onto the running overlay and poller."""
     overlay.set_placement(cfg.offset, cfg.rotation_deg)
+    overlay.set_orbit(cfg.orbit, cfg.orbit_radius_m, cfg.orbit_limit_deg)
+    overlay.set_arm_guide(cfg.arm_guide)
     overlay.set_width(cfg.width_m)
     overlay.set_opacity(cfg.opacity)
     overlay.set_flip_vertical(cfg.flip_vertical)
@@ -179,24 +224,46 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
     poller = Poller(client, cfg.poll_interval_sec)
     watcher = ConfigWatcher(config_path)
 
-    with WristOverlay(
+    with fine_timer(), WristOverlay(
         hand=cfg.hand,
         width_m=cfg.width_m,
         offset=cfg.offset,
         rotation_deg=cfg.rotation_deg,
         opacity=cfg.opacity,
         flip_vertical=cfg.flip_vertical,
+        orbit=cfg.orbit,
+        orbit_radius_m=cfg.orbit_radius_m,
+        orbit_limit_deg=cfg.orbit_limit_deg,
+        arm_guide=cfg.arm_guide,
     ) as overlay:
         overlay.set_image(renderer.render_message("CONNECTING"))
 
+        # Pace against the headset rather than a rate picked here: 72 on a
+        # Quest 3, 144 on an Index. Only the orbit angle is computed in this
+        # loop -- the compositor applies the live controller pose to it every
+        # frame regardless -- so matching is about not stepping and not
+        # burning work, rather than about being in phase with anything.
+        track_interval = 1.0 / overlay.display_hz(FALLBACK_TRACK_HZ)
+        log.info("tracking at %.0fHz", 1.0 / track_interval)
+
         last_draw = 0.0
         was_low = False
+        attached = False
+        # perf_counter, not monotonic: on Windows monotonic comes off
+        # GetTickCount64 and only moves in 15.6ms steps, which is coarser
+        # than the interval being paced here.
+        next_tick = time.perf_counter()
 
         while True:
-            now = time.monotonic()
+            now = time.perf_counter()
 
             if overlay.should_quit():
                 return 0
+
+            # Tracking runs on every pass, not just when redrawing. In orbit
+            # mode this is what turns the face towards the head, and at the
+            # one second draw rate it would lag a head turn badly.
+            attached = overlay.update_attachment()
 
             if poller.due(now):
                 poller.poll(now)
@@ -213,8 +280,6 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
                     )
                     cfg = edited
                     log.info("reloaded %s", config_path)
-
-                attached = overlay.update_attachment()
 
                 if not attached:
                     # Nothing to attach to while the controller sleeps.
@@ -239,7 +304,14 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
 
                 overlay.set_image(image)
 
-            time.sleep(0.05)
+            # Sleep to the next tick rather than for a fixed span, so the
+            # work above does not stretch the interval it was meant to keep.
+            next_tick += track_interval
+            delay = next_tick - time.perf_counter()
+            if delay > 0:
+                time.sleep(delay)
+            else:
+                next_tick = time.perf_counter()  # fell behind; do not chase it
 
 
 def dry_run(cfg: config_mod.Config, out: Path) -> int:

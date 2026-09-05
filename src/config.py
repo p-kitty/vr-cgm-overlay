@@ -8,13 +8,9 @@ it).
 from __future__ import annotations
 
 import logging
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-
-try:  # Python 3.11+
-    import tomllib
-except ModuleNotFoundError:  # 3.10 and earlier
-    import tomli as tomllib  # type: ignore[no-redef]
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +30,10 @@ class Config:
     rotation_deg: tuple[float, float, float] = (-40.0, 0.0, 0.0)
     opacity: float = 1.0
     flip_vertical: bool = False
+    orbit: bool = False
+    orbit_radius_m: float = 0.06
+    orbit_limit_deg: float = 120.0
+    arm_guide: bool = False
     stale_after_min: float = 10.0
 
     low_mgdl: float = 70.0
@@ -73,6 +73,10 @@ def load(path: Path) -> Config:
     )
     cfg.opacity = float(display.get("opacity", cfg.opacity))
     cfg.flip_vertical = bool(display.get("flip_vertical", cfg.flip_vertical))
+    cfg.orbit = bool(display.get("orbit", cfg.orbit))
+    cfg.orbit_radius_m = float(display.get("orbit_radius_m", cfg.orbit_radius_m))
+    cfg.orbit_limit_deg = float(display.get("orbit_limit_deg", cfg.orbit_limit_deg))
+    cfg.arm_guide = bool(display.get("arm_guide", cfg.arm_guide))
     cfg.stale_after_min = float(display.get("stale_after_min", cfg.stale_after_min))
 
     cfg.low_mgdl = float(thresholds.get("low_mgdl", cfg.low_mgdl))
@@ -101,6 +105,15 @@ def _validate(cfg: Config) -> None:
         raise ValueError(f"display.hand must be left or right: {cfg.hand!r}")
     if len(cfg.offset) != 3 or len(cfg.rotation_deg) != 3:
         raise ValueError("display.offset and rotation_deg must have three elements")
+    if cfg.orbit_radius_m <= 0:
+        raise ValueError(
+            f"display.orbit_radius_m must be positive: {cfg.orbit_radius_m}"
+        )
+    # 180 is a full half turn either way, which is the whole circle.
+    if not (0 < cfg.orbit_limit_deg <= 180):
+        raise ValueError(
+            f"display.orbit_limit_deg must be in (0, 180]: {cfg.orbit_limit_deg}"
+        )
 
     if not (cfg.low_mgdl < cfg.high_mgdl < cfg.very_high_mgdl):
         raise ValueError(

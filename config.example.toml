@@ -27,16 +27,33 @@ unit = "mgdl"        # "mgdl" or "mmol"
 hand = "left"        # which controller to follow; the off hand works best
 width_m = 0.14       # overlay width in metres
 
+# Ride around the forearm instead of being bolted to the controller, so
+# that turning your hand cannot push the face into your arm. Recommended;
+# see "Orbit mode" in README.md, which also explains what offset and
+# rotation_deg mean once this is on.
+orbit = false
+orbit_radius_m = 0.06    # how far off the arm's centreline the face floats
+orbit_limit_deg = 120.0  # how far round the arm it may travel from the top
+
+# Draw the arm orbit mode is aiming at: a cyan line down the modelled
+# centreline and magenta dots on the circle the face travels. Turn it on
+# while setting offset, off once it is right. See "Orbit mode" in README.md.
+arm_guide = false
+
 # Position relative to the controller, in metres: 0.01 is one centimetre.
 # Point the controller away from you like a torch, then
 #   X: + right          Y: + up, off the back of the hand
 #   Z: + back towards the elbow
+# With orbit on this is a point on the arm's centreline, so Y usually goes
+# negative: try [0.0, -0.02, 0.10].
 offset = [0.0, 0.02, 0.10]
 
 # Tilt in degrees, applied X, then Y, then Z.
 #   X: - stands the face up towards your eyes, + lays it flat on the arm
 #   Y: swings it left and right
 #   Z: spins it in place; try 90 or -90 if the digits run across the arm
+# With orbit on the aiming is done for you, so start from [0, 0, 0] and use
+# these only to trim.
 rotation_deg = [-40.0, 0.0, 0.0]
 
 opacity = 1.0

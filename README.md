@@ -73,10 +73,23 @@ have actually been reported against existing clients.
 
 ## Setup
 
+Needs **Python 3.14 or newer** — any 3.14.x, nothing here cares which
+patch release. An older interpreter is turned away at startup rather
+than failing halfway through an import.
+
+Name the interpreter rather than trusting whichever `python` is on PATH.
+A machine with more than one Python installed will hand you the wrong
+one, and installing a fresh Windows build does not change what an
+already-open terminal resolves.
+
 ```bash
+py -3.14 -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 cp config.example.toml config.toml
 ```
+
+Every later command in this file assumes that environment is active.
 
 Put your LibreLinkUp `email` and `password` in `config.toml`.
 
@@ -140,13 +153,84 @@ Point the controller away from you, like a torch. Then:
 | Sitting on the back of the hand, not the wrist | raise `offset` Z: `0.10` → `0.14` |
 | You twist your wrist right over to read it | lower `rotation_deg` X: `-40` → `-55` |
 | Floating off the side of your arm | nudge `offset` X by `0.01` (1 cm) at a time |
-| Buried in your arm, or clipping through it | raise `offset` Y: `0.02` → `0.04` |
+| Buried in your arm, or clipping through it | raise `offset` Y: `0.02` → `0.04`, or turn on orbit mode |
 | Digits run across your arm, not along it | put `90` or `-90` into `rotation_deg` Z |
 | Upside down | `flip_vertical = true` |
 | Too big, or too small to read | `width_m`, around `0.14` |
 
 Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning.
+
+### Orbit mode
+
+A fixed placement is bolted to the controller, and that is the problem:
+your forearm is not. Rolling your wrist turns your hand about twice as
+far as the forearm follows it, so a face that lies neatly on your arm
+palm-down is inside your arm palm-up. It does not hide behind the arm
+either — SteamVR composites overlays over the scene without a depth
+test, so it cuts straight through.
+
+Orbit mode fixes it by modelling your forearm as a line and letting the
+face ride around that line to whichever side your head is on, the way a
+watch slides round a wrist. It is then outside your arm whatever your
+hand is doing, and square to your eye without you turning your wrist to
+read it.
+
+```toml
+orbit = true
+offset = [0.0, -0.02, 0.10]
+rotation_deg = [0.0, 0.0, 0.0]
+orbit_radius_m = 0.06
+orbit_limit_deg = 120.0
+```
+
+Two of the settings change meaning when it is on:
+
+| | With orbit off | With orbit on |
+|---|---|---|
+| `offset` | where the face sits | a point on your forearm's centreline: X and Y say where the arm runs relative to the controller, Z how far back along it |
+| `rotation_deg` | how the face is aimed | a trim on top of the aiming, which is now automatic |
+
+`orbit_limit_deg` is how far round the arm it may travel from the top,
+either way. At `120` it stops before it reaches the underside; `180`
+lets it go anywhere.
+
+### Tuning it with the guides
+
+Both the line and the circle orbit mode works from are invisible, which
+is what makes `offset` hard to set by nudging: you are moving something
+you cannot see and judging it by how the face ends up behaving. So draw
+them instead.
+
+```toml
+arm_guide = true
+```
+
+A **cyan line** appears down the modelled centreline of your forearm, and
+a row of **magenta dots** on the circle the face travels. The dots are
+turned to face you one by one, so the arc reads from any angle rather
+than vanishing edge-on the way a drawn circle would. The wide dot is the
+top of the wrist, and the arc the dots span is exactly how far
+`orbit_limit_deg` lets the face go.
+
+Now the settings are things you look at:
+
+1. **`offset` X and Y** until the cyan line runs down the middle of your
+   arm and stays there as you turn your hand. This is the one that was
+   guesswork; with the line drawn it is not. Y usually wants to be
+   negative, the controller origin sitting above your wrist.
+2. **`offset` Z** until the dots ring the part of your arm you want the
+   face on. Keep it near the wrist, around `0.08` to `0.12`: the model is
+   most accurate there, for the reason in `NOTES.md`.
+3. **`orbit_radius_m`** until the dots sit just clear of your sleeve.
+4. **`rotation_deg` Z** by 90 or 180, only if the digits come out
+   sideways or upside down.
+
+Judge the line by where it crosses the dots, not by its far end. It runs
+40 cm, and it is expected to splay off the arm towards the elbow.
+
+Then set `arm_guide = false`. The guides are a tuning aid, not part of
+the display.
 
 `[thresholds]` sets the colour bands. All four are mg/dL and are used
 even in mmol/L mode, so changing the display unit cannot quietly change

@@ -80,12 +80,14 @@ Two ways to supply one password was confusing with no real benefit.
 
 ## Verification
 
-Before committing, confirm the code still runs. None of these need a VR
-headset or network access:
+Before committing, confirm the code still runs, on Python 3.14 — the
+version the project targets. None of these need a VR headset or network
+access:
 
 ```bash
 python -m unittest discover -s tests -t .  # the logic that runs headless
 python tools/preview.py      # renders every watch face state to a PNG
+python tools/check_orbit.py  # asserts the orbit placement geometry
 python -m compileall -q src tools tests
 ```
 
@@ -116,5 +118,10 @@ untested instead.
   account being rate limited or blocked.
 - **Never commit `config.toml`.** It holds the account password. It is in
   `.gitignore`; keep it there.
+- **Target Python 3.14, and do not lower the floors in
+  `requirements.txt`.** Each one is the first release of that package
+  that runs on 3.14; below them the install succeeds and the import
+  fails. `src/main.py` refuses an older interpreter, so keep that guard
+  and the floors in step.
 - Range checks are always done in mg/dL, even when displaying mmol/L.
 - This is not a medical device. Keep the disclaimer in `README.md`.
