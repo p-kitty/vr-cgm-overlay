@@ -54,7 +54,8 @@ rather than taken.
 fonts have no U+2197/U+2198 glyphs and render tofu boxes. The trend
 matters nearly as much as the number, so it does not depend on a font.
 
-**The trend is worked out here, not taken from the API.** Abbott's own
+**The trend is worked out here by default, not taken from the API.**
+Abbott's own
 `TrendArrow` is five buckets on thresholds it does not publish and
 nothing here can adjust, so a gentle drift and a hard climb arrive as
 the same arrow. The same response already carries about twelve hours of
@@ -63,7 +64,8 @@ fifteen minutes of it instead, and because the arrow is a drawing rather
 than a glyph it can point anywhere. Nothing extra is fetched and nothing
 is stored, so the trend is right again the moment the process restarts.
 `TrendArrow` stays as the fallback for a fresh sensor or a gap in
-scanning.
+scanning, and `trend.local = false` goes back to it entirely for anyone
+who would rather the face and the phone agree exactly.
 
 **Credentials live in `config.toml`, which git ignores.** That file grants
 access to health data; keep it out of the repository.
@@ -281,6 +283,7 @@ because each one becomes a real failure.
 
 | Setting | What it does |
 |---|---|
+| `local` (true) | `true` fits the slope here; `false` uses Abbott's own `TrendArrow`, so the face and the phone show the same five arrows |
 | `window_min` (15) | How far back the slope is fitted over. Longer is steadier and slower to react; it must be at least 5, or there is never enough history to fit |
 | `flat_mgdl_min` (1.0) | The rate at which the arrow reaches 45 degrees |
 | `fast_mgdl_min` (2.0) | The rate at which it stands fully vertical |
@@ -292,8 +295,12 @@ Lower them both to make the arrow react harder.
 
 When there is too little history to fit — a fresh sensor, or a stretch
 where the phone was not scanning — the arrow falls back to the API's own
-value and snaps to the five official positions. `--dry-run` prints which
-of the two is in use, and so does the log line on every fetch.
+value and snaps to the five official positions, whatever `local` says.
+`--dry-run` prints which of the two is in use, and so does the log line
+on every fetch.
+
+`[trend]` is re-read while running like `[display]` is, so `local` can be
+flipped with the headset on to see both arrows against the same reading.
 
 ## Known limits
 
