@@ -22,7 +22,7 @@ import time
 import openvr
 from PIL import Image
 
-from armguide import ArmGuide
+from armguide import MARKER_COUNT, ArmGuide
 
 log = logging.getLogger(__name__)
 
@@ -99,6 +99,45 @@ def _to_openvr(
             matrix.m[row][col] = rotation[row][col]
         matrix.m[row][3] = translation[row]
     return matrix
+
+
+def _cross(a, b) -> tuple[float, float, float]:
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
+
+
+def _billboard(
+    position: tuple[float, float, float], head: tuple[float, float, float]
+) -> list[list[float]]:
+    """Turn a marker at `position` to face the head, all in controller space.
+
+    A quad seen edge-on is not there. The orbit circle lies across the arm,
+    so drawn as one quad it disappears from the side, which is exactly where
+    a wrist gets looked at. Turning each marker to the head instead costs a
+    basis per marker and makes the arc readable from anywhere.
+    """
+    to_head = [head[i] - position[i] for i in range(3)]
+    length = math.sqrt(sum(c * c for c in to_head))
+    if length < 1e-6:
+        return _IDENTITY
+    z_axis = tuple(c / length for c in to_head)
+
+    # Keep the marker's up towards the hand, so it rolls with the face
+    # rather than spinning on its own. Any hint does while the dot is round;
+    # this one keeps a square marker square to the arm.
+    hint = (0.0, 0.0, -1.0)
+    x_axis = _cross(hint, z_axis)
+    length = math.sqrt(sum(c * c for c in x_axis))
+    if length < 1e-6:  # looking straight down the arm: pick any other hint
+        x_axis = _cross((0.0, 1.0, 0.0), z_axis)
+        length = math.sqrt(sum(c * c for c in x_axis))
+    x_axis = tuple(c / length for c in x_axis)
+    y_axis = _cross(z_axis, x_axis)
+
+    return [[x_axis[r], y_axis[r], z_axis[r]] for r in range(3)]
 
 
 def _make_transform(
@@ -291,15 +330,28 @@ class WristOverlay:
         """Draw the arm the placement is currently modelling.
 
         The line is the centreline itself, so it sits at radius zero and is
-        only turned towards the head to stop it vanishing edge-on. The ring
-        lies in the plane across the arm, which is the controller's own XY
-        plane, so it needs no rotation at all.
+        only turned towards the head to stop it vanishing edge-on. The
+        markers are spread over the arc the face may travel, so the run of
+        them shows orbit_radius_m and orbit_limit_deg at once.
         """
         axis, _ = _orbit_transform(
             self._offset, 0.0, 180.0, (0.0, 0.0, 0.0), head, None
         )
-        ring = _to_openvr(_IDENTITY, self._offset)
-        self._guide.update(index, axis, ring, self._orbit_radius)
+
+        cx, cy, cz = self._offset
+        limit = math.radians(self._orbit_limit)
+        markers = []
+        for i in range(MARKER_COUNT):
+            # -1 at one end of the travel, +1 at the other, 0 in the middle.
+            angle = (i / (MARKER_COUNT - 1) * 2.0 - 1.0) * limit
+            position = (
+                cx + math.sin(angle) * self._orbit_radius,
+                cy + math.cos(angle) * self._orbit_radius,
+                cz,
+            )
+            markers.append(_to_openvr(_billboard(position, head), position))
+
+        self._guide.update(index, axis, markers)
 
     def update_attachment(self) -> bool:
         """Keep the controller attachment, and in orbit mode the pose, current.
