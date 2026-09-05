@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 
 import config as config_mod
+from librelink import MIN_FIT_SPAN_MIN
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
 
@@ -83,6 +84,21 @@ class Loading(ConfigTestCase):
         self.assertTrue(cfg.arm_guide)
         self.assertEqual(cfg.orbit_radius_m, 0.05)
         self.assertEqual(cfg.orbit_limit_deg, 100.0)
+
+    def test_trend_defaults_to_a_quarter_hour_window(self):
+        cfg = self.load()
+        self.assertEqual(cfg.trend_window_min, 15.0)
+        self.assertEqual(cfg.trend_flat_mgdl_min, 1.0)
+        self.assertEqual(cfg.trend_fast_mgdl_min, 2.0)
+
+    def test_trend_settings_are_read(self):
+        cfg = self.load(
+            "\n[trend]\nwindow_min = 30\nflat_mgdl_min = 0.5\n"
+            "fast_mgdl_min = 1.5\n"
+        )
+        self.assertEqual(cfg.trend_window_min, 30.0)
+        self.assertEqual(cfg.trend_flat_mgdl_min, 0.5)
+        self.assertEqual(cfg.trend_fast_mgdl_min, 1.5)
 
     def test_a_blank_patient_id_means_unset(self):
         # An empty string would be sent as a patient id and 404; absent
@@ -161,6 +177,34 @@ class Validation(ConfigTestCase):
         # Equal bounds leave a colour with no range to occupy, so the face
         # would simply never show it.
         self.assertRejected("\n[thresholds]\nlow_mgdl = 180\nhigh_mgdl = 180\n")
+
+    def test_the_trend_window_must_be_long_enough_to_fit(self):
+        # Under the fit's own span floor there is never enough spread in
+        # the samples to fit a line, so the arrow would quietly sit on
+        # the API's five buckets rather than failing where it was set.
+        message = self.assertRejected("\n[trend]\nwindow_min = 4\n")
+        self.assertIn("window_min", message)
+        self.assertRejected("\n[trend]\nwindow_min = 0\n")
+
+    def test_the_span_floor_itself_is_allowed(self):
+        cfg = self.load(f"\n[trend]\nwindow_min = {MIN_FIT_SPAN_MIN}\n")
+        self.assertEqual(cfg.trend_window_min, MIN_FIT_SPAN_MIN)
+
+    def test_trend_thresholds_must_be_ordered(self):
+        # flat is where the arrow reaches 45 degrees and fast where it
+        # stands upright. Reversed, the angle between them would run
+        # backwards; equal, there would be nothing between them at all.
+        message = self.assertRejected(
+            "\n[trend]\nflat_mgdl_min = 3\nfast_mgdl_min = 2\n"
+        )
+        self.assertIn("0 < flat < fast", message)
+        self.assertRejected("\n[trend]\nflat_mgdl_min = 2\nfast_mgdl_min = 2\n")
+
+    def test_a_zero_flat_threshold_is_rejected(self):
+        # It is a divisor: zero would take the draw loop down on the
+        # first reading rather than at startup.
+        self.assertRejected("\n[trend]\nflat_mgdl_min = 0\n")
+        self.assertRejected("\n[trend]\nflat_mgdl_min = -1\n")
 
     def test_polling_floor_is_thirty_seconds(self):
         # The sensor updates about once a minute. Anything faster returns

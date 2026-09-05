@@ -2,8 +2,8 @@
 
 The watch face is judged by eye with `tools/preview.py`, and the orbit
 geometry is asserted by `tools/check_orbit.py`. What is left over is the
-plain logic those two cannot reach: timestamp parsing, the fetch
-schedule, config validation, and the colour thresholds.
+plain logic those two cannot reach: timestamp parsing, the trend fit,
+the fetch schedule, config validation, and the colour thresholds.
 
 Nothing here touches `src/overlay.py`, which needs SteamVR, or the HTTP
 side of `src/librelink.py`, where a mock would only prove the mock
