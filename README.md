@@ -193,19 +193,28 @@ them instead.
 arm_guide = true
 ```
 
-A **cyan line** appears down the modelled centreline of your forearm and
-a **magenta ring** on the circle the face travels. Now the settings are
-things you look at:
+A **cyan line** appears down the modelled centreline of your forearm, and
+a row of **magenta dots** on the circle the face travels. The dots are
+turned to face you one by one, so the arc reads from any angle rather
+than vanishing edge-on the way a drawn circle would. The wide dot is the
+top of the wrist, and the arc the dots span is exactly how far
+`orbit_limit_deg` lets the face go.
+
+Now the settings are things you look at:
 
 1. **`offset` X and Y** until the cyan line runs down the middle of your
    arm and stays there as you turn your hand. This is the one that was
    guesswork; with the line drawn it is not. Y usually wants to be
    negative, the controller origin sitting above your wrist.
-2. **`offset` Z** until the magenta ring is around the part of your arm
-   you want the face on.
-3. **`orbit_radius_m`** until the ring sits just clear of your sleeve.
+2. **`offset` Z** until the dots ring the part of your arm you want the
+   face on. Keep it near the wrist, around `0.08` to `0.12`: the model is
+   most accurate there, for the reason in `NOTES.md`.
+3. **`orbit_radius_m`** until the dots sit just clear of your sleeve.
 4. **`rotation_deg` Z** by 90 or 180, only if the digits come out
    sideways or upside down.
+
+Judge the line by where it crosses the dots, not by its far end. It runs
+40 cm, and it is expected to splay off the arm towards the elbow.
 
 Then set `arm_guide = false`. The guides are a tuning aid, not part of
 the display.

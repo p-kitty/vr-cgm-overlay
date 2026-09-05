@@ -53,10 +53,12 @@ Nothing has exercised these yet. Each says how to check it.
      basis: leaving it in the trim hides a wrong convention behind a
      number that is supposed to be a nudge.
 - **The arm guides.** `display.arm_guide = true` should draw a cyan line
-  down the modelled forearm and a magenta ring around it. Neither has
-  been seen in a headset. The line is symmetric on purpose, so it cannot
-  look upside down; if the ring is an ellipse rather than a circle when
-  seen down the arm, its transform is not square to the arm.
+  down the modelled forearm and nine magenta dots around it, the wide one
+  at the top of the wrist. Neither has been seen in a headset. The line
+  is symmetric on purpose, so it cannot look upside down. Every dot is
+  turned to the head separately, so all nine should stay visible from any
+  angle; one going missing means its billboard basis is degenerate rather
+  than that it is edge-on.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
@@ -68,6 +70,26 @@ fires the buzz. It has to stay under `high_mgdl`, because `_validate`
 rejects anything breaking `low < high < very_high`; raise
 `high_mgdl` and `very_high_mgdl` too when the reading is already above
 them. Put them all back afterwards.
+
+## The modelled arm drifts from the real one towards the elbow
+
+Orbit mode takes the forearm to run along the controller's Z axis. That
+is very nearly right at the wrist and wrong at the elbow, and turning the
+hand is what separates them. The carpals rotate with the radius, so the
+hand and the wrist joint move as one lump, while the far end of the
+forearm barely rotates at all. A line fixed in controller space therefore
+holds its place where it meets the wrist and swings away from the arm
+further down it.
+
+This is not going away, and measuring the axis instead of assuming it
+would not help: the error is a rotation that happens as the hand turns,
+not a fixed misalignment to calibrate out.
+
+What it does is bound where the face can sensibly sit. Keep `offset` Z
+near the wrist, around 0.08 to 0.12, where the model is close to exact.
+The guide line is 40cm long and will always splay off the arm near the
+elbow; it is meant to be judged where it passes the markers.
+
 
 ## Gaze fade would have to be a mode
 
