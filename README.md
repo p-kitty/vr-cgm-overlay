@@ -54,6 +54,17 @@ rather than taken.
 fonts have no U+2197/U+2198 glyphs and render tofu boxes. The trend
 matters nearly as much as the number, so it does not depend on a font.
 
+**The trend is worked out here, not taken from the API.** Abbott's own
+`TrendArrow` is five buckets on thresholds it does not publish and
+nothing here can adjust, so a gentle drift and a hard climb arrive as
+the same arrow. The same response already carries about twelve hours of
+history, which used to be discarded; a line is fitted through the last
+fifteen minutes of it instead, and because the arrow is a drawing rather
+than a glyph it can point anywhere. Nothing extra is fetched and nothing
+is stored, so the trend is right again the moment the process restarts.
+`TrendArrow` stays as the fallback for a fresh sensor or a gap in
+scanning.
+
 **Credentials live in `config.toml`, which git ignores.** That file grants
 access to health data; keep it out of the repository.
 
@@ -70,6 +81,7 @@ have actually been reported against existing clients.
 | `Timestamp` is local time with no zone | Age is computed from `FactoryTimestamp` (UTC) |
 | No token while terms or email verification are pending | `step.type` is detected and explained |
 | Tokens expire with no refresh endpoint and no warning | A 401 triggers one automatic re-login |
+| `TrendArrow` is five buckets on undocumented thresholds | The trend is fitted from `graphData`; `TrendArrow` is the fallback |
 
 ## Setup
 
@@ -257,6 +269,24 @@ means "fine" in one colour on the phone and another here would be worse
 than either — but that choice is only safe because position is carrying
 the distinction underneath it. Position does not depend on seeing colour
 at all.
+
+`[trend]` sets how the arrow is worked out.
+
+| Setting | What it does |
+|---|---|
+| `window_min` (15) | How far back the slope is fitted over. Longer is steadier and slower to react; it must be at least 5, or there is never enough history to fit |
+| `flat_mgdl_min` (1.0) | The rate at which the arrow reaches 45 degrees |
+| `fast_mgdl_min` (2.0) | The rate at which it stands fully vertical |
+
+Both rates are mg/dL per minute, and like the colour bands they stay in
+mg/dL in mmol/L mode. Between the two the angle slides rather than
+stepping, so a slow drift and a hard climb do not draw the same arrow.
+Lower them both to make the arrow react harder.
+
+When there is too little history to fit — a fresh sensor, or a stretch
+where the phone was not scanning — the arrow falls back to the API's own
+value and snaps to the five official positions. `--dry-run` prints which
+of the two is in use, and so does the log line on every fetch.
 
 Someone with normal colour vision cannot check this by eye, so
 `tools/check_palette.py` simulates the palette under protanopia and

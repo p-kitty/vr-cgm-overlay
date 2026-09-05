@@ -28,6 +28,15 @@ Nothing has exercised these yet. Each says how to check it.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log.
+- **The fitted trend against a real day.** The slope is asserted only
+  against series written in the tests, where the answer is known in
+  advance. Whether it behaves on a real arm — whether the arrow twitches
+  during a meal rise, whether fifteen minutes is the right window — takes
+  a session with the log open. Every fetch logs either a slope in
+  mg/dL/min or the API arrow marked `(API)`, so the log says which source
+  was used and how the number moved. `python src/main.py --dry-run`
+  prints the same thing once, and is also the only check that `graphData`
+  still arrives in the shape the parser expects.
 - **The palette against real colour vision deficiency.** It is validated
   by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
   and asserts the separations. That model is dichromacy — full absence of
