@@ -77,10 +77,19 @@ Needs **Python 3.14 or newer** — any 3.14.x, nothing here cares which
 patch release. An older interpreter is turned away at startup rather
 than failing halfway through an import.
 
+Name the interpreter rather than trusting whichever `python` is on PATH.
+A machine with more than one Python installed will hand you the wrong
+one, and installing a fresh Windows build does not change what an
+already-open terminal resolves.
+
 ```bash
+py -3.14 -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements.txt
 cp config.example.toml config.toml
 ```
+
+Every later command in this file assumes that environment is active.
 
 Put your LibreLinkUp `email` and `password` in `config.toml`.
 
