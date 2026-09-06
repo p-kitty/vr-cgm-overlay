@@ -11,17 +11,24 @@ Glucose data comes from the unofficial LibreLinkUp API.
 Single Python process. See `README.md` for the architecture and for the
 list of LibreLinkUp API quirks the client works around.
 
-The code is one installed package, `src/cgm/`, in three layers:
+The code is one installed package, `src/cgm/`: two shared layers and
+two frontends.
 
 | Layer | Holds | Needs |
 |---|---|---|
-| `cgm.core` | API client, config, poller, config watcher | nothing special |
+| `cgm.core` | API client, config, poller, config watcher, fetch thread | nothing special |
 | `cgm.face` | the watch face drawing | Pillow |
 | `cgm.vr` | the SteamVR overlay and its arm guide | a headset |
+| `cgm.desk` | the same face in a desktop window (`--window`) | tkinter |
 
-**Put new code in the shallowest layer that can hold it.** The split
-exists so a second frontend can show the same face outside VR, and that
-only pays off while `cgm.vr` stays the small half. `cgm.face` imports
+**Put new code in the shallowest layer that can hold it.** The two
+frontends are the reason: whatever lives in one of them has to be
+written twice or go without. Neither imports the other, and `cgm.main`
+wires whichever was asked for.
+
+**Prefer `--window` for anything that is not about placement.** It runs
+the same core and the same face with the VR half left out, so behaviour
+that used to need a headset and an hour can be watched at a desk. `cgm.face` imports
 nothing from `cgm.core`; the one crossing is `cgm.core.poller` reaching
 up for `TrendTuning`, so the fetch log cannot name a trend source the
 face is not drawing.
@@ -112,13 +119,16 @@ python -m compileall -q src tools tests
 
 `tests/` covers what can be asserted without a device: timestamp
 parsing, the trend fit and the arrow angle it maps to, the fetch
-schedule and its backoff, config validation, the live reload and which
-settings it cannot apply, the colour thresholds, and that every import
-inside the package resolves -- including the lazy one in `run()`, which
-only executes with a headset attached. It deliberately does not mock the LibreLinkUp HTTP
+schedule and its backoff and the thread that drives it, config
+validation, the live reload and which settings each frontend cannot
+apply, the colour thresholds, the window's compositing and title, and
+that every import inside the package resolves -- including the lazy ones
+in `run()` and `window()`, one of which only executes with a headset
+attached. It deliberately does not mock the LibreLinkUp HTTP
 calls — the real risk there is the unofficial API
 changing shape, which only `--dry-run` can see — and it does not touch
-`cgm.vr`.
+`cgm.vr`. It does not start Tk either: `cgm.desk` is tested down to the
+last thing before a window would open.
 
 To check the API client against the live service (needs `config.toml`):
 
@@ -126,9 +136,17 @@ To check the API client against the live service (needs `config.toml`):
 vr-cgm-overlay --dry-run
 ```
 
+To watch the whole thing run — fetching, reloading, the face changing
+over time — with no headset involved:
+
+```bash
+vr-cgm-overlay --window
+```
+
 Anything under `src/cgm/vr/` requires a headset and SteamVR to verify. Do
 not claim overlay behaviour is confirmed without a device — say it is
-untested instead.
+untested instead. `src/cgm/desk/` has no such excuse: it opens on any
+desktop, so verify it there.
 
 ## Constraints
 

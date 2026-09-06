@@ -21,13 +21,22 @@ Nothing has exercised these yet. Each says how to check it.
   the face should come back.
 - **Stale greying.** Set `display.stale_after_min = 1.0` and watch the
   value and the age readout go grey within a couple of minutes. Put it
-  back to `10.0`.
-- **A long session.** Play for an hour or two, then check the log still
-  shows `fetched:` about once a minute, with no `fetch failed` streak
-  stretching the interval out.
+  back to `10.0`. No headset needed: `--window` shows the same face.
+- **A long session.** Leave it running for an hour or two, then check
+  the log still shows `fetched:` about once a minute, with no `fetch
+  failed` streak stretching the interval out. `--window` counts — this
+  is the fetch schedule, which the two frontends share.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
-  401 followed by one re-login in the log.
+  401 followed by one re-login in the log. A `--window` left open for
+  days is the cheap way to be there when it does.
+- **The window bell as a low alert.** `alert_on_low` rings the system
+  bell in `--window`, and the code path is confirmed: with a fake
+  threshold `pulse()` is reached exactly once, on the transition in.
+  Whether it is *audible* is the machine's sound scheme, not this —
+  Windows plays nothing for the default beep on some themes. Same
+  standing as the haptics below: colour is the alert, this is a
+  supplement.
 - **The fitted trend against a real day.** `graphData` itself is now
   confirmed: a dry run against the live API returned 48 points over 11.9
   hours at a median gap of 15.05 minutes, which is what
@@ -35,7 +44,8 @@ Nothing has exercised these yet. Each says how to check it.
   comes from. What is still open is whether an hour is the right window
   on a real arm — long enough not to twitch, short enough to notice a
   meal rise while it is still rising. That takes a session with the log
-  open. Every fetch logs either a slope in mg/dL/min or the API arrow
+  open — which `--window` makes a desk job rather than an hour in a
+  headset, since the fit is `cgm.core` and `cgm.face` with no VR in it. Every fetch logs either a slope in mg/dL/min or the API arrow
   marked `(API)`, so the log says which source was used and how the
   number moved; `vr-cgm-overlay --dry-run` prints the same thing
   once. Watch for `(API)` while the sensor is scanning normally: that
