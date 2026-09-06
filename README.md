@@ -190,12 +190,15 @@ A key in the wrong section, a misspelled key or a misspelled section is
 otherwise accepted without a word and simply does nothing, which looks
 like a broken feature rather than a typo -- and under `[thresholds]` it
 means an alert that does not fire where you thought it would. The
-message names what it found and, where it can, where it should have
-gone:
+message names what it found and always says something about it: where
+the key should have gone, what it was probably meant to be, or -- when
+it resembles nothing at all -- what the section does take.
 
 ```
 config.toml holds settings nothing reads, so they would do nothing without saying so:
   display.window_min is not a setting; it belongs under [trend]
+  trend.windowmin is not a setting; did you mean window_min?
+  polling.nonsense is not a setting; [polling] takes alert_haptic, alert_on_low, ...
 ```
 
 Saved mid-session this costs nothing: the reload logs `ignoring the
@@ -203,7 +206,13 @@ edited config` and keeps the settings already running. Where it does
 bite is going backwards -- a `config.toml` written against a newer
 commit will not start an older checkout, since the keys added since do
 not exist there. Comment those out for as long as the old checkout is in
-use. `[account]` is exempt and accepts any key.
+use.
+
+`[account]` is the exception: an unrecognised key there is logged as a
+warning and the app still starts, because that section gets pasted in
+from other clients and an extra key in it is usually harmless. A
+misspelling still gets said out loud -- an `api_verison` that silently
+kept the default would otherwise turn up as a rejected login much later.
 
 Getting the watch face where you want it is trial and error. The loop is:
 

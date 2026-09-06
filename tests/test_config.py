@@ -427,11 +427,28 @@ class UnknownKeys(ConfigTestCase):
         self.assertIn("[trends]", message)
         self.assertIn("did you mean [trend]", message)
 
-    def test_a_key_nothing_resembles_is_still_rejected(self):
-        # No suggestion to offer, but the key is still named.
+    def test_a_key_nothing_resembles_is_told_what_the_section_takes(self):
+        # The branch with no other clue in it: not a typo of anything and
+        # not filed in the wrong place, so naming it and stopping would
+        # leave the reader to go and find the list themselves.
         with self.assertRaises(ValueError) as caught:
             self.load("\n[polling]\nnonsense = 1\n")
-        self.assertIn("polling.nonsense", str(caught.exception))
+        message = str(caught.exception)
+        self.assertIn("polling.nonsense", message)
+        self.assertIn("interval_sec", message)
+        self.assertIn("alert_on_low", message)
+
+    def test_a_section_nothing_resembles_is_told_what_the_sections_are(self):
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[whatever]\nx = 1\n")
+        message = str(caught.exception)
+        self.assertIn("[whatever]", message)
+        self.assertIn("[thresholds]", message)
+
+    def test_a_stray_key_nothing_resembles_says_so(self):
+        with self.assertRaises(ValueError) as caught:
+            self.load(account="nonsense = 1\n" + ACCOUNT)
+        self.assertIn("not a setting in any of them", str(caught.exception))
 
     def test_every_unknown_key_is_named_at_once(self):
         # Fixing one and being stopped by the next is the worst way to
@@ -445,8 +462,21 @@ class UnknownKeys(ConfigTestCase):
     def test_the_account_section_stays_permissive(self):
         # It is the section people paste into from other clients, and an
         # extra key there is harmless where a rejected one is not.
-        cfg = self.load(account=ACCOUNT + 'extra_thing = "whatever"\n')
+        with self.assertLogs("cgm.core.config", "WARNING"):
+            cfg = self.load(account=ACCOUNT + 'extra_thing = "whatever"\n')
         self.assertEqual(cfg.account.email, "someone@example.com")
+
+    def test_a_misspelled_account_key_still_gets_said_out_loud(self):
+        # Permissive, not silent. `api_verison` keeping the default
+        # would otherwise surface as a 4xx from the API hours later,
+        # with nothing pointing back at the file.
+        with self.assertLogs("cgm.core.config", "WARNING") as logged:
+            self.load(account=ACCOUNT + 'api_verison = "4.16.0"\n')
+        self.assertIn("api_verison", logged.output[0])
+
+    def test_a_correct_account_section_says_nothing(self):
+        with self.assertNoLogs("cgm.core.config", "WARNING"):
+            self.load(account=ACCOUNT + 'region = "jp"\n')
 
     def test_both_halves_of_the_display_section_are_recognised(self):
         # [display] fills two dataclasses. Neither half may be treated

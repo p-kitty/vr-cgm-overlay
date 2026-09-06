@@ -165,11 +165,11 @@ SECTION_KEYS: dict[str, frozenset[str]] = {
     "polling": _keys_of(Polling),
 }
 
-# [account] takes whatever it is given. It is the section people paste
-# into from elsewhere -- another client's config, a support thread -- and
-# an extra key there costs nothing, where a rejected one would stop the
-# app over something harmless.
-PERMISSIVE_SECTIONS = frozenset({"account"})
+# Sections that take whatever they are given. [account] is the one people
+# paste into from elsewhere -- another client's config, a support thread
+# -- so an unrecognised key there must not stop the app the way it does
+# everywhere else. It is still logged: permissive, not silent.
+PERMISSIVE_SECTIONS: dict[str, frozenset[str]] = {"account": _keys_of(Account)}
 
 
 def _homes(key: str) -> list[str]:
@@ -177,17 +177,18 @@ def _homes(key: str) -> list[str]:
     return sorted(name for name, keys in SECTION_KEYS.items() if key in keys)
 
 
-def _did_you_mean(word: str, candidates, *, section: bool = False) -> str:
-    """The nearest thing that would have worked, when there is one.
+def _nearest(word: str, candidates) -> str | None:
+    """The nearest thing that would have worked, or None.
 
-    A misspelling is the common case and the one hardest to see by
-    rereading, so the message names the key it was probably meant to be
-    rather than only saying no.
+    A misspelling is the common mistake and the hardest to see by
+    rereading, so where there is a near miss the message names it.
     """
     near = difflib.get_close_matches(word, sorted(candidates), n=1, cutoff=0.7)
-    if not near:
-        return ""
-    return f"; did you mean [{near[0]}]?" if section else f"; did you mean {near[0]}?"
+    return near[0] if near else None
+
+
+def _listed(names) -> str:
+    return ", ".join(sorted(names))
 
 
 def _check_keys(raw: dict) -> None:
@@ -201,6 +202,12 @@ def _check_keys(raw: dict) -> None:
     error and not a warning: someone raising `low_mgdl` to match their
     own low would otherwise find out when an alert did not fire.
 
+    Every rejection carries something to act on. A near miss is named, a
+    misfiled key is sent to its section, and a key that resembles nothing
+    -- invented, or carried over from another client -- gets the list of
+    what the section does take, because that one has no other clue in it
+    and "not a setting" alone leaves the reader to go and find the list.
+
     Raising here also covers the live reload for free, since
     `ConfigWatcher.poll` already keeps the running config when a re-read
     raises. The cost is that a config.toml written against a newer commit
@@ -212,33 +219,61 @@ def _check_keys(raw: dict) -> None:
             # A key above the first [section] header, so nothing ever
             # looks for it. TOML puts it at the top level; we do not.
             homes = _homes(name)
-            where = (
-                f"; it belongs under [{homes[0]}]"
-                if homes
-                else _did_you_mean(name, set().union(*SECTION_KEYS.values()))
-            )
-            problems.append(f"{name} sits outside any section{where}")
+            near = _nearest(name, set().union(*SECTION_KEYS.values()))
+            if homes:
+                problems.append(
+                    f"{name} sits outside any section; it belongs under [{homes[0]}]"
+                )
+            elif near:
+                problems.append(
+                    f"{name} sits outside any section; did you mean {near}, "
+                    f"under [{_homes(near)[0]}]?"
+                )
+            else:
+                problems.append(
+                    f"{name} sits outside any section, and is not a setting in "
+                    "any of them"
+                )
             continue
+
         if name in PERMISSIVE_SECTIONS:
+            # Permissive, not silent: the app still starts, but an
+            # `api_verison` that quietly kept the default would surface
+            # as a 4xx from the API hours later, with nothing pointing
+            # back at the file.
+            unknown = set(body) - PERMISSIVE_SECTIONS[name]
+            if unknown:
+                log.warning(
+                    "[%s] holds keys nothing reads, which will do nothing: %s",
+                    name,
+                    _listed(unknown),
+                )
             continue
+
         allowed = SECTION_KEYS.get(name)
         if allowed is None:
-            known = set(SECTION_KEYS) | PERMISSIVE_SECTIONS
-            problems.append(
-                f"[{name}] is not a section"
-                + _did_you_mean(name, known, section=True)
+            known = set(SECTION_KEYS) | set(PERMISSIVE_SECTIONS)
+            near = _nearest(name, known)
+            hint = (
+                f"did you mean [{near}]?"
+                if near
+                else "the sections are " + _listed(f"[{s}]" for s in known)
             )
+            problems.append(f"[{name}] is not a section; {hint}")
             continue
+
         for key in body:
             if key in allowed:
                 continue
             homes = _homes(key)
-            where = (
-                f"; it belongs under [{homes[0]}]"
-                if homes
-                else _did_you_mean(key, allowed)
-            )
-            problems.append(f"{name}.{key} is not a setting{where}")
+            near = _nearest(key, allowed)
+            if homes:
+                hint = f"it belongs under [{homes[0]}]"
+            elif near:
+                hint = f"did you mean {near}?"
+            else:
+                hint = f"[{name}] takes {_listed(allowed)}"
+            problems.append(f"{name}.{key} is not a setting; {hint}")
 
     if problems:
         raise ValueError(
