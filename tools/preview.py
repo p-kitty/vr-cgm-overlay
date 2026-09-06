@@ -26,7 +26,6 @@ BACKDROP = (48, 50, 58, 255)
 def reading(mgdl: float, trend: int, age_min: float) -> Reading:
     return Reading(
         value_mgdl=mgdl,
-        value_mmol=mgdl / 18.0,
         trend=trend,
         timestamp_utc=datetime.now(timezone.utc) - timedelta(minutes=age_min),
         is_high=mgdl > 180,

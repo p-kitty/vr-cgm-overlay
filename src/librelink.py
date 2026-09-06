@@ -18,6 +18,9 @@ existing clients:
   6. graphData is downsampled to a point every fifteen minutes, not the
      once a minute the sensor records, which is what decides how long a
      window the fit needs. See GRAPH_RESOLUTION_MIN.
+  7. The Value field is in whatever unit the account displays in, which
+     follows its country. Only ValueInMgPerDl is guaranteed mg/dL, so
+     that is the one field read and mmol/L is derived from it.
 """
 
 from __future__ import annotations
@@ -105,12 +108,25 @@ class Reading:
     """
 
     value_mgdl: float
-    value_mmol: float
     trend: int
     timestamp_utc: datetime
     is_high: bool
     is_low: bool
     history: tuple[GlucosePoint, ...] = ()
+
+    @property
+    def value_mmol(self) -> float:
+        """The same measurement in mmol/L, derived rather than read.
+
+        The API's own `Value` field is not fixed to mmol/L: it follows
+        the unit the account displays in, which LibreLinkUp picks from
+        the account's country and no user-visible setting can change. On
+        a mg/dL account it carries the mg/dL number, so trusting it drew
+        an in-range reading as an impossible one under
+        `display.unit = "mmol"`. `ValueInMgPerDl` is the only field
+        whose unit its name guarantees, so everything comes off that.
+        """
+        return self.value_mgdl / 18.0
 
     @property
     def arrow(self) -> str:
@@ -407,7 +423,6 @@ class LibreLinkUp:
 
         return Reading(
             value_mgdl=latest.mgdl,
-            value_mmol=float(measurement["Value"]),
             trend=int(measurement.get("TrendArrow") or 3),
             timestamp_utc=latest.at,
             is_high=bool(measurement.get("isHigh")),
