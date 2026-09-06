@@ -10,6 +10,7 @@ prose and become something that runs.
 from __future__ import annotations
 
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -377,6 +378,89 @@ class Validation(ConfigTestCase):
     def test_exactly_thirty_seconds_is_allowed(self):
         cfg = self.load("\n[polling]\ninterval_sec = 30\n")
         self.assertEqual(cfg.polling.interval_sec, 30.0)
+
+
+class UnknownKeys(ConfigTestCase):
+    """A key nothing reads is an error rather than a shrug.
+
+    Every setting is loaded with `.get(key, default)`, which cannot tell
+    absent from misspelled or misfiled, so without this check the file
+    accepts anything and the setting simply does not happen. The rows
+    below are the ways that was reachable: right key wrong section, no
+    section at all, misspelled key, misspelled section.
+    """
+
+    def test_a_key_in_the_wrong_section_is_rejected(self):
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[display]\nwindow_min = 30\n")
+        message = str(caught.exception)
+        self.assertIn("display.window_min", message)
+        # And says where it should have gone, since the point of
+        # failing is to save the reader working that out.
+        self.assertIn("[trend]", message)
+
+    def test_a_threshold_in_the_wrong_section_is_rejected(self):
+        # The case this is really for: silently keeping 70.0 here means
+        # an alert that does not fire when the user thinks it will.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[display]\nlow_mgdl = 500\n")
+        self.assertIn("[thresholds]", str(caught.exception))
+
+    def test_a_key_outside_any_section_is_rejected(self):
+        with self.assertRaises(ValueError) as caught:
+            self.load(account="window_min = 30\n" + ACCOUNT)
+        message = str(caught.exception)
+        self.assertIn("window_min", message)
+        self.assertIn("[trend]", message)
+
+    def test_a_misspelled_key_is_rejected_with_the_spelling_meant(self):
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[trend]\nwindowmin = 30\n")
+        message = str(caught.exception)
+        self.assertIn("trend.windowmin", message)
+        self.assertIn("window_min", message)
+
+    def test_a_misspelled_section_is_rejected(self):
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[trends]\nwindow_min = 30\n")
+        message = str(caught.exception)
+        self.assertIn("[trends]", message)
+        self.assertIn("did you mean [trend]", message)
+
+    def test_a_key_nothing_resembles_is_still_rejected(self):
+        # No suggestion to offer, but the key is still named.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[polling]\nnonsense = 1\n")
+        self.assertIn("polling.nonsense", str(caught.exception))
+
+    def test_every_unknown_key_is_named_at_once(self):
+        # Fixing one and being stopped by the next is the worst way to
+        # hand back a list of typos.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[polling]\nnonsense = 1\nalso_nonsense = 2\n")
+        message = str(caught.exception)
+        self.assertIn("polling.nonsense", message)
+        self.assertIn("polling.also_nonsense", message)
+
+    def test_the_account_section_stays_permissive(self):
+        # It is the section people paste into from other clients, and an
+        # extra key there is harmless where a rejected one is not.
+        cfg = self.load(account=ACCOUNT + 'extra_thing = "whatever"\n')
+        self.assertEqual(cfg.account.email, "someone@example.com")
+
+    def test_both_halves_of_the_display_section_are_recognised(self):
+        # [display] fills two dataclasses. Neither half may be treated
+        # as foreign because the other one is where the key is read.
+        cfg = self.load("\n[display]\nunit = 'mmol'\nhand = 'right'\n")
+        self.assertEqual(cfg.display.unit, "mmol")
+        self.assertEqual(cfg.vr.hand, "right")
+
+    def test_the_example_config_is_fully_recognised(self):
+        # The example is what a user copies. If it drifted from the
+        # loader, the first thing they did would be to fail to start.
+        example = Path(__file__).resolve().parents[1] / "config.example.toml"
+        with example.open("rb") as fh:
+            config_mod._check_keys(tomllib.load(fh))
 
 
 if __name__ == "__main__":

@@ -16,9 +16,10 @@ there is no existing file for it to break.
 
 from __future__ import annotations
 
+import difflib
 import logging
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
@@ -146,13 +147,122 @@ class Config:
     polling: Polling = field(default_factory=Polling)
 
 
+def _keys_of(*classes: type) -> frozenset[str]:
+    return frozenset(f.name for cls in classes for f in fields(cls))
+
+
+# What each section of the file is allowed to contain. Read off the
+# dataclasses rather than written out a second time: every field above is
+# loaded under its own name, so a key is recognised exactly when some
+# dataclass has a field called that, and adding a setting cannot forget
+# to register it here. `[display]` is the one section that fills two
+# dataclasses -- see the module docstring for why it stays one section.
+SECTION_KEYS: dict[str, frozenset[str]] = {
+    "display": _keys_of(Display, Vr),
+    "window": _keys_of(Window),
+    "thresholds": _keys_of(Thresholds),
+    "trend": _keys_of(Trend),
+    "polling": _keys_of(Polling),
+}
+
+# [account] takes whatever it is given. It is the section people paste
+# into from elsewhere -- another client's config, a support thread -- and
+# an extra key there costs nothing, where a rejected one would stop the
+# app over something harmless.
+PERMISSIVE_SECTIONS = frozenset({"account"})
+
+
+def _homes(key: str) -> list[str]:
+    """Which sections do recognise `key`. Empty when none do."""
+    return sorted(name for name, keys in SECTION_KEYS.items() if key in keys)
+
+
+def _did_you_mean(word: str, candidates, *, section: bool = False) -> str:
+    """The nearest thing that would have worked, when there is one.
+
+    A misspelling is the common case and the one hardest to see by
+    rereading, so the message names the key it was probably meant to be
+    rather than only saying no.
+    """
+    near = difflib.get_close_matches(word, sorted(candidates), n=1, cutoff=0.7)
+    if not near:
+        return ""
+    return f"; did you mean [{near[0]}]?" if section else f"; did you mean {near[0]}?"
+
+
+def _check_keys(raw: dict) -> None:
+    """Refuse a file that contains anything nothing reads.
+
+    Every setting below is read with `.get(key, default)`, which cannot
+    tell a key that is absent from one that is misspelled or filed under
+    the wrong section. Both then do nothing, silently, and the only
+    evidence is a setting that appears not to work -- which reads as a
+    broken feature rather than a typo. `[thresholds]` is why this is an
+    error and not a warning: someone raising `low_mgdl` to match their
+    own low would otherwise find out when an alert did not fire.
+
+    Raising here also covers the live reload for free, since
+    `ConfigWatcher.poll` already keeps the running config when a re-read
+    raises. The cost is that a config.toml written against a newer commit
+    stops an older checkout from starting -- see README.md.
+    """
+    problems: list[str] = []
+    for name, body in raw.items():
+        if not isinstance(body, dict):
+            # A key above the first [section] header, so nothing ever
+            # looks for it. TOML puts it at the top level; we do not.
+            homes = _homes(name)
+            where = (
+                f"; it belongs under [{homes[0]}]"
+                if homes
+                else _did_you_mean(name, set().union(*SECTION_KEYS.values()))
+            )
+            problems.append(f"{name} sits outside any section{where}")
+            continue
+        if name in PERMISSIVE_SECTIONS:
+            continue
+        allowed = SECTION_KEYS.get(name)
+        if allowed is None:
+            known = set(SECTION_KEYS) | PERMISSIVE_SECTIONS
+            problems.append(
+                f"[{name}] is not a section"
+                + _did_you_mean(name, known, section=True)
+            )
+            continue
+        for key in body:
+            if key in allowed:
+                continue
+            homes = _homes(key)
+            where = (
+                f"; it belongs under [{homes[0]}]"
+                if homes
+                else _did_you_mean(key, allowed)
+            )
+            problems.append(f"{name}.{key} is not a setting{where}")
+
+    if problems:
+        raise ValueError(
+            "config.toml holds settings nothing reads, so they would do "
+            "nothing without saying so:\n  "
+            + "\n  ".join(problems)
+        )
+
+
 def load(path: Path) -> Config:
-    """Read the config file, falling back to defaults for absent keys."""
+    """Read the config file, falling back to defaults for absent keys.
+
+    Absent is not the same as unrecognised: a key nothing reads is an
+    error, not a default. See `_check_keys`.
+    """
     if not path.exists():
         raise FileNotFoundError(f"{path} not found; copy config.example.toml to create it")
 
     with path.open("rb") as fh:
         raw = tomllib.load(fh)
+
+    # Before anything is read, while the file's own keys still exist.
+    # Past this point the unrecognised ones have already been dropped.
+    _check_keys(raw)
 
     account = raw.get("account", {})
     display = raw.get("display", {})

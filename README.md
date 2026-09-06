@@ -185,6 +185,26 @@ headset within a second. Leave it running, keep the headset on, and
 change one number at a time. Only `hand` and the `[account]` settings
 need a restart, and the log says so when one of them changes.
 
+**A setting nothing recognises stops the app** instead of being ignored.
+A key in the wrong section, a misspelled key or a misspelled section is
+otherwise accepted without a word and simply does nothing, which looks
+like a broken feature rather than a typo -- and under `[thresholds]` it
+means an alert that does not fire where you thought it would. The
+message names what it found and, where it can, where it should have
+gone:
+
+```
+config.toml holds settings nothing reads, so they would do nothing without saying so:
+  display.window_min is not a setting; it belongs under [trend]
+```
+
+Saved mid-session this costs nothing: the reload logs `ignoring the
+edited config` and keeps the settings already running. Where it does
+bite is going backwards -- a `config.toml` written against a newer
+commit will not start an older checkout, since the keys added since do
+not exist there. Comment those out for as long as the old checkout is in
+use. `[account]` is exempt and accepts any key.
+
 Getting the watch face where you want it is trial and error. The loop is:
 
 1. Start `vr-cgm-overlay` and put the headset on.
