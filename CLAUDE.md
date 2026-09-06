@@ -29,9 +29,12 @@ wires whichever was asked for.
 **Prefer `--window` for anything that is not about placement.** It runs
 the same core and the same face with the VR half left out, so behaviour
 that used to need a headset and an hour can be watched at a desk. `cgm.face` imports
-nothing from `cgm.core`; the one crossing is `cgm.core.poller` reaching
-up for `TrendTuning`, so the fetch log cannot name a trend source the
-face is not drawing.
+nothing from `cgm.core`, and the two crossings the other way are both
+there so that one number cannot be written down twice: `cgm.core.poller`
+reaches up for `TrendTuning`, so the fetch log cannot name a trend
+source the face is not drawing, and `cgm.core.config` reaches up for
+`AXIS_FLOOR_MGDL`, so the floor it rejects a config against is the floor
+the graph is drawn on.
 
 `NOTES.md` holds what is still open: unverified paths, limits that are
 not going away, decisions that still stand. Keep it out of `README.md`,

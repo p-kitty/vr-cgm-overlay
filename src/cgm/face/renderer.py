@@ -49,16 +49,19 @@ WIDTH, HEIGHT = 512, 256
 # does not move at all: every element keeps the coordinates it had, and
 # the strip is added underneath.
 #
-# The size is set by the axis, not by taste. The trace is drawn against
-# a fixed 40-300 mg/dL so a quiet stretch stays quiet (see
-# cgm.face.graph), which spends most of the height on room the reading
-# is not using -- the target range alone is 110 of those 260 mg/dL. At
-# the 64px the issue first proposed, an ordinary 30 mg/dL move came out
-# 7px tall and the whole strip read as a bar rather than a graph. The
-# 104px of plot below gives that move 12px and the band 44, which is
-# the point at which the shape of a meal is visible at a glance. The
-# rest of the strip is the row of times underneath.
-GRAPH_HEIGHT = 148
+# The size is set by the labels, not by taste.
+#
+# The two closest are the axis floor and low_mgdl, twenty mg/dL apart on
+# a scale of 250 -- eight percent of the plot, whatever the plot is --
+# and both have to be legible at once. At 136px that is ten pixels, and
+# with the floor's label hanging below its line rather than centred on
+# it, the two clear each other with room to spare. Everything shorter
+# was tried first: at 104 they touch, and at the 64 the issue originally
+# proposed an ordinary 30 mg/dL move came out 7px tall and the whole
+# strip read as a bar rather than a graph.
+#
+# The rest of the strip is the two rows of labels underneath.
+GRAPH_HEIGHT = 184
 
 # Where the trace lives inside that strip.
 #
@@ -72,9 +75,9 @@ GRAPH_HEIGHT = 148
 # marker's own room. The marker must not touch the labels or the plot,
 # or a low would look like the graph had a floor drawn under it.
 GRAPH_MARGIN_X = 44
-GRAPH_LABEL_GUTTER = 58
+GRAPH_LABEL_GUTTER = 46
 GRAPH_TOP = 244
-GRAPH_BOTTOM_MARGIN = 56
+GRAPH_BOTTOM_MARGIN = 60
 
 # Tried in order; all ship with Windows.
 FONT_CANDIDATES = [
@@ -339,8 +342,10 @@ class WatchFaceRenderer:
         self._font_message = _load_font(52)
         # Smaller than anything else on the card on purpose: the axis
         # labels are there to be read when you go looking for them, not
-        # to compete with the number for the half-second glance.
-        self._font_axis = _load_font(24)
+        # to compete with the number for the half-second glance. Small
+        # enough, too, that the floor and low_mgdl fit one above the
+        # other -- see GRAPH_HEIGHT.
+        self._font_axis = _load_font(18)
 
     # -- public API ---------------------------------------------------------
 

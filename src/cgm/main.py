@@ -173,7 +173,6 @@ def fire_alert(cfg: config_mod.Config, overlay=None) -> None:
 def build_graph(cfg: config_mod.Config) -> GraphTuning:
     return GraphTuning(
         window_min=cfg.graph.window_min,
-        axis_low_mgdl=cfg.graph.axis_low_mgdl,
         axis_high_mgdl=cfg.graph.axis_high_mgdl,
     )
 

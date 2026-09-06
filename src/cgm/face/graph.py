@@ -30,7 +30,7 @@ obvious alternative lies:
     been running that long.
 
 A reading below the bottom is clamped onto it rather than pushed off,
-so a 42 draws where a 50 would. That is deliberate -- the floor is the
+so a 42 draws where AXIS_FLOOR_MGDL is. That is deliberate -- the floor is the
 one part of the scale the eye can rely on being in the same place -- and
 it is safe here because it is the *number* that says how low a low is,
 in digits the size of the card, on a face that has gone red.
@@ -76,13 +76,18 @@ BAND_TINT = 0.18
 LABEL_COLOR = (150, 155, 168)
 LABEL_PAD = 8
 
-# How close two level labels may come before the lower-priority one is
-# dropped. They are written centred on their own level, so anything
-# under about the height of a line of them overlaps into mush. At the
-# default axis this is what silently drops the low threshold's label:
-# 50 and 70 are eight percent of the scale apart, and no plot tall
-# enough to separate them would fit on a wrist.
-LABEL_MIN_GAP = 24
+# The floor label hangs below its line, and a few pixels further down
+# than the line itself: the anchor puts the top of the text box there,
+# and the box has air above the digits that eats into the gap up to
+# low_mgdl. Three pixels buys that back.
+FLOOR_LABEL_DROP = 3
+
+# The bottom of the Y axis, and not a setting. Every graph of this
+# starts at the same place, so the eye learns where the floor is once
+# instead of per config file, and two of these side by side are
+# comparable. It is also what the plot is sized around: the floor and
+# low_mgdl are twenty apart, and their labels have to clear each other.
+AXIS_FLOOR_MGDL = 50.0
 
 # What the axis top is rounded up to when a reading goes above it. Round
 # numbers, so an axis that has moved still reads as a scale rather than
@@ -114,19 +119,17 @@ class GraphTuning:
     window is the one for glancing at it, because the axis does not
     move underneath you between fetches.
 
-    `axis_low_mgdl` is a floor and `axis_high_mgdl` is a minimum. The
-    bottom of the graph is always exactly the floor; the top is the
-    minimum, or as far above it as a reading needs, rounded up to
-    AXIS_STEP_MGDL. So the scale is the one asked for on an ordinary
-    day and grows only to keep a hyper on the chart.
+    `axis_high_mgdl` is a minimum, not a ceiling: the top sits there on
+    an ordinary day and goes as far above it as a reading needs, rounded
+    up to AXIS_STEP_MGDL. The bottom is AXIS_FLOOR_MGDL and is not
+    settable at all.
 
-    Both are mg/dL like every other threshold in this project, including
+    It is mg/dL like every other threshold in this project, including
     under `display.unit = "mmol"`. The labels are converted on the way
     out; the arithmetic never is.
     """
 
     window_min: float = 480.0
-    axis_low_mgdl: float = 50.0
     axis_high_mgdl: float = 300.0
 
     @property
@@ -276,7 +279,7 @@ def draw_sparkline(
     # The points are windowed first because how high the axis reaches
     # depends on them, and every line below is drawn against that.
     shown = recent(points, tuning.window_min, now)
-    floor = tuning.axis_low_mgdl
+    floor = AXIS_FLOOR_MGDL
     ceiling = axis_top(shown, tuning)
     span_mgdl = ceiling - floor
 
@@ -307,25 +310,43 @@ def draw_sparkline(
         _dashed_line(draw, y_for(level), left, right, color)
 
     if font is not None:
-        # Priority order, and it is not the order they appear in.
+        # Three labels, always: the floor and the two thresholds. They
+        # are the whole scale -- where it starts and the two levels it
+        # is being read against -- so none of them is worth dropping to
+        # save room, and the plot is tall enough to hold them because
+        # they have to fit rather than the other way round.
         #
-        # The floor first: it never moves, so it is the one number the
-        # eye can place the rest against. Then very_high, which is the
-        # level worth reading off. The ceiling comes third on purpose --
-        # at the default axis it sits 60 mg/dL above very_high, close
-        # enough to be dropped, and that is the right outcome: the top
-        # is then exactly what the config says and needs no label. The
-        # moment a hyper pushes it up, the gap opens and the number
-        # appears, which is how the reader is told the scale moved.
-        #
-        # The low threshold is last and never survives at the defaults:
-        # 70 sits eight percent of the scale above a floor of 50, and no
-        # plot that fits on a wrist can separate them. Its line is still
-        # drawn, with the floor's own label right underneath it.
-        _draw_levels(
-            draw, left, y_for, (floor, theme.very_high_mgdl, ceiling,
-                                theme.low_mgdl), unit, font
+        # The floor's is the one that is not centred on its own line. It
+        # sits at the very bottom, where centring would push half of it
+        # under the plot, and hanging it below leaves the twenty mg/dL
+        # up to low_mgdl entirely to that label.
+        draw.text(
+            (left - LABEL_PAD, y_for(floor)),
+            format_value(floor, unit),
+            font=font,
+            fill=LABEL_COLOR,
+            anchor="rt",
         )
+        for level in (theme.low_mgdl, theme.very_high_mgdl):
+            draw.text(
+                (left - LABEL_PAD, y_for(level)),
+                format_value(level, unit),
+                font=font,
+                fill=LABEL_COLOR,
+                anchor="rm",
+            )
+        # And the top only once it has moved. At the configured value it
+        # would be a number saying what the config already says; the
+        # moment a hyper pushes it up, it appearing is how the reader is
+        # told the scale is no longer the one they set.
+        if ceiling != tuning.axis_high_mgdl:
+            draw.text(
+                (left - LABEL_PAD, y_for(ceiling)),
+                format_value(ceiling, unit),
+                font=font,
+                fill=LABEL_COLOR,
+                anchor="rm",
+            )
 
     if not shown:
         return
@@ -344,9 +365,13 @@ def draw_sparkline(
         return left + max(0.0, min(1.0, fraction)) * width_px
 
     if font is not None:
+        # Below the floor's label rather than below the plot: that one
+        # hangs into this margin too, and the leftmost time sits far
+        # enough left to run into it.
+        times_y = y_for(floor) + FLOOR_LABEL_DROP + font.size + LABEL_PAD
         for tick in time_ticks(start, now):
             draw.text(
-                (x_for(tick), bottom + HEAD_RADIUS + LABEL_PAD),
+                (x_for(tick), times_y),
                 tick.strftime(TIME_FORMAT),
                 font=font,
                 fill=LABEL_COLOR,
@@ -365,29 +390,6 @@ def draw_sparkline(
     # the number are the same fact, and it says which end is now.
     newest = shown[-1]
     _dot(draw, (x_for(newest.at), y_for(newest.mgdl)), HEAD_RADIUS, accent)
-
-
-def _draw_levels(draw, left: float, y_for, levels, unit: str, font) -> None:
-    """Write the level labels into the gutter, most important first.
-
-    A label that would land on top of one already written is dropped
-    rather than drawn over it: two levels can be any distance apart, and
-    the axis moves, so which pairs collide is not something the layout
-    can be tuned around once and left.
-    """
-    placed: list[float] = []
-    for level in levels:
-        y = y_for(level)
-        if any(abs(y - taken) < LABEL_MIN_GAP for taken in placed):
-            continue
-        draw.text(
-            (left - LABEL_PAD, y),
-            format_value(level, unit),
-            font=font,
-            fill=LABEL_COLOR,
-            anchor="rm",
-        )
-        placed.append(y)
 
 
 def _dashed_line(draw, y: float, left: float, right: float, color) -> None:

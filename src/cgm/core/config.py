@@ -23,6 +23,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
+from cgm.face.graph import AXIS_FLOOR_MGDL
 
 log = logging.getLogger(__name__)
 
@@ -118,11 +119,10 @@ class Graph:
     # than a fixed length. Eight hours by default -- long enough to hold
     # a night, short enough that the points are not touching.
     window_min: float = 480.0
-    # The axis the trace is drawn against. The low is a floor the graph
-    # never goes below, the high a minimum it grows past only to keep a
-    # reading on the chart. See cgm.face.graph for why it does not fit
-    # itself to the data instead.
-    axis_low_mgdl: float = 50.0
+    # A minimum, not a ceiling: the axis grows past this only far enough
+    # to keep a reading on the chart. The bottom of the axis is not here
+    # because it is not settable -- see AXIS_FLOOR_MGDL. See
+    # cgm.face.graph for why neither end fits itself to the data.
     axis_high_mgdl: float = 300.0
 
 
@@ -390,7 +390,6 @@ def load(path: Path) -> Config:
     gr.in_window = bool(graph.get("in_window", gr.in_window))
     gr.in_vr = bool(graph.get("in_vr", gr.in_vr))
     gr.window_min = float(graph.get("window_min", gr.window_min))
-    gr.axis_low_mgdl = float(graph.get("axis_low_mgdl", gr.axis_low_mgdl))
     gr.axis_high_mgdl = float(graph.get("axis_high_mgdl", gr.axis_high_mgdl))
 
     th = cfg.thresholds
@@ -489,22 +488,20 @@ def _validate(cfg: Config) -> None:
     # else, and a setting only rejected at the moment it starts being
     # used is rejected at the worst possible moment.
     gr = cfg.graph
-    if gr.axis_low_mgdl >= gr.axis_high_mgdl:
-        raise ValueError(
-            "graph.axis_low_mgdl must be below axis_high_mgdl: "
-            f"{gr.axis_low_mgdl} / {gr.axis_high_mgdl}"
-        )
     # The band showing the target range is the whole reason the trace
     # can be read without an axis drawn beside it. An axis that does not
     # contain the range clips the band against an edge, where it stops
     # looking like a band and starts looking like the graph having a
-    # floor or a ceiling. The top only ever grows from here, so checking
-    # the configured value is checking the smallest axis there can be.
-    if not (gr.axis_low_mgdl <= th.low_mgdl and th.high_mgdl <= gr.axis_high_mgdl):
+    # floor or a ceiling. The top only ever grows from the configured
+    # value, so checking that is checking the smallest axis there can
+    # be; the bottom never moves at all.
+    if not (AXIS_FLOOR_MGDL <= th.low_mgdl and th.high_mgdl <= gr.axis_high_mgdl):
         raise ValueError(
             "the graph axis must contain the target range: "
-            f"axis {gr.axis_low_mgdl}-{gr.axis_high_mgdl} does not hold "
-            f"thresholds {th.low_mgdl}-{th.high_mgdl}"
+            f"axis {AXIS_FLOOR_MGDL:.0f}-{gr.axis_high_mgdl} does not hold "
+            f"thresholds {th.low_mgdl}-{th.high_mgdl}. The bottom of the "
+            "graph is fixed, so a low_mgdl under it means raising "
+            "thresholds.low_mgdl rather than lowering the axis"
         )
     # 0 asks for all the history there is, so there is no length to
     # check. Any other value is one, and it has to hold two points to
