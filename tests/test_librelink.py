@@ -22,6 +22,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from librelink import (
+    GRAPH_RESOLUTION_MIN,
     MIN_FIT_POINTS,
     MIN_FIT_SPAN_MIN,
     GlucosePoint,
@@ -64,8 +65,12 @@ def series(
 ) -> tuple[GlucosePoint, ...]:
     """A straight run of samples `step` minutes apart, ending at `ends_at`.
 
-    The real sensor reports about once a minute, so `step` defaults to
-    that. `slope` is in mg/dL per minute, which is what the fit returns.
+    `slope` is in mg/dL per minute, which is what the fit returns.
+
+    `step` defaults to a minute because that is the convenient shape for
+    asserting the arithmetic, NOT because it is what arrives: the API
+    downsamples to a point every GRAPH_RESOLUTION_MIN. RealisticSpacing
+    below is the case that uses the spacing the API actually sends.
     """
     return tuple(
         GlucosePoint(
@@ -214,6 +219,58 @@ class FitSlope(unittest.TestCase):
         # Not at the wall clock: these samples are dated 2026 and would
         # otherwise all fall outside any window.
         self.assertAlmostEqual(fit_slope(series(1.0), 15.0), 1.0, places=6)
+
+
+class RealisticSpacing(unittest.TestCase):
+    """The fit against the spacing the API actually sends.
+
+    A dry run against the live service returned 48 points over 11.9
+    hours -- a point every 15 minutes, not the once a minute the sensor
+    records. The first default shipped here was a 15 minute window,
+    which put exactly one point inside it and could never fit; the arrow
+    silently used TrendArrow for every reading. These pin the spacing so
+    that cannot come back unnoticed.
+    """
+
+    # The measured median gap, not the nominal 15. It matters: at an
+    # exact 15.0 the point on a 30 minute boundary lands just inside the
+    # window and a 30 minute window looks like it fits. Real gaps are
+    # never exact, so that apparent fit is an artefact -- which is the
+    # margin the floor at three gaps exists to keep.
+    MEASURED_GAP_MIN = 15.05
+
+    def coarse(self, slope: float, step: float | None = None):
+        return series(
+            slope,
+            12 * 60.0,
+            step=step or self.MEASURED_GAP_MIN,
+            end_mgdl=140.0,
+        )
+
+    def test_a_window_of_one_gap_cannot_fit(self):
+        # The bug that shipped: one point lands inside, so there is
+        # nothing to fit and every reading fell back to TrendArrow.
+        self.assertIsNone(fit_slope(self.coarse(1.0), GRAPH_RESOLUTION_MIN))
+
+    def test_a_window_of_two_gaps_cannot_fit_either(self):
+        self.assertIsNone(fit_slope(self.coarse(1.0), 2 * GRAPH_RESOLUTION_MIN))
+
+    def test_the_configured_floor_is_the_shortest_window_that_fits(self):
+        floor = MIN_FIT_POINTS * GRAPH_RESOLUTION_MIN
+        self.assertAlmostEqual(fit_slope(self.coarse(1.0), floor), 1.0, places=6)
+
+    def test_the_default_window_fits_with_room_to_spare(self):
+        # An hour holds four points, so one missing sample still leaves
+        # enough to fit rather than dropping to the API arrow.
+        self.assertAlmostEqual(fit_slope(self.coarse(-0.5), 60.0), -0.5, places=6)
+
+    def test_the_longest_observed_gap_still_fits_the_default_window(self):
+        # Gaps ran 15.02 to 21 minutes. Three of the longest still land
+        # inside an hour, which is what makes 60 a safe default and 45 a
+        # floor rather than a recommendation.
+        self.assertAlmostEqual(
+            fit_slope(self.coarse(1.0, step=21.0), 60.0), 1.0, places=6
+        )
 
 
 class ReadingTrend(unittest.TestCase):

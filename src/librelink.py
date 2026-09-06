@@ -15,6 +15,9 @@ existing clients:
   5. TrendArrow is five buckets on thresholds Abbott does not document,
      so the trend is fitted from graphData instead and TrendArrow is
      kept only as the fallback.
+  6. graphData is downsampled to a point every fifteen minutes, not the
+     once a minute the sensor records, which is what decides how long a
+     window the fit needs. See GRAPH_RESOLUTION_MIN.
 """
 
 from __future__ import annotations
@@ -53,11 +56,21 @@ REGION_URLS = {
 # 1=falling fast 2=falling 3=flat 4=rising 5=rising fast
 TREND_ARROWS = {1: "↓", 2: "↘", 3: "→", 4: "↗", 5: "↑"}
 
+# How coarse the history actually is: the graph endpoint returns about
+# twelve hours at one sample every fifteen minutes, NOT the once a
+# minute the sensor itself records. Measured against the live API --
+# 48 points over 11.9 hours, median gap 15.05 min, stretching to 21.
+#
+# This is what sets a useful window. Three points need roughly three of
+# these gaps to land inside it, so a window under about 45 minutes can
+# only ever fall back to TrendArrow, however sensible the number looks.
+GRAPH_RESOLUTION_MIN = 15.0
+
 # A least-squares fit needs points, spread over time, before it means
-# anything. The sensor's own jitter is a couple of mg/dL, so two samples
-# a minute apart can show a 2 mg/dL/min slope out of pure noise -- which
-# is the whole width of the arrow's range. Below either floor the fit is
-# refused and TrendArrow is used instead.
+# anything, and the sensor's own jitter is a couple of mg/dL. Below
+# either floor the fit is refused and TrendArrow is used instead.
+# MIN_FIT_SPAN_MIN is a backstop rather than a working limit: at the
+# resolution above, any three points already span half an hour.
 MIN_FIT_POINTS = 3
 MIN_FIT_SPAN_MIN = 5.0
 

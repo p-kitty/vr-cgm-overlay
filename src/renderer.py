@@ -162,7 +162,7 @@ class TrendTuning:
     """
 
     local: bool = True
-    window_min: float = 15.0
+    window_min: float = 60.0
     fast_mgdl_min: float = 2.0
 
     def slope_for(self, reading) -> float | None:

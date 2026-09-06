@@ -60,8 +60,11 @@ Abbott's own
 nothing here can adjust, so a gentle drift and a hard climb arrive as
 the same arrow. The same response already carries about twelve hours of
 history, which used to be discarded; a line is fitted through the last
-fifteen minutes of it instead, and because the arrow is a drawing rather
-than a glyph it can point anywhere. Nothing extra is fetched and nothing
+hour of it instead, and because the arrow is a drawing rather than a
+glyph it can point anywhere. An hour rather than a few minutes because
+that history is downsampled to a point every fifteen minutes — coarser
+than the sensor's own record, and what decides how long a window the fit
+needs. Nothing extra is fetched and nothing
 is stored, so the trend is right again the moment the process restarts.
 `TrendArrow` stays as the fallback for a fresh sensor or a gap in
 scanning, and `trend.local = false` goes back to it entirely for anyone
@@ -84,6 +87,7 @@ have actually been reported against existing clients.
 | No token while terms or email verification are pending | `step.type` is detected and explained |
 | Tokens expire with no refresh endpoint and no warning | A 401 triggers one automatic re-login |
 | `TrendArrow` is five buckets on undocumented thresholds | The trend is fitted from `graphData`; `TrendArrow` is the fallback |
+| `graphData` is downsampled to a point every 15 min | The trend window has a 45 minute floor, so three points can land in it |
 
 ## Setup
 
@@ -284,7 +288,7 @@ because each one becomes a real failure.
 | Setting | What it does |
 |---|---|
 | `local` (true) | `true` fits the slope here; `false` uses Abbott's own `TrendArrow`, so the face and the phone show the same five arrows |
-| `window_min` (15) | How far back the slope is fitted over. Longer is steadier and slower to react; it must be at least 5, or there is never enough history to fit |
+| `window_min` (60) | How far back the slope is fitted over. Longer is steadier and slower to notice a turn. The floor is 45: the history arrives at one point every 15 minutes, so a shorter window cannot hold enough of them to fit |
 | `fast_mgdl_min` (2.0) | The rate at which the arrow stands straight up. Everything slower is in proportion, so half of it is the 45 degree diagonal |
 
 The rate is mg/dL per minute, and like the colour bands it stays in

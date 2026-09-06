@@ -81,7 +81,11 @@ very_high_mgdl = 240
 # little history to fit -- a fresh sensor, or a gap in scanning.
 local = true
 
-window_min = 15.0    # how far back the slope is fitted over; at least 5
+# How far back the slope is fitted over. The API sends history at one
+# point every 15 minutes, so this has to span several of them: 45 is the
+# floor and anything shorter is rejected. Longer is steadier and slower
+# to notice a turn.
+window_min = 60.0
 
 # The rate, in mg/dL per minute, at which the arrow stands straight up.
 # Everything slower is in proportion, so half of this is the 45 degree

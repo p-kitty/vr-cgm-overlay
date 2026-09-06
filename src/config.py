@@ -12,7 +12,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from librelink import MIN_FIT_SPAN_MIN
+from librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class Config:
     very_high_mgdl: float = 240.0
 
     trend_local: bool = True
-    trend_window_min: float = 15.0
+    trend_window_min: float = 60.0
     trend_fast_mgdl_min: float = 2.0
 
     poll_interval_sec: float = 60.0
@@ -139,14 +139,18 @@ def _validate(cfg: Config) -> None:
     # a setting that is only rejected at the moment it starts being used
     # is rejected at the worst possible moment.
     #
-    # A window shorter than the fit's own span floor can never hold
-    # enough spread to fit, so the arrow would silently fall back to the
-    # API's five buckets forever rather than failing where it was set.
-    if cfg.trend_window_min < MIN_FIT_SPAN_MIN:
+    # The history arrives at one point every GRAPH_RESOLUTION_MIN, so a
+    # window has to be long enough for MIN_FIT_POINTS of them to land in
+    # it. Shorter and the arrow silently falls back to the API's five
+    # buckets forever, rather than failing where it was set -- which is
+    # exactly what a window of 15 did before this floor existed.
+    window_floor = MIN_FIT_POINTS * GRAPH_RESOLUTION_MIN
+    if cfg.trend_window_min < window_floor:
         raise ValueError(
-            f"trend.window_min must be at least {MIN_FIT_SPAN_MIN:.0f}; below "
-            "that there is never enough history to fit a slope: "
-            f"{cfg.trend_window_min}"
+            f"trend.window_min must be at least {window_floor:.0f}; the API "
+            f"sends one point every ~{GRAPH_RESOLUTION_MIN:.0f} minutes, so a "
+            f"shorter window will not reliably hold the {MIN_FIT_POINTS} "
+            f"needed to fit a slope: {cfg.trend_window_min}"
         )
     # It divides the slope, so zero is a crash on the first reading
     # rather than a wrong angle.

@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 import config as config_mod
-from librelink import MIN_FIT_SPAN_MIN
+from librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
 
@@ -85,18 +85,18 @@ class Loading(ConfigTestCase):
         self.assertEqual(cfg.orbit_radius_m, 0.05)
         self.assertEqual(cfg.orbit_limit_deg, 100.0)
 
-    def test_trend_defaults_to_a_quarter_hour_window(self):
+    def test_trend_defaults_to_an_hour_window(self):
         cfg = self.load()
         self.assertTrue(cfg.trend_local)
-        self.assertEqual(cfg.trend_window_min, 15.0)
+        self.assertEqual(cfg.trend_window_min, 60.0)
         self.assertEqual(cfg.trend_fast_mgdl_min, 2.0)
 
     def test_trend_settings_are_read(self):
         cfg = self.load(
-            "\n[trend]\nlocal = false\nwindow_min = 30\nfast_mgdl_min = 1.5\n"
+            "\n[trend]\nlocal = false\nwindow_min = 90\nfast_mgdl_min = 1.5\n"
         )
         self.assertFalse(cfg.trend_local)
-        self.assertEqual(cfg.trend_window_min, 30.0)
+        self.assertEqual(cfg.trend_window_min, 90.0)
         self.assertEqual(cfg.trend_fast_mgdl_min, 1.5)
 
     def test_a_blank_patient_id_means_unset(self):
@@ -177,23 +177,28 @@ class Validation(ConfigTestCase):
         # would simply never show it.
         self.assertRejected("\n[thresholds]\nlow_mgdl = 180\nhigh_mgdl = 180\n")
 
-    def test_the_trend_window_must_be_long_enough_to_fit(self):
-        # Under the fit's own span floor there is never enough spread in
-        # the samples to fit a line, so the arrow would quietly sit on
-        # the API's five buckets rather than failing where it was set.
-        message = self.assertRejected("\n[trend]\nwindow_min = 4\n")
+    def test_the_trend_window_must_hold_enough_points_to_fit(self):
+        # The history arrives at one point every GRAPH_RESOLUTION_MIN, so
+        # a short window holds one or two of them and can never fit. The
+        # first default shipped here was 15, which did exactly that and
+        # left the arrow on TrendArrow for every reading without ever
+        # saying so. Rejecting it is the only way that fails loudly.
+        message = self.assertRejected("\n[trend]\nwindow_min = 15\n")
         self.assertIn("window_min", message)
+        self.assertIn("15 minutes", message)
+        self.assertRejected("\n[trend]\nwindow_min = 30\n")
         self.assertRejected("\n[trend]\nwindow_min = 0\n")
 
-    def test_the_span_floor_itself_is_allowed(self):
-        cfg = self.load(f"\n[trend]\nwindow_min = {MIN_FIT_SPAN_MIN}\n")
-        self.assertEqual(cfg.trend_window_min, MIN_FIT_SPAN_MIN)
+    def test_the_window_floor_itself_is_allowed(self):
+        floor = MIN_FIT_POINTS * GRAPH_RESOLUTION_MIN
+        cfg = self.load(f"\n[trend]\nwindow_min = {floor}\n")
+        self.assertEqual(cfg.trend_window_min, floor)
 
     def test_trend_settings_are_checked_even_when_the_fit_is_off(self):
         # local is flipped from inside the headset like everything else
         # here. A value only rejected once the fit is switched on is
         # rejected at the worst possible moment.
-        self.assertRejected("\n[trend]\nlocal = false\nwindow_min = 1\n")
+        self.assertRejected("\n[trend]\nlocal = false\nwindow_min = 15\n")
         self.assertRejected("\n[trend]\nlocal = false\nfast_mgdl_min = 0\n")
 
     def test_the_fast_rate_must_be_positive(self):
