@@ -459,24 +459,24 @@ class UnknownKeys(ConfigTestCase):
         self.assertIn("polling.nonsense", message)
         self.assertIn("polling.also_nonsense", message)
 
-    def test_the_account_section_stays_permissive(self):
-        # It is the section people paste into from other clients, and an
-        # extra key there is harmless where a rejected one is not.
-        with self.assertLogs("cgm.core.config", "WARNING"):
-            cfg = self.load(account=ACCOUNT + 'extra_thing = "whatever"\n')
-        self.assertEqual(cfg.account.email, "someone@example.com")
+    def test_the_account_section_is_checked_like_the_others(self):
+        # It has no exemption. One rule beats a section that has to be
+        # remembered as the odd one out.
+        with self.assertRaises(ValueError) as caught:
+            self.load(account=ACCOUNT + 'extra_thing = "whatever"\n')
+        self.assertIn("account.extra_thing", str(caught.exception))
 
-    def test_a_misspelled_account_key_still_gets_said_out_loud(self):
-        # Permissive, not silent. `api_verison` keeping the default
-        # would otherwise surface as a 4xx from the API hours later,
-        # with nothing pointing back at the file.
-        with self.assertLogs("cgm.core.config", "WARNING") as logged:
+    def test_a_misspelled_account_key_is_caught_at_startup(self):
+        # `api_verison` keeping the default would otherwise surface as a
+        # login the API rejects, hours later, with nothing pointing back
+        # at the file.
+        with self.assertRaises(ValueError) as caught:
             self.load(account=ACCOUNT + 'api_verison = "4.16.0"\n')
-        self.assertIn("api_verison", logged.output[0])
+        self.assertIn("api_version", str(caught.exception))
 
-    def test_a_correct_account_section_says_nothing(self):
-        with self.assertNoLogs("cgm.core.config", "WARNING"):
-            self.load(account=ACCOUNT + 'region = "jp"\n')
+    def test_a_correct_account_section_loads(self):
+        cfg = self.load(account=ACCOUNT + 'region = "jp"\n')
+        self.assertEqual(cfg.account.region, "jp")
 
     def test_both_halves_of_the_display_section_are_recognised(self):
         # [display] fills two dataclasses. Neither half may be treated

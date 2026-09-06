@@ -158,6 +158,7 @@ def _keys_of(*classes: type) -> frozenset[str]:
 # to register it here. `[display]` is the one section that fills two
 # dataclasses -- see the module docstring for why it stays one section.
 SECTION_KEYS: dict[str, frozenset[str]] = {
+    "account": _keys_of(Account),
     "display": _keys_of(Display, Vr),
     "window": _keys_of(Window),
     "thresholds": _keys_of(Thresholds),
@@ -165,11 +166,14 @@ SECTION_KEYS: dict[str, frozenset[str]] = {
     "polling": _keys_of(Polling),
 }
 
-# Sections that take whatever they are given. [account] is the one people
-# paste into from elsewhere -- another client's config, a support thread
-# -- so an unrecognised key there must not stop the app the way it does
-# everywhere else. It is still logged: permissive, not silent.
-PERMISSIVE_SECTIONS: dict[str, frozenset[str]] = {"account": _keys_of(Account)}
+# [account] is in that table like everything else. It was briefly exempt,
+# on the grounds that it gets pasted in from other clients and an extra
+# key there is harmless -- but once an exempt section had to warn anyway
+# to be any use, the exemption bought nothing but a second rule. One rule
+# is also the direction that can be undone: relaxing a section later
+# accepts files that used to be refused, where tightening one later
+# refuses files that used to work, at a commit with nothing to do with
+# the setting that suddenly stops the app.
 
 
 def _homes(key: str) -> list[str]:
@@ -208,6 +212,11 @@ def _check_keys(raw: dict) -> None:
     what the section does take, because that one has no other clue in it
     and "not a setting" alone leaves the reader to go and find the list.
 
+    Every section is treated the same way, `[account]` included: an
+    `api_verison` that kept the default silently would otherwise surface
+    as a login the API rejects, hours later, with nothing pointing back
+    at the file.
+
     Raising here also covers the live reload for free, since
     `ConfigWatcher.poll` already keeps the running config when a re-read
     raises. The cost is that a config.toml written against a newer commit
@@ -236,28 +245,13 @@ def _check_keys(raw: dict) -> None:
                 )
             continue
 
-        if name in PERMISSIVE_SECTIONS:
-            # Permissive, not silent: the app still starts, but an
-            # `api_verison` that quietly kept the default would surface
-            # as a 4xx from the API hours later, with nothing pointing
-            # back at the file.
-            unknown = set(body) - PERMISSIVE_SECTIONS[name]
-            if unknown:
-                log.warning(
-                    "[%s] holds keys nothing reads, which will do nothing: %s",
-                    name,
-                    _listed(unknown),
-                )
-            continue
-
         allowed = SECTION_KEYS.get(name)
         if allowed is None:
-            known = set(SECTION_KEYS) | set(PERMISSIVE_SECTIONS)
-            near = _nearest(name, known)
+            near = _nearest(name, SECTION_KEYS)
             hint = (
                 f"did you mean [{near}]?"
                 if near
-                else "the sections are " + _listed(f"[{s}]" for s in known)
+                else "the sections are " + _listed(f"[{s}]" for s in SECTION_KEYS)
             )
             problems.append(f"[{name}] is not a section; {hint}")
             continue

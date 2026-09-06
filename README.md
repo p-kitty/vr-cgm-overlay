@@ -208,11 +208,11 @@ commit will not start an older checkout, since the keys added since do
 not exist there. Comment those out for as long as the old checkout is in
 use.
 
-`[account]` is the exception: an unrecognised key there is logged as a
-warning and the app still starts, because that section gets pasted in
-from other clients and an extra key in it is usually harmless. A
-misspelling still gets said out loud -- an `api_verison` that silently
-kept the default would otherwise turn up as a rejected login much later.
+`[account]` is checked the same way, with no exemption for being the
+section most often pasted in from somewhere else. That is the section
+most likely to arrive holding a key this does not read, and an
+`api_verison` that quietly kept the default would turn up as a login the
+API rejects hours later -- which is a worse morning than not starting.
 
 Getting the watch face where you want it is trial and error. The loop is:
 
