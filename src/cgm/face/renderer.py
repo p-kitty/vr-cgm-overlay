@@ -12,6 +12,12 @@ corner of your eye:
   - stale data goes grey, so an old value is never mistaken for a live one
 All text is ASCII, so it survives fonts without CJK glyphs.
 
+The card grows a history sparkline below all that when one is asked
+for, and stays 512x256 when it is not -- so the frontend that wants a
+glanceable number only still gets exactly the face it always had. See
+`cgm.face.graph`, and `WatchFaceRenderer.height`, which is the size to
+build a texture or a window from now that there are two of them.
+
 Status is carried on two independent channels. Colour gives severity;
 the marker's *position* gives direction -- above range lights the top
 edge, below range the bottom -- and position does not depend on seeing
@@ -28,9 +34,40 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from cgm.face.graph import GraphTuning, draw_sparkline
+
 log = logging.getLogger(__name__)
 
+# The face itself. The layout below is tuned to these -- font sizes,
+# where the arrow sits next to the digits, how thick a marker reads --
+# so they are constants rather than arguments: a second size would be a
+# second layout to keep in step with the first. Scaling to a window is
+# done by resampling the finished image (see cgm.desk.window.compose).
 WIDTH, HEIGHT = 512, 256
+
+# What the card grows by when the sparkline is on. The face above it
+# does not move at all: every element keeps the coordinates it had, and
+# the strip is added underneath.
+#
+# The size is set by the axis, not by taste. The trace is drawn against
+# a fixed 40-300 mg/dL so a quiet stretch stays quiet (see
+# cgm.face.graph), which spends most of the height on room the reading
+# is not using -- the target range alone is 110 of those 260 mg/dL. At
+# the 64px the issue first proposed, an ordinary 30 mg/dL move came out
+# 7px tall and the whole strip read as a bar rather than a graph. 120
+# gives that move 13px and the band 46, which is the point at which the
+# shape of a meal is visible at a glance.
+GRAPH_HEIGHT = 120
+
+# Where the trace lives inside that strip. The sides line up with the
+# text above -- the value starts at 44, the age ends at WIDTH - 44 -- so
+# the graph reads as the same column of information rather than a panel
+# bolted on. The bottom stops short of the card edge to leave the low
+# marker its own room; the two must not touch, or a low would look like
+# the graph had a floor drawn under it.
+GRAPH_MARGIN_X = 44
+GRAPH_TOP = 244
+GRAPH_BOTTOM_MARGIN = 22
 
 # Tried in order; all ship with Windows.
 FONT_CANDIDATES = [
@@ -278,10 +315,18 @@ class WatchFaceRenderer:
         theme: Theme | None = None,
         unit: str = "mgdl",
         trend: TrendTuning | None = None,
+        graph: GraphTuning | None = None,
     ) -> None:
         self.theme = theme or Theme()
         self.unit = unit
         self.trend = trend or TrendTuning()
+        # None is the switch as well as the absence of tuning: one
+        # object says both whether there is a sparkline and how it is
+        # scaled, so the two cannot be set to disagree. Which frontend
+        # gets one is `cgm.main`'s decision, not this class's.
+        self.graph = graph
+        self.width = WIDTH
+        self.height = HEIGHT + (GRAPH_HEIGHT if graph is not None else 0)
         self._font_value = _load_font(150)
         self._font_small = _load_font(38)
         self._font_message = _load_font(52)
@@ -333,6 +378,21 @@ class WatchFaceRenderer:
             anchor="rm",
         )
 
+        if self.graph is not None:
+            draw_sparkline(
+                draw,
+                self._graph_box(),
+                reading.history,
+                tuning=self.graph,
+                theme=self.theme,
+                # The reading's own timestamp, not the wall clock: the
+                # right-hand edge of the graph is the measurement the
+                # digits are showing. Same anchor the slope is fitted
+                # over, so the arrow and the trace describe one window.
+                now=reading.timestamp_utc,
+                accent=color,
+            )
+
         return img
 
     def render_message(self, message: str, *, detail: str = "") -> Image.Image:
@@ -341,8 +401,14 @@ class WatchFaceRenderer:
         Keeps "no reading at all" visually distinct from a real value.
         """
         img, draw = self._new_canvas(self.theme.color_stale, STATUS_MARKERS["stale"])
+        # Centred on the card rather than at the coordinates the 512x256
+        # face used, so the message sits in the middle of a card that has
+        # grown a sparkline strip too. No graph is drawn here: a message
+        # card has no history behind it, and an empty band under "NO
+        # CONNECTION" would be one more thing to read for nothing.
+        middle = self.height // 2
         draw.text(
-            (WIDTH // 2, 104 if detail else 128),
+            (self.width // 2, middle - 24 if detail else middle),
             message,
             font=self._font_message,
             fill=(226, 228, 235),
@@ -350,7 +416,7 @@ class WatchFaceRenderer:
         )
         if detail:
             draw.text(
-                (WIDTH // 2, 168),
+                (self.width // 2, middle + 40),
                 detail,
                 font=self._font_small,
                 fill=(150, 155, 168),
@@ -374,31 +440,48 @@ class WatchFaceRenderer:
             return self.trend.angle_for_slope(slope)
         return TREND_ANGLES.get(reading.trend)
 
+    def _graph_box(self) -> tuple[float, float, float, float]:
+        """Where the sparkline is drawn, in canvas coordinates."""
+        return (
+            GRAPH_MARGIN_X,
+            GRAPH_TOP,
+            self.width - GRAPH_MARGIN_X,
+            self.height - GRAPH_BOTTOM_MARGIN,
+        )
+
     def _new_canvas(self, accent: tuple[int, int, int], marker: str):
         """Rounded background card with the status marker on one edge."""
-        img = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+        img = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         draw.rounded_rectangle(
-            (0, 0, WIDTH - 1, HEIGHT - 1), radius=CARD_RADIUS, fill=self.theme.color_bg
+            (0, 0, self.width - 1, self.height - 1),
+            radius=CARD_RADIUS,
+            fill=self.theme.color_bg,
         )
         self._draw_marker(draw, marker, accent)
         return img, draw
 
-    @staticmethod
     def _draw_marker(
-        draw: ImageDraw.ImageDraw, marker: str, color: tuple[int, int, int]
+        self, draw: ImageDraw.ImageDraw, marker: str, color: tuple[int, int, int]
     ) -> None:
-        """Light one edge of the card, so status reads without the digits."""
+        """Light one edge of the card, so status reads without the digits.
+
+        The edges are the card's, not the face's: with a sparkline on,
+        the bottom marker lights the bottom of the whole card and the
+        frame goes round the graph as well. A marker that stopped at
+        y=256 would be a line across the middle of the card, which is
+        not an edge and does not read as a direction.
+        """
         fill = (*color, 255)
         thick = MARKER_THICKNESS
-        near, far = MARKER_INSET, WIDTH - 1 - MARKER_INSET
+        near, far = MARKER_INSET, self.width - 1 - MARKER_INSET
 
         if marker == "frame":
             # The whole outline, which is the one shape that cannot be
             # mistaken for a direction. Stale is not "high" or "low"; it is
             # "do not read this as either".
             draw.rounded_rectangle(
-                (2, 2, WIDTH - 3, HEIGHT - 3),
+                (2, 2, self.width - 3, self.height - 3),
                 radius=CARD_RADIUS - 2,
                 outline=fill,
                 width=6,
@@ -406,7 +489,7 @@ class WatchFaceRenderer:
             return
 
         if marker == "left":
-            box = (0, MARKER_INSET, thick, HEIGHT - 1 - MARKER_INSET)
+            box = (0, MARKER_INSET, thick, self.height - 1 - MARKER_INSET)
         elif marker == "top":
             box = (near, 0, far, thick)
         elif marker == "top_heavy":
@@ -414,7 +497,7 @@ class WatchFaceRenderer:
             # even where the yellow and the orange are not.
             box = (near, 0, far, thick * 2)
         elif marker == "bottom":
-            box = (near, HEIGHT - 1 - thick, far, HEIGHT - 1)
+            box = (near, self.height - 1 - thick, far, self.height - 1)
         else:
             raise ValueError(f"unknown marker: {marker!r}")
 
