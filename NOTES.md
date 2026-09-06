@@ -30,6 +30,14 @@ Nothing has exercised these yet. Each says how to check it.
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
   days is the cheap way to be there when it does.
+- **Where the alert sound comes out in VR.** SteamVR normally makes the
+  headset the default output device, so `winsound` should reach your
+  ears with no VR-specific code at all — but that is an assumption
+  about the runtime, not something this can check. Set
+  `thresholds.low_mgdl` above the current reading, start the overlay,
+  and listen. If it comes out of the desktop speakers instead, the fix
+  is to set the headset as the Windows default device; if that does not
+  work either, the fallback is documenting it rather than code.
 - **The fitted trend against a real day.** `graphData` itself is now
   confirmed: a dry run against the live API returned 48 points over 11.9
   hours at a median gap of 15.05 minutes, which is what
@@ -134,6 +142,13 @@ an action manifest JSON shipped with the process and bindings per
 controller type. That is a lot of work for a supplementary signal, so it
 is not planned unless Link turns out to be silent too: colour is the
 primary alert and haptics were only ever a supplement.
+
+**`alert_sound` has taken the pressure off this.** The gap the silent
+buzz left was that nothing reached the user who was not looking at their
+wrist, and a sound covers that on every stack, since it never goes near
+a controller driver. What is left here is a channel that does not work
+on one setup rather than a user who cannot be told, so the Link test is
+worth doing out of curiosity and no longer worth doing first.
 
 ## Placement defaults are tuned for one device
 

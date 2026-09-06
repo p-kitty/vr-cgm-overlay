@@ -173,11 +173,10 @@ always_on_top = true
 placement keys mean nothing here — there is no controller — so editing
 `hand` says nothing rather than asking you to restart for it.
 
-`alert_on_low` does nothing here yet. It buzzes a controller, and there
-is no controller; an audible alert to take its place is planned but not
-built. **The face itself is the real alert** — in a window as in VR —
-so a low is red and marked on the bottom edge whether or not anything
-makes a noise.
+`alert_on_low` works here through sound. The controller buzz is the one
+channel a window has no hardware for; everything about *when* to
+announce a low is shared, so the window and the headset cannot disagree
+about whether you have already been told.
 
 ## Tuning
 
@@ -378,6 +377,48 @@ cannot, and warns on the pairs the markers are covering. Run it if you
 change the colours — and if you remove a marker, read its warnings,
 because each one becomes a real failure.
 
+### Being told about a low
+
+The face going red is the alert. Everything in `[polling]` below
+`alert_on_low` is a supplement to it, for the case the face cannot
+cover: a low starting while you are looking at something else.
+
+```toml
+[polling]
+alert_on_low = true
+alert_haptic = true
+alert_sound = true
+sound_path = ""
+rearm_margin_mgdl = 5.0
+repeat_every_min = 0.0
+```
+
+`alert_on_low` is the master switch. Under it, **`alert_haptic` buzzes
+the controller** — VR only, and silent on some drivers, see **Known
+limits** — and **`alert_sound` plays a sound**, which works the same in
+VR and in `--window`. Sound is the channel that reaches you without
+looking at your wrist, which is exactly the case this is for.
+
+An empty `sound_path` plays your Windows *Exclamation* sound, so it is
+already whatever you chose. Point it at a `.wav` for something distinct.
+Only `.wav`: anything else would need a decoder, and the dependency list
+is deliberately short. Volume is the Windows mixer's, not this app's.
+
+Two rules decide *when*, and both exist because an alert that cries wolf
+gets muted, and a muted alert is worse than none because it is trusted.
+
+- **It fires on the way in, not throughout.** `repeat_every_min = 0`
+  means once per low. Set it to a number of minutes to be told again
+  while it lasts — worth it if sleeping through one is the worry.
+  The floor is 1, because a new reading only arrives about once a
+  minute.
+- **It re-arms above a margin, not at the threshold.** A reading
+  hovering on `low_mgdl` crosses it repeatedly — the sensor's own
+  noise is a couple of mg/dL, the same size as the moves being watched
+  — and every crossing would otherwise be announced as a fresh low.
+  `rearm_margin_mgdl = 5.0` means the reading has to reach 75 before a
+  dip below 70 counts again. Set it to `0` for the bare threshold test.
+
 `[trend]` sets how the arrow is worked out.
 
 | Setting | What it does |
@@ -402,11 +443,18 @@ flipped with the headset on to see both arrows against the same reading.
 
 ## Known limits
 
-The low-glucose buzz is silent on a Quest 3 running through Virtual
+The low-glucose **buzz** is silent on a Quest 3 running through Virtual
 Desktop, which is the one setup this has been tried on. It uses the
 legacy haptic call, which a driver is free to ignore, so whether it
-buzzes on yours is a question only running it answers. **Haptics are a
-supplement; the face itself is the real alert.**
+buzzes on yours is a question only running it answers. This is why
+`alert_sound` exists and defaults on: a sound reaches you whatever the
+controller driver decides to do with the buzz.
+
+Whether that **sound** comes out of the headset rather than the desktop
+speakers is the runtime's business, not this app's. SteamVR normally
+makes the headset the default output device, in which case it simply
+works; if yours does not, set the headset as the default device in
+Windows. **Both are supplements; the face itself is the real alert.**
 
 ## Cautions
 
