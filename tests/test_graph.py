@@ -22,11 +22,13 @@ from PIL import Image, ImageDraw
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, GlucosePoint, Reading
 
 from cgm.face.graph import (
+    AXIS_STEP_MGDL,
     HEAD_RADIUS,
     MAX_GAP_MIN,
     MAX_TIME_TICKS,
     TRACE_COLOR,
     GraphTuning,
+    axis_top,
     draw_sparkline,
     format_value,
     recent,
@@ -93,6 +95,42 @@ class Windowing(unittest.TestCase):
         # part of the stretch that reading describes.
         points = series((400, 92), (0, 110), (-30, 140))
         self.assertEqual([p.mgdl for p in recent(points, 0, NOW)], [92, 110])
+
+
+class Axis(unittest.TestCase):
+    """The bottom never moves; the top grows rather than clip."""
+
+    def test_an_ordinary_day_leaves_the_axis_where_it_was_configured(self):
+        # The whole reason the axis is not fitted to the data: a quiet
+        # stretch has to stay a flat line rather than fill the plot.
+        points = series((60, 88), (30, 104), (0, 121))
+        self.assertEqual(axis_top(points, TUNING), TUNING.axis_high_mgdl)
+
+    def test_a_reading_at_the_top_does_not_move_it(self):
+        points = series((30, 100), (0, TUNING.axis_high_mgdl))
+        self.assertEqual(axis_top(points, TUNING), TUNING.axis_high_mgdl)
+
+    def test_a_hyper_grows_the_axis_to_hold_it(self):
+        points = series((30, 288), (0, 372))
+        grown = axis_top(points, TUNING)
+        self.assertGreaterEqual(grown, 372)
+        self.assertLess(grown, 372 + AXIS_STEP_MGDL)
+
+    def test_the_grown_axis_lands_on_a_round_number(self):
+        # An axis whose top is whatever the highest sample happened to
+        # be is a number, not a scale.
+        for peak in (301, 349, 350, 351, 480):
+            with self.subTest(peak=peak):
+                grown = axis_top(series((0, peak)), TUNING)
+                self.assertEqual(grown % AXIS_STEP_MGDL, 0)
+
+    def test_nothing_to_draw_leaves_the_configured_axis(self):
+        self.assertEqual(axis_top([], TUNING), TUNING.axis_high_mgdl)
+
+    def test_the_floor_is_not_a_minimum_but_a_floor(self):
+        # Readings under it are clamped onto it rather than lowering it.
+        # The digits above say how low a low actually went.
+        self.assertEqual(axis_top(series((0, 42)), TUNING), TUNING.axis_high_mgdl)
 
 
 class Formatting(unittest.TestCase):
@@ -270,21 +308,23 @@ class Drawing(unittest.TestCase):
         # Screen Y grows downwards, so higher glucose is a smaller y.
         self.assertLess(high, low)
 
-    def test_both_thresholds_get_a_dashed_line(self):
-        # The two levels the face changes colour at. The band marks the
-        # target range, but its edges are a change of shade; these are
-        # drawn.
+    def test_each_threshold_is_drawn_in_the_colour_it_turns_the_face(self):
+        # One line each, in its own status colour, so the line and the
+        # card cannot disagree about which end of the scale it marks.
         self.sparkline(())
-        rows = sorted({y for _, y in self.coloured(THEME.color_low)})
-        self.assertTrue(rows, "no threshold line was drawn")
-        # Two runs of rows, one line each, well clear of one another.
-        breaks = [b for a, b in zip(rows, rows[1:]) if b - a > 2]
-        self.assertEqual(len(breaks), 1, f"expected two lines, rows were {rows}")
+        low = self.coloured(THEME.color_low)
+        very_high = self.coloured(THEME.color_very_high)
+        self.assertTrue(low, "the low threshold has no line")
+        self.assertTrue(very_high, "the very high threshold has no line")
+        # Screen Y grows downwards, so the low line is the lower one.
+        self.assertGreater(
+            min(y for _, y in low), max(y for _, y in very_high)
+        )
 
     def test_the_threshold_lines_are_dashed_and_not_solid(self):
         self.sparkline(())
-        top = min(y for _, y in self.coloured(THEME.color_low))
-        xs = [x for x, y in self.coloured(THEME.color_low) if y == top]
+        row = min(y for _, y in self.coloured(THEME.color_low))
+        xs = [x for x, y in self.coloured(THEME.color_low) if y == row]
         # A solid rule would run without a break from one end to the
         # other; a dashed one leaves gaps in the middle of its own row.
         self.assertTrue(

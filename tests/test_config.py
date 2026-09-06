@@ -144,7 +144,11 @@ class Loading(ConfigTestCase):
         cfg = self.load()
         self.assertTrue(cfg.graph.in_window)
         self.assertFalse(cfg.graph.in_vr)
-        self.assertEqual(cfg.graph.window_min, 180.0)
+        # Eight hours: long enough to hold a night, which is the span
+        # the official app shows and the one worth waking up to.
+        self.assertEqual(cfg.graph.window_min, 480.0)
+        # And a floor of 50, which the graph is never drawn below.
+        self.assertEqual(cfg.graph.axis_low_mgdl, 50.0)
 
     def test_graph_settings_are_read(self):
         cfg = self.load(
