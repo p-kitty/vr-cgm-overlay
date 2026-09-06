@@ -80,6 +80,8 @@ class FaceWindow:
         # to it, and then draws nothing. The reference has to be held
         # here, on the Python side, for as long as it is on screen.
         self._photo: ImageTk.PhotoImage | None = None
+        # What size is currently on screen, so a change can be noticed.
+        self._shown: tuple[int, int] | None = None
 
         self._root = tk.Tk()
         self._root.title("vr-cgm-overlay")
@@ -98,22 +100,29 @@ class FaceWindow:
     # -- presentation -------------------------------------------------------
 
     def set_image(self, image: Image.Image) -> None:
-        """Show a rendered face."""
+        """Show a rendered face, resizing the window if it has to.
+
+        Two things change the size, and neither one announces itself
+        here: `window.scale`, and turning the history sparkline on or
+        off, which gives the face a different height. So the size is
+        measured off the image rather than tracked, and the window is
+        told to forget its geometry whenever it differs -- without that
+        Tk keeps the old size and crops or pads the new picture into it.
+        """
         if self._closed:
             return
-        self._photo = ImageTk.PhotoImage(compose(image, self._scale))
+        shown = compose(image, self._scale)
+        if shown.size != self._shown:
+            self._shown = shown.size
+            self._root.geometry("")
+        self._photo = ImageTk.PhotoImage(shown)
         self._label.configure(image=self._photo)
 
     def set_scale(self, scale: float) -> None:
-        """Resize, effective from the next image.
-
-        The window is told to forget its size so it takes the new
-        image's; without that it keeps the old one and crops or pads.
-        """
-        if scale == self._scale or self._closed:
+        """Resize, effective from the next image."""
+        if self._closed:
             return
         self._scale = scale
-        self._root.geometry("")
 
     def set_always_on_top(self, on_top: bool) -> None:
         if self._closed:
