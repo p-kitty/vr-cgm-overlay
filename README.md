@@ -20,9 +20,10 @@ the face composites over any SteamVR title.
 ┌────────────────────▼──────────────────────────────────┐
 │  vr-cgm-overlay (resident, single process)            │
 │                                                       │
-│    cgm.core     ──→ cgm.face     ──→ cgm.vr           │
-│    auth + fetch     PIL drawing      pyopenvr         │
-│                                                       │
+│                                  ┌─→ cgm.vr           │
+│    cgm.core     ──→ cgm.face  ───┤   pyopenvr         │
+│    auth + fetch     PIL drawing  └─→ cgm.desk         │
+│                                      tkinter          │
 │    cgm.main: 60s fetch loop / 1s draw loop            │
 └────────────────────┬──────────────────────────────────┘
                      │ SetOverlayTransformTrackedDeviceRelative
@@ -30,6 +31,10 @@ the face composites over any SteamVR title.
            │ SteamVR Compositor │ → wrist-tracked, over every game
            └────────────────────┘
 ```
+
+The same face has two places to go. `cgm.vr` puts it on a controller;
+`cgm.desk` (`--window`) puts it in a desktop window. Neither imports the
+other, and everything above them is shared.
 
 ### Decisions worth knowing
 
@@ -112,8 +117,9 @@ cp config.example.toml config.toml
 copied out of it: editing a file under `src/` changes what runs, with no
 reinstall. `[vr]` adds the SteamVR bindings, which only the overlay
 itself loads: `pip install -e .` on its own is enough for `--dry-run`,
-the tests and every script under `tools/`, since the two that reach into
-the overlay stub the bindings out rather than needing them.
+`--window`, the tests and every script under `tools/`, since the two
+that reach into the overlay stub the bindings out rather than needing
+them.
 
 Every later command in this file assumes that environment is active.
 
@@ -134,6 +140,44 @@ side is done. Then leave it running.
 ```bash
 vr-cgm-overlay
 ```
+
+## Without a headset
+
+The same watch face runs in a desktop window.
+
+```bash
+vr-cgm-overlay --window
+```
+
+No SteamVR, no `openvr`, no headset — a plain `pip install -e .` is
+enough. It is the same fetching and the same face, so everything in
+**Tuning** below that is not about placement applies here too: the
+colour bands, the units, the trend arrow, the stale greying, and
+`config.toml` being re-read while it runs.
+
+Useful for a second monitor while you are doing something other than
+playing, and useful for anything that takes hours to show itself — a
+long session's fetch schedule, a token expiring and being renewed, or
+whether the trend window is the right length against a real day. None of
+those are VR questions, and none of them are worth wearing a headset for
+as long as they take to answer.
+
+```toml
+[window]
+scale = 1.0
+always_on_top = true
+```
+
+`scale` is a multiple of the face's own 512x256, between `0.25` and
+`4.0`; both it and `always_on_top` change while the window is up. The
+placement keys mean nothing here — there is no controller — so editing
+`hand` says nothing rather than asking you to restart for it.
+
+`alert_on_low` does nothing here yet. It buzzes a controller, and there
+is no controller; an audible alert to take its place is planned but not
+built. **The face itself is the real alert** — in a window as in VR —
+so a low is red and marked on the bottom edge whether or not anything
+makes a noise.
 
 ## Tuning
 

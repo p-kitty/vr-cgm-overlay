@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 
 from cgm.core import config as config_mod
+from cgm.core.config import WINDOW_SCALE_MAX, WINDOW_SCALE_MIN
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
@@ -119,6 +120,21 @@ class Loading(ConfigTestCase):
         self.assertEqual(cfg.vr.gaze_fade_deg, 60.0)
         self.assertEqual(cfg.vr.gaze_min_alpha, 0.4)
 
+    def test_the_window_defaults_to_native_size_and_on_top(self):
+        # Native size because the face was laid out at 512x256 and
+        # anything else is resampling it; on top because a readout you
+        # have to go and find is not a readout.
+        cfg = self.load()
+        self.assertEqual(cfg.window.scale, 1.0)
+        self.assertTrue(cfg.window.always_on_top)
+
+    def test_window_settings_are_read(self):
+        cfg = self.load(
+            "\n[window]\nscale = 0.75\nalways_on_top = false\n"
+        )
+        self.assertEqual(cfg.window.scale, 0.75)
+        self.assertFalse(cfg.window.always_on_top)
+
     def test_a_blank_patient_id_means_unset(self):
         # An empty string would be sent as a patient id and 404; absent
         # means "work it out from the connections list".
@@ -219,6 +235,26 @@ class Validation(ConfigTestCase):
         # setting only rejected at that point is rejected at the worst
         # moment.
         self.assertRejected("\n[display]\ngaze_fade = false\ngaze_min_alpha = 0\n")
+
+    def test_the_window_scale_has_both_a_floor_and_a_ceiling(self):
+        for scale in (0.0, 0.1, 8.0):
+            with self.subTest(scale=scale):
+                with self.assertRaises(ValueError) as caught:
+                    self.load(f"\n[window]\nscale = {scale}\n")
+                self.assertIn("window.scale", str(caught.exception))
+
+    def test_the_window_scale_bounds_themselves_are_allowed(self):
+        for scale in (WINDOW_SCALE_MIN, WINDOW_SCALE_MAX):
+            with self.subTest(scale=scale):
+                cfg = self.load(f"\n[window]\nscale = {scale}\n")
+                self.assertEqual(cfg.window.scale, scale)
+
+    def test_the_window_scale_is_checked_without_the_window(self):
+        # Same rule as orbit and gaze: a setting only rejected by the
+        # frontend that happens to read it is rejected at the worst
+        # possible moment. This is the config, not the window.
+        with self.assertRaises(ValueError):
+            self.load(f"\n[window]\nscale = 99\n")
 
     def test_thresholds_must_be_ordered(self):
         message = self.assertRejected(

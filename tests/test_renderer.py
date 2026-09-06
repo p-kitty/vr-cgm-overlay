@@ -24,11 +24,15 @@ from datetime import datetime, timedelta, timezone
 from cgm.core.librelink import GlucosePoint, Reading
 
 from cgm.face.renderer import (
+    HEIGHT,
     STATUS_MARKERS,
     TREND_ANGLES,
+    WIDTH,
     Theme,
     TrendTuning,
     WatchFaceRenderer,
+    face_image,
+    unit_label,
 )
 
 THEME = Theme()
@@ -235,6 +239,56 @@ class TrendSource(unittest.TestCase):
         # was never drawn.
         self.assertIsNone(TrendTuning(local=False).slope_for(reading(slope=1.5)))
         self.assertAlmostEqual(TREND.slope_for(reading(slope=1.5)), 1.5, places=6)
+
+
+class UnitLabel(unittest.TestCase):
+    """One spelling of the unit, for the face, the title bar and --dry-run."""
+
+    def test_the_two_units(self):
+        self.assertEqual(unit_label("mmol"), "mmol/L")
+        self.assertEqual(unit_label("mgdl"), "mg/dL")
+
+    def test_anything_else_reads_as_mgdl(self):
+        # `_validate` rejects a third unit at startup, so this is the
+        # behaviour for a caller that skipped it rather than a supported
+        # setting. mg/dL is the safer guess: the range checks are in it.
+        self.assertEqual(unit_label(""), "mg/dL")
+
+
+class FaceForState(unittest.TestCase):
+    """What both frontends draw for whatever the poller is holding."""
+
+    def setUp(self):
+        self.renderer = WatchFaceRenderer()
+
+    def face(self, reading_or_none, error):
+        return face_image(
+            self.renderer, reading_or_none, error, stale_after_min=10.0
+        )
+
+    def test_a_reading_is_drawn(self):
+        image = self.face(reading(), None)
+        self.assertEqual(image.size, (WIDTH, HEIGHT))
+
+    def test_a_reading_survives_a_failed_fetch(self):
+        # The last value stays up while the network is down. It keeps
+        # ageing and greys out, which is honest; replacing it with an
+        # error card would throw away the only number there is.
+        with_error = self.face(reading(), "NO CONNECTION")
+        without = self.face(reading(), None)
+        self.assertEqual(with_error.tobytes(), without.tobytes())
+
+    def test_no_reading_shows_the_error(self):
+        expected = self.renderer.render_message(
+            "NO CONNECTION", detail="no reading yet"
+        )
+        self.assertEqual(self.face(None, "NO CONNECTION").tobytes(), expected.tobytes())
+
+    def test_no_reading_and_no_error_is_still_waiting(self):
+        # The gap between starting up and the first fetch landing. It is
+        # not an error, and must not be drawn as one.
+        expected = self.renderer.render_message("WAITING", detail="no reading yet")
+        self.assertEqual(self.face(None, None).tobytes(), expected.tobytes())
 
 
 class FormatAge(unittest.TestCase):

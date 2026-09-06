@@ -6,10 +6,12 @@ it).
 
 The Python side is split into sections so a frontend can be handed the
 part that concerns it: everything under `Vr` needs a headset, everything
-else does not. **The file format is deliberately not split to match.**
-`hand`, `offset` and the rest of the VR keys stay in `[display]` where
-they have always been, because moving them would break every existing
-config.toml to gain nothing a user can see.
+under `Window` needs a screen, everything else needs neither. **The file
+format is only partly split to match.** `hand`, `offset` and the rest of
+the VR keys stay in `[display]` where they have always been, because
+moving them would break every existing config.toml to gain nothing a
+user can see. `[window]` is a section of its own because it is new, so
+there is no existing file for it to break.
 """
 
 from __future__ import annotations
@@ -28,6 +30,12 @@ log = logging.getLogger(__name__)
 # is the failure this whole thing exists to avoid, so the floor is a rule
 # rather than a default: it has to survive someone turning the dial down.
 GAZE_ALPHA_FLOOR = 0.1
+
+# What `window.scale` may be set to. The watch face is rendered once at
+# 512x256 and resampled to the window, so scaling down loses detail and
+# scaling up cannot invent it.
+WINDOW_SCALE_MIN = 0.25
+WINDOW_SCALE_MAX = 4.0
 
 
 @dataclass
@@ -75,6 +83,18 @@ class Vr:
 
 
 @dataclass
+class Window:
+    """[window]. How the desktop frontend's window is sized and stacked.
+
+    Read only by `--window`; the overlay ignores this section, the same
+    way a window ignores every key under `Vr`.
+    """
+
+    scale: float = 1.0
+    always_on_top: bool = True
+
+
+@dataclass
 class Thresholds:
     """[thresholds]. Always mg/dL, whatever the display unit is."""
 
@@ -105,6 +125,7 @@ class Config:
     account: Account = field(default_factory=Account)
     display: Display = field(default_factory=Display)
     vr: Vr = field(default_factory=Vr)
+    window: Window = field(default_factory=Window)
     thresholds: Thresholds = field(default_factory=Thresholds)
     trend: Trend = field(default_factory=Trend)
     polling: Polling = field(default_factory=Polling)
@@ -120,6 +141,7 @@ def load(path: Path) -> Config:
 
     account = raw.get("account", {})
     display = raw.get("display", {})
+    window = raw.get("window", {})
     thresholds = raw.get("thresholds", {})
     trend = raw.get("trend", {})
     polling = raw.get("polling", {})
@@ -156,6 +178,10 @@ def load(path: Path) -> Config:
     vr.gaze_full_deg = float(display.get("gaze_full_deg", vr.gaze_full_deg))
     vr.gaze_fade_deg = float(display.get("gaze_fade_deg", vr.gaze_fade_deg))
     vr.gaze_min_alpha = float(display.get("gaze_min_alpha", vr.gaze_min_alpha))
+
+    win = cfg.window
+    win.scale = float(window.get("scale", win.scale))
+    win.always_on_top = bool(window.get("always_on_top", win.always_on_top))
 
     th = cfg.thresholds
     th.low_mgdl = float(thresholds.get("low_mgdl", th.low_mgdl))
@@ -218,6 +244,19 @@ def _validate(cfg: Config) -> None:
             f"{cfg.vr.gaze_min_alpha}. A face that fades to nothing looks exactly "
             "like the process having died, which is the failure this exists to "
             "avoid, so it always leaves something on screen"
+        )
+
+    # The face is drawn at one fixed size and scaled on the way to the
+    # window, so this is a resampling factor rather than a layout knob.
+    # Below the floor the digits stop being glanceable, which is the
+    # entire point of them; above the ceiling it is upscaling a 512px
+    # image and going soft. Both are checked even without --window, so a
+    # typo is caught at startup rather than by the frontend that happens
+    # to read it.
+    if not (WINDOW_SCALE_MIN <= cfg.window.scale <= WINDOW_SCALE_MAX):
+        raise ValueError(
+            f"window.scale must be between {WINDOW_SCALE_MIN} and "
+            f"{WINDOW_SCALE_MAX}: {cfg.window.scale}"
         )
 
     th = cfg.thresholds
