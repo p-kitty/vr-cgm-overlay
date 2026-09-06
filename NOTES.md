@@ -19,9 +19,6 @@ Nothing has exercised these yet. Each says how to check it.
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and
   the face should come back.
-- **Stale greying.** Set `display.stale_after_min = 1.0` and watch the
-  value and the age readout go grey within a couple of minutes. Put it
-  back to `10.0`. No headset needed: `--window` shows the same face.
 - **A long session.** Leave it running for an hour or two, then check
   the log still shows `fetched:` about once a minute, with no `fetch
   failed` streak stretching the interval out. `--window` counts — this
