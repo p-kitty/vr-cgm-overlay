@@ -99,6 +99,26 @@ class Loading(ConfigTestCase):
         self.assertEqual(cfg.trend_window_min, 90.0)
         self.assertEqual(cfg.trend_fast_mgdl_min, 1.5)
 
+    def test_gaze_fade_defaults_to_off(self):
+        # A glucose readout is not a desktop window, so the fade is opt
+        # in; its settings still have to have values, since they are read
+        # whether or not it is on.
+        cfg = self.load()
+        self.assertFalse(cfg.gaze_fade)
+        self.assertEqual(cfg.gaze_full_deg, 20.0)
+        self.assertEqual(cfg.gaze_fade_deg, 45.0)
+        self.assertEqual(cfg.gaze_min_alpha, 0.25)
+
+    def test_gaze_settings_are_read(self):
+        cfg = self.load(
+            "\n[display]\ngaze_fade = true\ngaze_full_deg = 15\n"
+            "gaze_fade_deg = 60\ngaze_min_alpha = 0.4\n"
+        )
+        self.assertTrue(cfg.gaze_fade)
+        self.assertEqual(cfg.gaze_full_deg, 15.0)
+        self.assertEqual(cfg.gaze_fade_deg, 60.0)
+        self.assertEqual(cfg.gaze_min_alpha, 0.4)
+
     def test_a_blank_patient_id_means_unset(self):
         # An empty string would be sent as a patient id and 404; absent
         # means "work it out from the connections list".
@@ -164,6 +184,41 @@ class Validation(ConfigTestCase):
         # Orbit is turned on from inside the headset. A radius that is
         # only rejected at that point is rejected at the worst moment.
         self.assertRejected("\n[display]\norbit = false\norbit_radius_m = 0\n")
+
+    def test_gaze_angles_must_be_ordered(self):
+        # Equal bounds would step from full to the floor at one angle
+        # rather than fade across a span, which is the one thing a fade
+        # must not do: a face that blinks reads as a fault.
+        message = self.assertRejected(
+            "\n[display]\ngaze_full_deg = 45\ngaze_fade_deg = 45\n"
+        )
+        self.assertIn("full < fade", message)
+        self.assertRejected("\n[display]\ngaze_full_deg = 60\ngaze_fade_deg = 30\n")
+        self.assertRejected("\n[display]\ngaze_full_deg = -5\n")
+        self.assertRejected("\n[display]\ngaze_fade_deg = 181\n")
+
+    def test_the_gaze_floor_may_not_reach_zero(self):
+        # This is the condition NOTES.md set for the fade existing at
+        # all. A face that faded to nothing would look exactly like the
+        # process having died, which is the failure the whole thing
+        # exists to avoid, so it is a rule and not just a default.
+        message = self.assertRejected("\n[display]\ngaze_min_alpha = 0\n")
+        self.assertIn(str(config_mod.GAZE_ALPHA_FLOOR), message)
+        self.assertRejected("\n[display]\ngaze_min_alpha = 0.05\n")
+        self.assertRejected("\n[display]\ngaze_min_alpha = -1\n")
+        self.assertRejected("\n[display]\ngaze_min_alpha = 1.5\n")
+
+    def test_the_gaze_floor_may_be_fully_opaque(self):
+        # A floor of 1 is a fade that does nothing. Pointless rather than
+        # wrong, and rejecting it would only be a trap while tuning.
+        cfg = self.load("\n[display]\ngaze_min_alpha = 1.0\n")
+        self.assertEqual(cfg.gaze_min_alpha, 1.0)
+
+    def test_gaze_is_checked_even_when_it_is_switched_off(self):
+        # Like orbit, the fade is turned on from inside the headset. A
+        # setting only rejected at that point is rejected at the worst
+        # moment.
+        self.assertRejected("\n[display]\ngaze_fade = false\ngaze_min_alpha = 0\n")
 
     def test_thresholds_must_be_ordered(self):
         message = self.assertRejected(

@@ -28,6 +28,7 @@ never what happened.
 - Code comments and docstrings
 - Identifiers, log messages, and user-facing strings
 - Documentation, including this file and `README.md`
+- `config.toml`, even though it is never committed
 
 The only exception is text quoted from an external source that would lose
 meaning in translation.
@@ -88,6 +89,7 @@ access:
 python -m unittest discover -s tests -t .  # the logic that runs headless
 python tools/preview.py                    # every watch face state, to a PNG
 python tools/check_orbit.py                # the orbit placement geometry
+python tools/check_gaze.py                 # the gaze fade and the rules on it
 python tools/check_palette.py              # the palette under colour blindness
 python -m compileall -q src tools tests
 ```
@@ -120,6 +122,12 @@ untested instead.
   account being rate limited or blocked.
 - **Never commit `config.toml`.** It holds the account password. It is in
   `.gitignore`; keep it there.
+- **But do edit it.** Untracked is not the same as untouchable. When a
+  change adds a setting, put it in `config.toml` as well as in
+  `config.example.toml` — a setting the user has to paste in by hand is
+  not delivered, it is homework. Load the file once afterwards to prove
+  it still parses, and say what was added. Leave values the user has
+  already tuned alone unless the change is about those values.
 - **Target Python 3.14, and do not lower the floors in
   `requirements.txt`.** Each one is the first release of that package
   that runs on 3.14; below them the install succeeds and the import

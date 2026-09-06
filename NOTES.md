@@ -107,24 +107,6 @@ The guide line is 40cm long and will always splay off the arm near the
 elbow; it is meant to be judged where it passes the markers.
 
 
-## Gaze fade would have to be a mode
-
-Desktop+ fades an overlay out when it is not being looked at, which
-suits something wanted glanceable but not permanently in view. The same
-trick fits here, and is cheap: orbit mode already works out where the
-head is relative to the face, and `setOverlayAlpha` is already called.
-
-It is not in. If it goes in it goes in switchable and off by default,
-because a glucose readout is not a desktop window, and two things would
-have to hold:
-
-- **A floor on the alpha, never zero.** Something that vanished outright
-  would look exactly like the process having died, which is the failure
-  this whole thing exists to avoid.
-- **No fading while low.** Colour is the alert. Dimming it at the moment
-  it matters most inverts the priority.
-
-
 ## The low buzz is silent through Virtual Desktop
 
 `triggerHapticPulse` neither buzzes nor raises with a Quest 3 running

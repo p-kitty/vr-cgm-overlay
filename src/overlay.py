@@ -10,6 +10,10 @@ Placement is either fixed in controller space or, in orbit mode, computed
 each pass so the face rides around the forearm towards the head. Both are
 device-relative transforms, so the compositor still applies the live
 controller pose at frame rate either way.
+
+Gaze mode, when it is on, dims the face while it is away from the centre
+of view. It never dims to nothing, and never while a low is showing: see
+set_alert.
 """
 
 from __future__ import annotations
@@ -43,6 +47,14 @@ DISPLAY_HZ_RANGE = (30.0, 360.0)
 # face twitching when the head is nearly in line with the arm and the target
 # direction is ill-conditioned.
 ORBIT_SMOOTH_SEC = 0.12
+
+# The same easing for the gaze fade, and slower on purpose. The orbit has
+# to keep up with a head turn or the face is left facing the wrong way,
+# but brightness moving at that speed reads as a flicker every time the
+# eye crosses the face. A third of a second is slow enough to be a fade
+# rather than a blink, and short enough that the face is up by the time a
+# glance has settled on it.
+GAZE_SMOOTH_SEC = 0.35
 
 _IDENTITY = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 
@@ -146,6 +158,63 @@ def _billboard(
     return [[x_axis[r], y_axis[r], z_axis[r]] for r in range(3)]
 
 
+def _into_controller(
+    rotation, vector: list[float] | tuple[float, float, float]
+) -> tuple[float, float, float]:
+    """Rotate a world space vector into the frame `rotation` describes.
+
+    The rotation block of a tracked pose is orthonormal, so its transpose
+    inverts it. This applies that transpose without building it.
+    """
+    return tuple(
+        sum(rotation[row][col] * vector[row] for row in range(3)) for col in range(3)
+    )
+
+
+def _gaze_alpha(
+    face: tuple[float, float, float],
+    head: tuple[float, float, float],
+    forward: tuple[float, float, float],
+    full_deg: float,
+    fade_deg: float,
+    min_alpha: float,
+) -> float:
+    """How much of the configured opacity the face has earned right now.
+
+    All three vectors are in controller space, and `forward` is the unit
+    direction the headset is looking. The angle between that and the
+    direction from the head to the face is how far off the centre of view
+    the face is sitting, and that angle, not where the head happens to
+    be, is what the fade follows. Holding the wrist up beside your eye
+    while looking elsewhere dims it, the same as looking away across the
+    room does.
+
+    Full opacity within `full_deg` of the centre of view, `min_alpha`
+    past `fade_deg`, and a straight line between the two. The result
+    never drops below `min_alpha`, which config.py refuses to let reach
+    zero: a face that vanished outright would look exactly like the
+    process having died, which is the failure this exists to avoid.
+    """
+    to_face = [face[i] - head[i] for i in range(3)]
+    length = math.sqrt(sum(c * c for c in to_face))
+    if length < 1e-6:
+        # The face is at the eye. There is no direction to it to measure,
+        # and it fills the view regardless, so count it as looked at.
+        return 1.0
+
+    cosine = sum(to_face[i] * forward[i] for i in range(3)) / length
+    # Rounding can leave a dot product a hair outside [-1, 1], where acos
+    # raises rather than saturating.
+    angle = math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+
+    if angle <= full_deg:
+        return 1.0
+    if angle >= fade_deg:
+        return min_alpha
+    travelled = (angle - full_deg) / (fade_deg - full_deg)
+    return 1.0 - travelled * (1.0 - min_alpha)
+
+
 def _make_transform(
     offset: tuple[float, float, float], rotation_deg: tuple[float, float, float]
 ) -> openvr.HmdMatrix34_t:
@@ -246,6 +315,10 @@ class WristOverlay:
         orbit_radius_m: float = 0.06,
         orbit_limit_deg: float = 120.0,
         arm_guide: bool = False,
+        gaze_fade: bool = False,
+        gaze_full_deg: float = 20.0,
+        gaze_fade_deg: float = 45.0,
+        gaze_min_alpha: float = 0.25,
     ) -> None:
         self._hand = hand
         self._offset = offset
@@ -261,11 +334,30 @@ class WristOverlay:
         # When that angle was last worked out, so the easing can be a rate.
         self._orbit_at: float | None = None
 
+        self._gaze = gaze_fade
+        self._gaze_full = gaze_full_deg
+        self._gaze_fade = gaze_fade_deg
+        self._gaze_min = gaze_min_alpha
+        # The fraction of `opacity` currently showing, eased towards what
+        # the gaze angle asks for. 1.0 with the fade off, so the alpha is
+        # then simply the configured one.
+        self._gaze_factor = 1.0
+        # When that fraction was last worked out, so the easing is a rate.
+        self._gaze_at: float | None = None
+        # True while a low is on the face, which pins it at full opacity.
+        # See set_alert.
+        self._alert = False
+        # The configured opacity, before any fade is taken off it.
+        self._opacity = max(0.0, min(1.0, opacity))
+        # What was last handed to the compositor, so a fade that has all
+        # but settled stops sending a call per frame to say so.
+        self._applied_alpha: float | None = None
+
         self._system = _connect()
         self._overlay = openvr.VROverlay()
         self._handle = self._overlay.createOverlay(OVERLAY_KEY, OVERLAY_NAME)
         self._overlay.setOverlayWidthInMeters(self._handle, width_m)
-        self._overlay.setOverlayAlpha(self._handle, opacity)
+        self._apply_alpha()
         self._overlay.showOverlay(self._handle)
 
         # Index we last attached to, kept to detect changes.
@@ -344,8 +436,10 @@ class WristOverlay:
                 names.append(name)
         return "/".join(names) or "unnamed"
 
-    def _head_in_controller_space(self, index: int) -> tuple[float, float, float] | None:
-        """Where the headset is, in the controller's own frame.
+    def _head_in_controller_space(
+        self, index: int
+    ) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:
+        """Where the headset is and which way it looks, in controller space.
 
         None while either pose is missing, which happens for a moment around
         a wake-up. Working in controller space is what lets orbit mode stay a
@@ -353,6 +447,10 @@ class WristOverlay:
         controller pose at frame rate, and only the choice of which side of
         the arm to sit on is left to this loop, where a little lag does not
         show.
+
+        The direction is what gaze mode needs and the orbit does not. The
+        orbit only cares which side of the arm the head is on; a fade has
+        to know whether the face is actually being looked at.
         """
         self._system.getDeviceToAbsoluteTrackingPose(
             openvr.TrackingUniverseStanding, 0.0, self._poses
@@ -365,10 +463,11 @@ class WristOverlay:
         h = head.mDeviceToAbsoluteTracking.m
         c = hand.mDeviceToAbsoluteTracking.m
         delta = [h[row][3] - c[row][3] for row in range(3)]
-        # The rotation block is orthonormal, so its transpose inverts it.
-        return tuple(
-            sum(c[row][col] * delta[row] for row in range(3)) for col in range(3)
-        )
+        # A headset looks down its own -Z, and the rotation block is
+        # orthonormal, so the negated third column is already a unit
+        # vector pointing where the wearer is facing.
+        forward = [-h[row][2] for row in range(3)]
+        return _into_controller(c, delta), _into_controller(c, forward)
 
     def _apply_orbit(self, index: int, head: tuple[float, float, float]) -> None:
         # perf_counter, not monotonic: monotonic is GetTickCount64 on
@@ -391,6 +490,51 @@ class WristOverlay:
         self._overlay.setOverlayTransformTrackedDeviceRelative(
             self._handle, index, transform
         )
+
+    def _face_position(self) -> tuple[float, float, float]:
+        """Where the face is sitting in controller space.
+
+        In orbit mode it rides around the arm, so it is wherever the last
+        update left it; with the orbit off it is the offset itself. Only
+        the gaze fade asks: the transform already knows, but reading a
+        position back out of an HmdMatrix34_t costs the 32 bit rounding
+        for no reason when the angle is right here.
+        """
+        if not self._orbit or self._orbit_angle is None:
+            return self._offset
+        cx, cy, cz = self._offset
+        return (
+            cx + math.sin(self._orbit_angle) * self._orbit_radius,
+            cy + math.cos(self._orbit_angle) * self._orbit_radius,
+            cz,
+        )
+
+    def _apply_gaze(
+        self, head: tuple[float, float, float], forward: tuple[float, float, float]
+    ) -> None:
+        """Ease the alpha towards what the current gaze angle asks for."""
+        # perf_counter for the same reason the orbit uses it: monotonic
+        # steps in 15.6ms on Windows and would quantise the easing.
+        now = time.perf_counter()
+        elapsed = now - (self._gaze_at or now)
+        self._gaze_at = now
+
+        if self._alert:
+            # Pinned, and pinned outright rather than eased there. An
+            # alert that arrived by fading up is an alert arriving late.
+            self._gaze_factor = 1.0
+        else:
+            target = _gaze_alpha(
+                self._face_position(),
+                head,
+                forward,
+                self._gaze_full,
+                self._gaze_fade,
+                self._gaze_min,
+            )
+            eased = 1.0 - math.exp(-max(0.0, elapsed) / GAZE_SMOOTH_SEC)
+            self._gaze_factor += (target - self._gaze_factor) * eased
+        self._apply_alpha()
 
     def _apply_guide(self, index: int, head: tuple[float, float, float]) -> None:
         """Draw the arm the placement is currently modelling.
@@ -420,13 +564,14 @@ class WristOverlay:
         self._guide.update(index, axis, markers)
 
     def update_attachment(self) -> bool:
-        """Keep the controller attachment, and in orbit mode the pose, current.
+        """Keep the attachment, and the computed pose and alpha, current.
 
         True while a controller is present. False means there is nothing to
         attach to (powered off, for instance), which the caller can surface.
 
         Call this on every pass of the loop, not only when redrawing: in
-        orbit mode it is what turns the face towards the head.
+        orbit mode it is what turns the face towards the head, and with
+        the gaze fade on it is what fades it.
         """
         index = self._controller_index()
         if index is None:
@@ -435,6 +580,12 @@ class WristOverlay:
                 self._attached_index = None
                 self._orbit_angle = None
                 self._orbit_at = None
+                self._gaze_at = None
+                # Bring it back at full when the controller returns. A
+                # face that reappeared already dim is one more thing to
+                # have to second guess.
+                self._gaze_factor = 1.0
+                self._apply_alpha()
             return False
 
         if index != self._attached_index:
@@ -454,11 +605,16 @@ class WristOverlay:
                 self._device_name(index),
             )
 
-        if self._orbit or self._guide is not None:
-            head = self._head_in_controller_space(index)
-            if head is not None:  # else keep what is on screen until it returns
+        if self._orbit or self._gaze or self._guide is not None:
+            pose = self._head_in_controller_space(index)
+            if pose is not None:  # else keep what is on screen until it returns
+                head, forward = pose
                 if self._orbit:
                     self._apply_orbit(index, head)
+                # After the orbit: that is what moves the face, and the
+                # gaze angle is measured to wherever it left it.
+                if self._gaze:
+                    self._apply_gaze(head, forward)
                 if self._guide is not None:
                     self._apply_guide(index, head)
         return True
@@ -508,6 +664,47 @@ class WristOverlay:
             radius_m,
             limit_deg,
         )
+
+    def set_gaze(
+        self, enabled: bool, full_deg: float, fade_deg: float, min_alpha: float
+    ) -> None:
+        """Change the gaze fade, applied on the next update_attachment."""
+        current = (self._gaze, self._gaze_full, self._gaze_fade, self._gaze_min)
+        if current == (enabled, full_deg, fade_deg, min_alpha):
+            return
+        self._gaze = enabled
+        self._gaze_full = full_deg
+        self._gaze_fade = fade_deg
+        self._gaze_min = min_alpha
+        self._gaze_at = None
+        if not enabled:
+            # Nothing else will move it back, and being left dim by
+            # switching the fade off would look like a bug.
+            self._gaze_factor = 1.0
+            self._apply_alpha()
+        log.info(
+            "gaze fade: %s (full within %.0f deg, floor %.2f past %.0f deg)",
+            "on" if enabled else "off",
+            full_deg,
+            min_alpha,
+            fade_deg,
+        )
+
+    def set_alert(self, active: bool) -> None:
+        """Hold the face at full opacity, whatever the gaze fade wants.
+
+        Colour is how a low is signalled, so dimming the face at the
+        moment it matters most inverts the priority. The draw loop calls
+        this with the reading's own verdict.
+
+        A no-op with the fade off, where the face is at full anyway.
+        """
+        if active == self._alert:
+            return
+        self._alert = active
+        if active:
+            self._gaze_factor = 1.0
+            self._apply_alpha()
 
     def set_arm_guide(self, enabled: bool) -> None:
         """Show or hide the tuning guides, creating them the first time."""
@@ -567,8 +764,23 @@ class WristOverlay:
             4,  # RGBA
         )
 
+    def _apply_alpha(self) -> None:
+        """Push the configured opacity, less whatever the fade is taking.
+
+        Skips a call that would not change what is on screen. The easing
+        approaches its target rather than arriving at it, so without this
+        a settled fade would still be sending one call per frame to say
+        the same thing.
+        """
+        alpha = self._opacity * self._gaze_factor
+        if self._applied_alpha is not None and abs(alpha - self._applied_alpha) < 1e-3:
+            return
+        self._applied_alpha = alpha
+        self._overlay.setOverlayAlpha(self._handle, alpha)
+
     def set_opacity(self, opacity: float) -> None:
-        self._overlay.setOverlayAlpha(self._handle, max(0.0, min(1.0, opacity)))
+        self._opacity = max(0.0, min(1.0, opacity))
+        self._apply_alpha()
 
     # -- haptics ------------------------------------------------------------
 

@@ -174,6 +174,7 @@ Point the controller away from you, like a torch. Then:
 | Buried in your arm, or clipping through it | raise `offset` Y: `0.02` → `0.04`, or turn on orbit mode |
 | Digits run across your arm, not along it | put `90` or `-90` into `rotation_deg` Z |
 | Upside down | `flip_vertical = true` |
+| In the corner of your eye all session, not just when you look | `gaze_fade = true` |
 | Too big, or too small to read | `width_m`, around `0.14` |
 
 Controller origins differ between Index, Touch and Vive, so assume the
@@ -249,6 +250,48 @@ Judge the line by where it crosses the dots, not by its far end. It runs
 
 Then set `arm_guide = false`. The guides are a tuning aid, not part of
 the display.
+
+### Gaze mode
+
+The face is on your wrist, which means it is in view whenever your hand
+is, including all the time you were not asking it anything. Gaze mode
+fades it down while you are not looking at it and back up when you are,
+so the number stays glanceable without also being lit in the corner of
+your eye for a whole session.
+
+```toml
+gaze_fade = true
+gaze_full_deg = 20.0
+gaze_fade_deg = 45.0
+gaze_min_alpha = 0.25
+```
+
+What it measures is the angle between where you are **looking** and
+where the face is, not where your hand is. Holding your wrist up beside
+your eye while looking somewhere else dims it, the same as dropping your
+arm does. Within `gaze_full_deg` of the centre of your view the face is
+at the full `opacity`; past `gaze_fade_deg` it is at `gaze_min_alpha`;
+between the two it slides. The fade itself takes about a third of a
+second in either direction, slow enough not to flicker as your eye
+crosses it and quick enough to be up before a glance has settled.
+
+Two things it will not do, on purpose:
+
+- **It never fades to nothing.** `gaze_min_alpha` is refused below
+  `0.1`. Something that vanished outright would look exactly like the
+  process having died, which is the failure this whole thing exists to
+  avoid, so there is always a ghost of it left.
+- **It never fades a low.** While the reading is under `low_mgdl` the
+  face is held at full opacity whatever you are looking at. Colour is
+  how a low is signalled, and dimming it at the moment it matters most
+  would invert the priority.
+
+It is off by default. A glucose readout is not a desktop window, and
+being able to see it without looking for it is most of the point — turn
+this on only if you find it is one thing too many in view.
+
+`tools/check_gaze.py` asserts both of those rules, along with the
+geometry, without needing a headset.
 
 `[thresholds]` sets the colour bands. All four are mg/dL and are used
 even in mmol/L mode, so changing the display unit cannot quietly change
