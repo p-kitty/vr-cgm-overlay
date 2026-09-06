@@ -173,9 +173,11 @@ always_on_top = true
 placement keys mean nothing here — there is no controller — so editing
 `hand` says nothing rather than asking you to restart for it.
 
-The low alert has no controller to buzz, so `alert_on_low` rings the
-system bell instead: once, when a low starts, on the same rule as the
-buzz. As in VR, **the face itself is the real alert.**
+`alert_on_low` does nothing here yet. It buzzes a controller, and there
+is no controller; an audible alert to take its place is planned but not
+built. **The face itself is the real alert** — in a window as in VR —
+so a low is red and marked on the bottom edge whether or not anything
+makes a noise.
 
 ## Tuning
 

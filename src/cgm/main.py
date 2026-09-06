@@ -337,6 +337,15 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
     Reloads work the way they do in the overlay -- and `window.scale`
     and `window.always_on_top` reload too, so this is also where the
     watcher gets exercised without a headset.
+
+    `alert_on_low` does nothing here. The overlay answers it by buzzing
+    a controller and there is none to buzz, and the sound that would
+    take its place is the audible-alert issue (#4), which asks for one
+    low-transition object in `cgm.core` feeding both frontends. Copying
+    the edge test into this loop to get a beep sooner would leave two of
+    them for that work to merge back together, so the face carries the
+    low on its own until then -- which is the standing position anyway:
+    colour is the alert, everything else is a supplement.
     """
     # tkinter is a stdlib module some builds of Python leave out, and
     # PIL.ImageTk needs it in turn. Importing it lazily keeps --dry-run
@@ -354,7 +363,6 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
     renderer = build_renderer(cfg)
     poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
-    was_low = False
 
     with Fetcher(poller), FaceWindow(
         scale=cfg.window.scale, always_on_top=cfg.window.always_on_top
@@ -362,7 +370,7 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
         win.set_image(renderer.render_message("CONNECTING"))
 
         def tick() -> None:
-            nonlocal cfg, renderer, was_low
+            nonlocal cfg, renderer
 
             edited = watcher.poll()
             if edited is not None:
@@ -392,16 +400,6 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
                 )
             )
             win.set_title(_window_title(reading, poller.error, cfg.display.unit))
-
-            is_low = (
-                reading is not None and reading.value_mgdl < cfg.thresholds.low_mgdl
-            )
-            # Once, on the way in -- the same rule as the controller
-            # buzz. There is no gaze fade here to hold off, because a
-            # window does not dim itself.
-            if cfg.polling.alert_on_low and is_low and not was_low:
-                win.pulse()
-            was_low = is_low
 
         win.run(tick, interval_ms=int(DRAW_INTERVAL_SEC * 1000))
 

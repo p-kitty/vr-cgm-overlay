@@ -125,16 +125,12 @@ class FaceWindow:
             return
         self._root.title(text)
 
-    def pulse(self) -> None:
-        """The window's answer to the controller buzz: one system beep.
-
-        Same contract as the overlay's `pulse` -- once, on the
-        transition into a low, never repeating while it lasts -- because
-        an alert that keeps going is one that gets muted.
-        """
-        if self._closed:
-            return
-        self._root.bell()
+    # No `pulse` here, deliberately. The overlay has one because it has a
+    # controller to buzz; the equivalent for a window is a sound, and the
+    # audible alert is its own issue (#4). What that issue asks for is a
+    # shared low-transition object in `cgm.core` driving both frontends,
+    # rather than each of them growing its own copy of the same edge
+    # test -- so adding a beep here would be the thing it exists to undo.
 
     # -- lifecycle ----------------------------------------------------------
 

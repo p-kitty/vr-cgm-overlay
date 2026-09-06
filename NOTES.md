@@ -30,13 +30,6 @@ Nothing has exercised these yet. Each says how to check it.
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
   days is the cheap way to be there when it does.
-- **The window bell as a low alert.** `alert_on_low` rings the system
-  bell in `--window`, and the code path is confirmed: with a fake
-  threshold `pulse()` is reached exactly once, on the transition in.
-  Whether it is *audible* is the machine's sound scheme, not this —
-  Windows plays nothing for the default beep on some themes. Same
-  standing as the haptics below: colour is the alert, this is a
-  supplement.
 - **The fitted trend against a real day.** `graphData` itself is now
   confirmed: a dry run against the live API returned 48 points over 11.9
   hours at a median gap of 15.05 minutes, which is what
