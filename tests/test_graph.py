@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, GlucosePoint, Reading
 
 from cgm.face.graph import (
+    AXIS_FLOOR_MGDL,
     AXIS_STEP_MGDL,
     HEAD_RADIUS,
     MAX_GAP_MIN,
@@ -131,6 +132,13 @@ class Axis(unittest.TestCase):
         # Readings under it are clamped onto it rather than lowering it.
         # The digits above say how low a low actually went.
         self.assertEqual(axis_top(series((0, 42)), TUNING), TUNING.axis_high_mgdl)
+
+    def test_the_floor_is_not_settable(self):
+        # It is a constant on purpose: every graph of this starts in the
+        # same place, so two of them are comparable and the eye learns
+        # where the bottom is once.
+        self.assertEqual(AXIS_FLOOR_MGDL, 50.0)
+        self.assertFalse(hasattr(TUNING, "axis_low_mgdl"))
 
 
 class Formatting(unittest.TestCase):

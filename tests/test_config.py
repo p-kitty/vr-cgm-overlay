@@ -17,6 +17,7 @@ from pathlib import Path
 from cgm.core import config as config_mod
 from cgm.core.config import WINDOW_SCALE_MAX, WINDOW_SCALE_MIN
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
+from cgm.face.graph import AXIS_FLOOR_MGDL
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
 
@@ -147,19 +148,25 @@ class Loading(ConfigTestCase):
         # Eight hours: long enough to hold a night, which is the span
         # the official app shows and the one worth waking up to.
         self.assertEqual(cfg.graph.window_min, 480.0)
-        # And a floor of 50, which the graph is never drawn below.
-        self.assertEqual(cfg.graph.axis_low_mgdl, 50.0)
+        self.assertEqual(cfg.graph.axis_high_mgdl, 300.0)
 
     def test_graph_settings_are_read(self):
         cfg = self.load(
             "\n[graph]\nin_window = false\nin_vr = true\nwindow_min = 240\n"
-            "axis_low_mgdl = 50\naxis_high_mgdl = 280\n"
+            "axis_high_mgdl = 280\n"
         )
         self.assertFalse(cfg.graph.in_window)
         self.assertTrue(cfg.graph.in_vr)
         self.assertEqual(cfg.graph.window_min, 240.0)
-        self.assertEqual(cfg.graph.axis_low_mgdl, 50.0)
         self.assertEqual(cfg.graph.axis_high_mgdl, 280.0)
+
+    def test_the_bottom_of_the_axis_is_not_a_setting(self):
+        # It used to be. Removing it has to fail loudly rather than
+        # quietly ignore the line somebody already had in their file --
+        # which is exactly what _check_keys is for.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[graph]\naxis_low_mgdl = 40\n")
+        self.assertIn("axis_low_mgdl", str(caught.exception))
 
     def test_a_blank_patient_id_means_unset(self):
         # An empty string would be sent as a patient id and 404; absent
@@ -294,13 +301,6 @@ class Validation(ConfigTestCase):
         # would simply never show it.
         self.assertRejected("\n[thresholds]\nlow_mgdl = 180\nhigh_mgdl = 180\n")
 
-    def test_the_graph_axis_must_be_the_right_way_up(self):
-        message = self.assertRejected(
-            "\n[graph]\naxis_low_mgdl = 300\naxis_high_mgdl = 40\n"
-        )
-        self.assertIn("axis_low_mgdl", message)
-        self.assertRejected("\n[graph]\naxis_low_mgdl = 40\naxis_high_mgdl = 40\n")
-
     def test_the_graph_axis_must_contain_the_target_range(self):
         # The band showing the range is what lets the trace be read
         # without an axis drawn next to it. An axis that clips the band
@@ -308,13 +308,27 @@ class Validation(ConfigTestCase):
         # something quite different.
         message = self.assertRejected("\n[graph]\naxis_high_mgdl = 150\n")
         self.assertIn("target range", message)
-        self.assertRejected("\n[graph]\naxis_low_mgdl = 100\n")
+        # An axis top under the floor is the same failure, further gone.
+        self.assertRejected("\n[graph]\naxis_high_mgdl = 40\n")
+
+    def test_a_low_threshold_under_the_graph_floor_is_rejected(self):
+        # The floor does not move, so a low_mgdl below it would put the
+        # band's own edge off the bottom of the chart. The message has
+        # to send the reader to the threshold, since the axis is not
+        # theirs to lower.
+        message = self.assertRejected("\n[thresholds]\nlow_mgdl = 45\n")
+        self.assertIn(f"{AXIS_FLOOR_MGDL:.0f}", message)
+        self.assertIn("low_mgdl", message)
 
     def test_the_thresholds_themselves_are_a_legal_axis(self):
-        # Exactly containing the range is allowed: the band then fills
-        # the strip, which is unusual but not contradictory.
-        cfg = self.load("\n[graph]\naxis_low_mgdl = 70\naxis_high_mgdl = 180\n")
-        self.assertEqual(cfg.graph.axis_low_mgdl, 70.0)
+        # An axis stopping exactly at high_mgdl is allowed: the band
+        # then fills the plot, which is unusual but not contradictory.
+        cfg = self.load("\n[graph]\naxis_high_mgdl = 180\n")
+        self.assertEqual(cfg.graph.axis_high_mgdl, 180.0)
+
+    def test_the_floor_itself_is_a_legal_low_threshold(self):
+        cfg = self.load(f"\n[thresholds]\nlow_mgdl = {AXIS_FLOOR_MGDL:.0f}\n")
+        self.assertEqual(cfg.thresholds.low_mgdl, AXIS_FLOOR_MGDL)
 
     def test_the_graph_window_must_hold_two_points(self):
         # Same rule the trend window has, for the same reason and with a
