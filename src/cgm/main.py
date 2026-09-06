@@ -162,8 +162,11 @@ def apply_config(
 
 def run(cfg: config_mod.Config, config_path: Path) -> int:
     # openvr is only needed for the VR path. Importing it lazily lets
-    # --dry-run work on a machine without SteamVR installed.
-    from overlay import WristOverlay
+    # --dry-run work on a machine without SteamVR installed -- and puts
+    # this line where no headless check can reach it, which is how it
+    # once shipped still naming the module by its pre-package name.
+    # tests/test_imports.py walks the AST for exactly that.
+    from cgm.vr.overlay import WristOverlay
 
     client = LibreLinkUp(
         cfg.account.email,

@@ -113,7 +113,9 @@ python -m compileall -q src tools tests
 `tests/` covers what can be asserted without a device: timestamp
 parsing, the trend fit and the arrow angle it maps to, the fetch
 schedule and its backoff, config validation, the live reload and which
-settings it cannot apply, and the colour thresholds. It deliberately does not mock the LibreLinkUp HTTP
+settings it cannot apply, the colour thresholds, and that every import
+inside the package resolves -- including the lazy one in `run()`, which
+only executes with a headset attached. It deliberately does not mock the LibreLinkUp HTTP
 calls — the real risk there is the unofficial API
 changing shape, which only `--dry-run` can see — and it does not touch
 `cgm.vr`.
