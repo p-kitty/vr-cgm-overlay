@@ -50,6 +50,14 @@ Nothing has exercised these yet. Each says how to check it.
   minute a minute, a 45 minute window -- the floor -- fell back at a
   lag of 30, and 60 held on to 45. Check the lag before suspecting
   `GRAPH_RESOLUTION_MIN`.
+- **The sparkline on a controller.** `graph.in_vr` has never been run on
+  a headset; everything below was decided at a desk with `--window`. It
+  grows the card from 512x256 to 512x376, and the overlay is sized by
+  width, so at `width_m = 0.14` the face becomes about 10cm tall instead
+  of 7 and grows around its centre — which means `offset` was tuned for
+  a shorter card and will want revisiting. The question a device answers
+  and a desk cannot is whether three hours of trace is legible at arm's
+  length at all, or whether it is just texture under the number.
 - **The palette against real colour vision deficiency.** It is validated
   by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
   and asserts the separations. That model is dichromacy — full absence of
@@ -96,6 +104,43 @@ fires the buzz. It has to stay under `high_mgdl`, because `_validate`
 rejects anything breaking `low < high < very_high`; raise
 `high_mgdl` and `very_high_mgdl` too when the reading is already above
 them. Put them all back afterwards.
+
+## Showing the graph in VR is a config switch, not yet a gesture
+
+`graph.in_vr` is a boolean in `config.toml`. It reloads within a second
+like everything else there, so it can be flipped with the headset on --
+but it is flipped by alt-tabbing to a text editor, which is not the same
+as being able to call the graph up when you want it and have it gone
+again the rest of the time. That is what was actually asked for, and it
+is not built.
+
+Three ways to reach it, cheapest first:
+
+- **The gaze angle is already computed.** `cgm.vr.overlay` measures how
+  far the face is from the centre of view every frame, for the fade.
+  Showing the graph only while you are actually looking at your wrist
+  needs no new input API, works on every stack, and is the only one of
+  these that cannot be broken by a driver. What it costs is that the
+  card changes size as you glance at it, which moves the number: the
+  overlay grows around its centre, so the digits would shift by half the
+  strip's height every time. Compensating means moving `offset` in step
+  with the size, which is a small piece of arithmetic and the reason
+  this is not free.
+- **A controller button, through `getControllerState`.** The obvious
+  answer, and the one with a known risk: that is the legacy input API,
+  and the legacy haptic call on the same API does nothing on this stack
+  (see the buzz entry above). Whether button state fares better than
+  haptics through Virtual Desktop's driver is unknown and worth ten
+  minutes to find out before designing anything around it.
+- **`IVRInput` with an action manifest.** Settles it for every stack and
+  every controller, and is the same work the buzz entry declines: a JSON
+  manifest shipped with the process and bindings per controller type. If
+  both a button and the buzz end up needing it, the cost is paid once
+  rather than twice, which changes the arithmetic.
+
+Until one of them lands, `in_vr = false` is the honest default: the
+overlay is glanced at mid-game, and a graph that cannot be dismissed is
+a graph that is always in the way.
 
 ## The modelled arm drifts from the real one towards the elbow
 

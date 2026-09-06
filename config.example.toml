@@ -93,6 +93,38 @@ scale = 1.0
 always_on_top = true
 
 
+# The history sparkline: the last few hours of readings, drawn under the
+# number. It costs nothing to fetch -- the same response the current
+# value arrives in already carries about twelve hours of history, and
+# until now only the trend arrow read it. Re-read while running, like
+# everything below [account].
+[graph]
+# Which frontend draws it. These are separate on purpose: a window is
+# read at a desk, where a few hours of history is worth the space it
+# takes, and the overlay is glanced at mid-game, where the whole point
+# is the number in half a second. Turning it on grows the card from
+# 512x256 to 512x376 -- the window resizes, and in VR the face keeps its
+# width in metres and gets taller.
+in_window = true
+in_vr = false
+
+# How far back it shows, in minutes. The history arrives at one point
+# every 15 minutes, so 30 is the floor -- below that there are not two
+# points to draw a line between. Much past 3 hours and the points are a
+# few pixels apart, which is a texture rather than a shape.
+window_min = 180.0
+
+# The top and bottom of the Y axis, in mg/dL like every other threshold
+# here. It is fixed rather than fitted to the data on purpose: scaling
+# to whatever the last three hours happened to do turns a quiet flat
+# stretch into a mountain range, which makes a calm reading look
+# alarming. Readings past either end ride the edge rather than vanish.
+# The axis has to contain low_mgdl and high_mgdl, since the target range
+# is drawn as a band across it.
+axis_low_mgdl = 40.0
+axis_high_mgdl = 300.0
+
+
 [thresholds]
 # All mg/dL. These are used even when displaying mmol/L.
 # The face is red below low, green up to high, yellow up to very_high,

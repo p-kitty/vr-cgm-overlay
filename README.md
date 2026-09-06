@@ -75,6 +75,13 @@ is stored, so the trend is right again the moment the process restarts.
 scanning, and `trend.local = false` goes back to it entirely for anyone
 who would rather the face and the phone agree exactly.
 
+**The same history is read twice.** The response the current value
+arrives in carries about twelve hours of it, so once the trend was being
+fitted from it, drawing it was free — no extra request, no cache,
+nothing stored. The desktop window shows the last three hours as a
+sparkline under the number; the overlay does not by default, because a
+face glanced at mid-game is there to be read in half a second.
+
 **Credentials live in `config.toml`, which git ignores.** That file grants
 access to health data; keep it out of the repository.
 
@@ -168,10 +175,15 @@ scale = 1.0
 always_on_top = true
 ```
 
-`scale` is a multiple of the face's own 512x256, between `0.25` and
-`4.0`; both it and `always_on_top` change while the window is up. The
-placement keys mean nothing here — there is no controller — so editing
-`hand` says nothing rather than asking you to restart for it.
+`scale` is a multiple of the face's own size, between `0.25` and `4.0`;
+both it and `always_on_top` change while the window is up. The placement
+keys mean nothing here — there is no controller — so editing `hand` says
+nothing rather than asking you to restart for it.
+
+**The window draws the history sparkline and the overlay does not**, and
+that is the one thing the two frontends deliberately disagree about. See
+[The history sparkline](#the-history-sparkline); `graph.in_window` turns
+it off if you would rather have the number alone.
 
 `alert_on_low` works here through sound. The controller buzz is the one
 channel a window has no hardware for; everything about *when* to
@@ -196,7 +208,7 @@ it resembles nothing at all -- what the section does take.
 
 ```
 config.toml holds settings nothing reads, so they would do nothing without saying so:
-  display.window_min is not a setting; it belongs under [trend]
+  display.window_min is not a setting; it belongs under [graph] or [trend]
   trend.windowmin is not a setting; did you mean window_min?
   polling.nonsense is not a setting; [polling] takes alert_haptic, alert_on_low, ...
 ```
@@ -480,6 +492,62 @@ on every fetch.
 
 `[trend]` is re-read while running like `[display]` is, so `local` can be
 flipped with the headset on to see both arrows against the same reading.
+
+### The history sparkline
+
+The last few hours drawn under the number, so the shape of where the
+reading came from is there as well as where it is. It costs nothing to
+fetch: the same response the value arrives in already carries about
+twelve hours of history, and until now only the trend arrow read it.
+
+```toml
+[graph]
+in_window = true
+in_vr = false
+window_min = 180.0
+axis_low_mgdl = 40.0
+axis_high_mgdl = 300.0
+```
+
+| Setting | What it does |
+|---|---|
+| `in_window` (true) | Draw it in the desktop window |
+| `in_vr` (false) | Draw it on the controller face |
+| `window_min` (180) | How far back it shows. The floor is 30: the history arrives at one point every 15 minutes, so a shorter window has no two points to draw a line between |
+| `axis_low_mgdl` (40) / `axis_high_mgdl` (300) | The bottom and top of the Y axis. Must contain `low_mgdl` and `high_mgdl` |
+
+**The two frontends are separate settings on purpose.** A window is read
+at a desk, where a few hours of history is worth the room it takes. The
+overlay is glanced at mid-game, where the number in half a second is the
+whole design goal, so it stays off there unless you ask for it.
+
+Turning it on grows the card from 512x256 to 512x376. The window resizes
+itself on the next frame; in VR the face keeps the width `width_m` gives
+it and gets taller, so expect to revisit `offset` if you switch it on
+there.
+
+What it draws, and why each of these is a rule rather than a preference:
+
+- **The Y axis is fixed, not fitted to the data.** Scaling to whatever
+  the last three hours happened to do turns a quiet flat stretch into a
+  mountain range, which makes a calm reading look alarming at exactly
+  the glance this face exists for. A reading past either end rides the
+  edge; the number above says how far past.
+- **The target range is a band behind the line**, so where the trace
+  sits reads without an axis drawn next to it. That is what the axis has
+  to contain the range for: clipped against an edge, a band stops
+  looking like a band and starts looking like a floor.
+- **The line breaks across gaps rather than spanning them.** A stretch
+  where the phone was not scanning gets no line drawn through it,
+  because a line there would be measurements that were never taken.
+- **The newest point is marked in the status colour**, the same colour
+  as the digits. It is the one place the graph and the number are the
+  same fact, and it says which end is now.
+
+`tools/preview.py` draws all of it — a meal rise, a quiet run, a fall
+into a low, a reading off the top of the axis, a scanning gap, and a
+fresh sensor with two points to its name — to `preview-states.png`,
+with no network and no headset.
 
 ## Known limits
 
