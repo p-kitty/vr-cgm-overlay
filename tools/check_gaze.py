@@ -29,13 +29,10 @@ from __future__ import annotations
 import math
 import sys
 import time
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-# openvr is not installed everywhere this runs, and none of this needs
-# it: the fade is arithmetic and one setOverlayAlpha call. A stub keeps
-# the check able to run on a machine with no SteamVR.
+# openvr is an optional extra (`pip install -e .[vr]`), and none of this
+# needs it: the fade is arithmetic and one setOverlayAlpha call. A stub
+# keeps the check able to run on a core-only install, or with no SteamVR.
 try:
     import openvr  # noqa: F401
 except ModuleNotFoundError:
@@ -49,7 +46,11 @@ except ModuleNotFoundError:
     stub.HmdMatrix34_t = _HmdMatrix34_t  # type: ignore[attr-defined]
     sys.modules["openvr"] = stub
 
-from overlay import GAZE_SMOOTH_SEC, WristOverlay, _gaze_alpha  # noqa: E402
+from cgm.vr.overlay import (  # noqa: E402
+    GAZE_SMOOTH_SEC,
+    WristOverlay,
+    _gaze_alpha,
+)
 
 FULL = 20.0
 FADE = 45.0
@@ -192,8 +193,8 @@ def main() -> int:
         assert got == floor > 0.0, f"floor {floor} came out at {got}"
     print(f"  {'the floor is never zero':28} {0.1:7.3f} lowest allowed")
 
-    # config.py rejects full == fade, but the arithmetic must not divide
-    # by zero if it ever gets there anyway.
+    # cgm.core.config rejects full == fade, but the arithmetic must not
+    # divide by zero if it ever gets there anyway.
     assert alpha(29.9, full=30.0, fade=30.0) == 1.0
     assert alpha(30.1, full=30.0, fade=30.0) == MIN
     print(f"  {'no gap between the angles':28} {'steps':>7}")

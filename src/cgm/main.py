@@ -15,6 +15,10 @@ the dangerous failure.
 
 The draw loop also watches config.toml, so placement can be tuned with
 the headset still on.
+
+Only the loop and the wiring are here. The fetch schedule and the config
+watcher live in `cgm.core`, because neither has anything to do with VR
+and a second frontend should not have to import this file to get them.
 """
 
 from __future__ import annotations
@@ -23,36 +27,50 @@ import argparse
 import contextlib
 import ctypes
 import logging
-import random
 import sys
 import time
 from pathlib import Path
 
-# config.py imports tomllib unguarded, and the floors in
-# requirements.txt assume 3.14. Say what is wrong in a sentence rather
-# than letting an import blow up further down.
+# cgm.core.config imports tomllib unguarded, and the dependency floors in
+# pyproject.toml assume 3.14. Say what is wrong in a sentence rather than
+# letting an import blow up further down.
 if sys.version_info < (3, 14):
     raise SystemExit(
         "vr-cgm-overlay needs Python 3.14 or newer; this is "
         f"{sys.version.split()[0]}."
     )
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-import config as config_mod
-from librelink import AuthError, LibreLinkError, LibreLinkUp
-from renderer import Theme, TrendTuning, WatchFaceRenderer
+from cgm.core import config as config_mod  # noqa: E402
+from cgm.core.librelink import (  # noqa: E402
+    AuthError,
+    LibreLinkError,
+    LibreLinkUp,
+)
+from cgm.core.poller import Poller  # noqa: E402
+from cgm.core.watcher import ConfigWatcher  # noqa: E402
+from cgm.face.renderer import (  # noqa: E402
+    Theme,
+    TrendTuning,
+    WatchFaceRenderer,
+)
 
 log = logging.getLogger("vrcgm")
 
 DRAW_INTERVAL_SEC = 1.0
 # Used only when the headset will not say what it refreshes at.
 FALLBACK_TRACK_HZ = 90.0
-MAX_BACKOFF_SEC = 600.0
 
 # Settings a reload cannot apply: the overlay picks its controller role
-# once, and the API client is built with the account.
-RESTART_ONLY = ("hand", "email", "password", "patient_id", "region", "api_version")
+# once, and the API client is built with the account. Keyed by the name
+# in config.toml, because that is the file the message sends you to.
+RESTART_ONLY = {
+    "display.hand": "vr.hand",
+    "account.email": "account.email",
+    "account.password": "account.password",
+    "account.patient_id": "account.patient_id",
+    "account.region": "account.region",
+    "account.api_version": "account.api_version",
+}
 
 
 @contextlib.contextmanager
@@ -81,144 +99,33 @@ def fine_timer():
         winmm.timeEndPeriod(1)
 
 
-class Poller:
-    """Owns the fetch schedule and its backoff.
-
-    Repeated failures back off exponentially: hammering the API through a
-    network outage or a service problem does not speed up recovery and
-    only raises the odds of being cut off.
-    """
-
-    def __init__(
-        self,
-        client: LibreLinkUp,
-        interval: float,
-        trend: TrendTuning | None = None,
-    ) -> None:
-        self._client = client
-        self._interval = interval
-        # Only the log line uses this; run() always passes the config's.
-        self._trend = trend or TrendTuning()
-        self._next_at = 0.0
-        self._failures = 0
-
-        self.reading = None
-        self.error: str | None = None
-
-    def due(self, now: float) -> bool:
-        return now >= self._next_at
-
-    def set_interval(self, interval: float) -> None:
-        """Change the fetch interval, effective from the next fetch."""
-        self._interval = interval
-
-    def set_trend(self, trend: TrendTuning) -> None:
-        """Change the tuning the logged trend is worked out with."""
-        self._trend = trend
-
-    def poll(self, now: float) -> bool:
-        """Attempt one fetch. True when a new reading arrived."""
-        got_new = False
-        try:
-            self.reading = self._client.get_latest()
-            self.error = None
-            self._failures = 0
-            got_new = True
-            # Say which source the arrow came from, not just where it
-            # points. Whether the local fit is actually being used can
-            # only be seen against live data, and this is where it shows.
-            slope = self._trend.slope_for(self.reading)
-            trend = (
-                f"{self.reading.arrow} (API)"
-                if slope is None
-                else f"{slope:+.2f} mg/dL/min"
-            )
-            log.info(
-                "fetched: %.0f mg/dL %s (%.1f min old)",
-                self.reading.value_mgdl,
-                trend,
-                self.reading.age_minutes(),
-            )
-        except AuthError as exc:
-            # Bad credentials or an unaccepted agreement. Retrying will not
-            # fix either, so wait a long time.
-            self.error = "AUTH ERROR"
-            self._failures = max(self._failures, 6)
-            log.error("authentication error: %s", exc)
-        except (LibreLinkError, OSError) as exc:
-            self.error = "NO CONNECTION"
-            self._failures += 1
-            log.warning("fetch failed (attempt %d): %s", self._failures, exc)
-
-        # Jitter keeps many clients from landing on the same instant.
-        if self._failures:
-            delay = min(self._interval * (2 ** self._failures), MAX_BACKOFF_SEC)
-        else:
-            delay = self._interval
-        self._next_at = now + delay + random.uniform(0, 3)
-        return got_new
-
-
-class ConfigWatcher:
-    """Re-read config.toml whenever it changes on disk.
-
-    Placement is found by trial and error with the headset on, and there
-    is no way to judge a change without wearing it. Restarting for every
-    nudge means taking the headset off, so the file is watched instead
-    and edits land on the next draw.
-
-    A half-written file parses as garbage, and an edit can be plain
-    wrong. Neither may take down a resident process, so a bad read is
-    logged and the running config is kept.
-    """
-
-    def __init__(self, path: Path) -> None:
-        self._path = path
-        self._stamp = self._current_stamp()
-
-    def _current_stamp(self) -> tuple[float, int] | None:
-        try:
-            st = self._path.stat()
-        except OSError:
-            return None
-        # Size as well as mtime: editors can write twice within the
-        # timestamp resolution of the filesystem.
-        return (st.st_mtime, st.st_size)
-
-    def poll(self) -> config_mod.Config | None:
-        """Return the reloaded config once the file changes, else None."""
-        stamp = self._current_stamp()
-        if stamp is None or stamp == self._stamp:
-            return None
-        self._stamp = stamp
-
-        try:
-            return config_mod.load(self._path)
-        except (OSError, ValueError) as exc:
-            # TOMLDecodeError is a ValueError, so a partial write lands here.
-            log.warning("ignoring the edited config: %s", exc)
-            return None
+def _setting(cfg: config_mod.Config, path: str):
+    """Read a dotted path like `vr.hand` off the sectioned config."""
+    value = cfg
+    for part in path.split("."):
+        value = getattr(value, part)
+    return value
 
 
 def build_theme(cfg: config_mod.Config) -> Theme:
     return Theme(
-        low_mgdl=cfg.low_mgdl,
-        high_mgdl=cfg.high_mgdl,
-        very_high_mgdl=cfg.very_high_mgdl,
+        low_mgdl=cfg.thresholds.low_mgdl,
+        high_mgdl=cfg.thresholds.high_mgdl,
+        very_high_mgdl=cfg.thresholds.very_high_mgdl,
     )
 
 
 def build_trend(cfg: config_mod.Config) -> TrendTuning:
     return TrendTuning(
-        local=cfg.trend_local,
-        window_min=cfg.trend_window_min,
-        fast_mgdl_min=cfg.trend_fast_mgdl_min,
+        local=cfg.trend.local,
+        window_min=cfg.trend.window_min,
+        fast_mgdl_min=cfg.trend.fast_mgdl_min,
     )
 
 
 def build_renderer(cfg: config_mod.Config) -> WatchFaceRenderer:
     return WatchFaceRenderer(
-        theme=build_theme(cfg), unit=cfg.unit, trend=build_trend(cfg)
+        theme=build_theme(cfg), unit=cfg.display.unit, trend=build_trend(cfg)
     )
 
 
@@ -229,19 +136,26 @@ def apply_config(
     poller: Poller,
 ) -> None:
     """Push a reloaded config onto the running overlay and poller."""
-    overlay.set_placement(cfg.offset, cfg.rotation_deg)
-    overlay.set_orbit(cfg.orbit, cfg.orbit_radius_m, cfg.orbit_limit_deg)
+    overlay.set_placement(cfg.vr.offset, cfg.vr.rotation_deg)
+    overlay.set_orbit(cfg.vr.orbit, cfg.vr.orbit_radius_m, cfg.vr.orbit_limit_deg)
     overlay.set_gaze(
-        cfg.gaze_fade, cfg.gaze_full_deg, cfg.gaze_fade_deg, cfg.gaze_min_alpha
+        cfg.vr.gaze_fade,
+        cfg.vr.gaze_full_deg,
+        cfg.vr.gaze_fade_deg,
+        cfg.vr.gaze_min_alpha,
     )
-    overlay.set_arm_guide(cfg.arm_guide)
-    overlay.set_width(cfg.width_m)
-    overlay.set_opacity(cfg.opacity)
-    overlay.set_flip_vertical(cfg.flip_vertical)
-    poller.set_interval(cfg.poll_interval_sec)
+    overlay.set_arm_guide(cfg.vr.arm_guide)
+    overlay.set_width(cfg.vr.width_m)
+    overlay.set_opacity(cfg.vr.opacity)
+    overlay.set_flip_vertical(cfg.vr.flip_vertical)
+    poller.set_interval(cfg.polling.interval_sec)
     poller.set_trend(build_trend(cfg))
 
-    changed = [k for k in RESTART_ONLY if getattr(cfg, k) != getattr(previous, k)]
+    changed = [
+        name
+        for name, path in RESTART_ONLY.items()
+        if _setting(cfg, path) != _setting(previous, path)
+    ]
     if changed:
         log.warning("restart to apply: %s", ", ".join(changed))
 
@@ -252,31 +166,31 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
     from overlay import WristOverlay
 
     client = LibreLinkUp(
-        cfg.email,
-        cfg.password,
-        patient_id=cfg.patient_id,
-        region=cfg.region,
-        version=cfg.api_version,
+        cfg.account.email,
+        cfg.account.password,
+        patient_id=cfg.account.patient_id,
+        region=cfg.account.region,
+        version=cfg.account.api_version,
     )
     renderer = build_renderer(cfg)
-    poller = Poller(client, cfg.poll_interval_sec, build_trend(cfg))
+    poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
 
     with fine_timer(), WristOverlay(
-        hand=cfg.hand,
-        width_m=cfg.width_m,
-        offset=cfg.offset,
-        rotation_deg=cfg.rotation_deg,
-        opacity=cfg.opacity,
-        flip_vertical=cfg.flip_vertical,
-        orbit=cfg.orbit,
-        orbit_radius_m=cfg.orbit_radius_m,
-        orbit_limit_deg=cfg.orbit_limit_deg,
-        arm_guide=cfg.arm_guide,
-        gaze_fade=cfg.gaze_fade,
-        gaze_full_deg=cfg.gaze_full_deg,
-        gaze_fade_deg=cfg.gaze_fade_deg,
-        gaze_min_alpha=cfg.gaze_min_alpha,
+        hand=cfg.vr.hand,
+        width_m=cfg.vr.width_m,
+        offset=cfg.vr.offset,
+        rotation_deg=cfg.vr.rotation_deg,
+        opacity=cfg.vr.opacity,
+        flip_vertical=cfg.vr.flip_vertical,
+        orbit=cfg.vr.orbit,
+        orbit_radius_m=cfg.vr.orbit_radius_m,
+        orbit_limit_deg=cfg.vr.orbit_limit_deg,
+        arm_guide=cfg.vr.arm_guide,
+        gaze_fade=cfg.vr.gaze_fade,
+        gaze_full_deg=cfg.vr.gaze_full_deg,
+        gaze_fade_deg=cfg.vr.gaze_fade_deg,
+        gaze_min_alpha=cfg.vr.gaze_min_alpha,
     ) as overlay:
         overlay.set_image(renderer.render_message("CONNECTING"))
 
@@ -329,12 +243,12 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
 
                 if poller.reading is not None:
                     image = renderer.render(
-                        poller.reading, stale_after_min=cfg.stale_after_min
+                        poller.reading, stale_after_min=cfg.display.stale_after_min
                     )
                     # Buzz only on the transition into a low, not while it
                     # lasts: a repeating alert is intolerable mid-game.
-                    is_low = poller.reading.value_mgdl < cfg.low_mgdl
-                    if cfg.alert_on_low and is_low and not was_low:
+                    is_low = poller.reading.value_mgdl < cfg.thresholds.low_mgdl
+                    if cfg.polling.alert_on_low and is_low and not was_low:
                         overlay.pulse()
                     was_low = is_low
                     # The buzz is once; this lasts. A gaze fade must not
@@ -367,18 +281,18 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
     Lets credentials and rendering be checked before SteamVR is involved.
     """
     client = LibreLinkUp(
-        cfg.email,
-        cfg.password,
-        patient_id=cfg.patient_id,
-        region=cfg.region,
-        version=cfg.api_version,
+        cfg.account.email,
+        cfg.account.password,
+        patient_id=cfg.account.patient_id,
+        region=cfg.account.region,
+        version=cfg.account.api_version,
     )
     renderer = build_renderer(cfg)
 
     reading = client.get_latest()
     print(
-        f"glucose: {reading.display_value(cfg.unit)} "
-        f"{'mmol/L' if cfg.unit == 'mmol' else 'mg/dL'} {reading.arrow}  "
+        f"glucose: {reading.display_value(cfg.display.unit)} "
+        f"{'mmol/L' if cfg.display.unit == 'mmol' else 'mg/dL'} {reading.arrow}  "
         f"({reading.age_minutes():.1f} min old)"
     )
     # The graph endpoint's history is the one part of the response no
@@ -393,7 +307,7 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
     else:
         detail = f"too few to fit, falling back to the API arrow {reading.arrow}"
     print(f"history: {len(reading.history)} points; {detail}")
-    renderer.render(reading, stale_after_min=cfg.stale_after_min).save(out)
+    renderer.render(reading, stale_after_min=cfg.display.stale_after_min).save(out)
     print(f"preview image: {out}")
     return 0
 
@@ -405,7 +319,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path(__file__).parent.parent / "config.toml",
+        # The checkout this package was installed from, which is where
+        # config.toml sits next to config.example.toml. Resolved from the
+        # module rather than the working directory so the command works
+        # from anywhere, as it did when this file lived in src/.
+        default=Path(__file__).resolve().parents[2] / "config.toml",
         help="path to the config file",
     )
     parser.add_argument(

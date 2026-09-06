@@ -12,12 +12,10 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
 from PIL import Image
 
-from librelink import Reading
-from renderer import HEIGHT, WIDTH, WatchFaceRenderer
+from cgm.core.librelink import Reading
+from cgm.face.renderer import HEIGHT, WIDTH, WatchFaceRenderer
 
 GAP = 24
 BACKDROP = (48, 50, 58, 255)

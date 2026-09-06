@@ -18,8 +18,8 @@ Two numbers, because they answer different questions:
   - **luminance contrast** is the harsher measure, and the one that still
     works if the surviving axis is degraded rather than absent, as in the
     anomalous trichromacies. It is only required of the pairs where
-    colour is working alone -- where renderer.py gives both statuses the
-    same marker edge, so position cannot break the tie.
+    colour is working alone -- where cgm.face.renderer gives both
+    statuses the same marker edge, so position cannot break the tie.
 
 Run it after touching Theme:
 
@@ -30,11 +30,8 @@ from __future__ import annotations
 
 import sys
 from itertools import combinations
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from renderer import STATUS_MARKERS, Theme
+from cgm.face.renderer import STATUS_MARKERS, Theme
 
 # Viénot, Brettel & Mollon 1999. A dichromat's response is modelled by
 # projecting LMS onto the plane the missing cone leaves behind, which is

@@ -17,9 +17,14 @@ import logging
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from librelink import AuthError, GlucosePoint, LibreLinkError, Reading
-from main import MAX_BACKOFF_SEC, Poller
-from renderer import TrendTuning
+from cgm.core.librelink import (
+    AuthError,
+    GlucosePoint,
+    LibreLinkError,
+    Reading,
+)
+from cgm.core.poller import MAX_BACKOFF_SEC, Poller
+from cgm.face.renderer import TrendTuning
 
 INTERVAL = 60.0
 

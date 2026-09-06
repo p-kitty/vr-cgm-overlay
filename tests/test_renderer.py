@@ -21,9 +21,9 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from librelink import GlucosePoint, Reading
+from cgm.core.librelink import GlucosePoint, Reading
 
-from renderer import (
+from cgm.face.renderer import (
     STATUS_MARKERS,
     TREND_ANGLES,
     Theme,

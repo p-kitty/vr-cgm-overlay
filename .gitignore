@@ -3,3 +3,7 @@ preview.png
 __pycache__/
 *.pyc
 .claude/
+# Left behind by `pip install -e .`
+*.egg-info/
+build/
+dist/
