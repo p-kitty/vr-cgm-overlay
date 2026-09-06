@@ -125,18 +125,30 @@ have to hold:
   it matters most inverts the priority.
 
 
-## Haptics do not work on Quest 3
+## The low buzz is silent through Virtual Desktop
 
-`triggerHapticPulse` is silent on Quest 3 controllers. The call neither
-buzzes nor raises. The low path around it is fine: with a fake threshold
+`triggerHapticPulse` neither buzzes nor raises with a Quest 3 running
+through Virtual Desktop's SteamVR driver, which is the only stack this
+has ever been tried on. The path around it is fine: with a fake threshold
 the face goes red, so `pulse()` is reached.
 
-`triggerHapticPulse` belongs to the legacy input API and devices on the
-newer input system may ignore it. Making it buzz would mean moving to
-`IVRInput` haptic actions, which needs an action manifest JSON shipped
-with the process and bindings per controller type. That is a lot of work
-for a supplementary signal, so it is not planned: colour is the primary
-alert and haptics were only ever a supplement.
+The driver is the suspect, not the controllers. `triggerHapticPulse`
+belongs to the legacy input API, and whether the call reaches the
+hardware is up to whichever driver is presenting the device. Oculus Link
+puts the same Quest 3 behind Meta's runtime and a different driver, so it
+is a separate question, and an untried one.
+
+- **Try it over Link before anything else.** It is the cheap test, and it
+  decides whether there is a problem here to solve at all.
+- **The attach line names the stack.** It logs the controller type and
+  the tracking system presenting it, so a later report of no buzz says
+  which driver it came from without anyone having to remember.
+
+`IVRInput` haptic actions would settle it for every stack, but they need
+an action manifest JSON shipped with the process and bindings per
+controller type. That is a lot of work for a supplementary signal, so it
+is not planned unless Link turns out to be silent too: colour is the
+primary alert and haptics were only ever a supplement.
 
 ## Placement defaults are tuned for one device
 
