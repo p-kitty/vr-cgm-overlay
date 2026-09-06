@@ -222,6 +222,39 @@ def _draw_arrow(
     )
 
 
+def unit_label(unit: str) -> str:
+    """How the display unit is spelled out.
+
+    On the face, in the window's title bar and in what --dry-run prints.
+    One function because three copies of the same conditional is three
+    chances for one of them to disagree with the number beside it.
+    """
+    return "mmol/L" if unit == "mmol" else "mg/dL"
+
+
+def face_image(
+    renderer: "WatchFaceRenderer",
+    reading,
+    error: str | None,
+    *,
+    stale_after_min: float,
+) -> Image.Image:
+    """The face to show for what the poller currently holds.
+
+    A reading is drawn even when the last fetch failed: it keeps ageing
+    on screen and greys out, which is the honest thing for a value that
+    was true a while ago. Only a poller that has never had a reading at
+    all falls back to a message card, because there is nothing yet to
+    put an age on.
+
+    Both frontends ask here, so a window and a headset cannot end up
+    disagreeing about what an empty poller looks like.
+    """
+    if reading is not None:
+        return renderer.render(reading, stale_after_min=stale_after_min)
+    return renderer.render_message(error or "WAITING", detail="no reading yet")
+
+
 def _load_font(size: int) -> ImageFont.FreeTypeFont:
     for path in FONT_CANDIDATES:
         if Path(path).exists():
@@ -274,7 +307,7 @@ class WatchFaceRenderer:
         img, draw = self._new_canvas(color, STATUS_MARKERS[status])
 
         value_text = reading.display_value(self.unit)
-        unit_text = "mmol/L" if self.unit == "mmol" else "mg/dL"
+        unit_text = unit_label(self.unit)
 
         # Left-aligned, leaving the right side for the arrow and the age.
         draw.text((44, 118), value_text, font=self._font_value, fill=color, anchor="lm")
