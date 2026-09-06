@@ -125,12 +125,10 @@ class FaceWindow:
             return
         self._root.title(text)
 
-    # No `pulse` here, deliberately. The overlay has one because it has a
-    # controller to buzz; the equivalent for a window is a sound, and the
-    # audible alert is its own issue (#4). What that issue asks for is a
-    # shared low-transition object in `cgm.core` driving both frontends,
-    # rather than each of them growing its own copy of the same edge
-    # test -- so adding a beep here would be the thing it exists to undo.
+    # No `pulse` here. The overlay has one because it has a controller
+    # to buzz, and a window does not; the channel a window can use is
+    # sound, which `cgm.core.alert` owns and plays for both frontends.
+    # Nothing about announcing a low belongs in this class.
 
     # -- lifecycle ----------------------------------------------------------
 
