@@ -20,10 +20,10 @@ the face composites over any SteamVR title.
 ┌────────────────────▼───────────────────────────────────┐
 │  vr-cgm-overlay (resident, single process)              │
 │                                                         │
-│    librelink.py ──→ renderer.py ──→ overlay.py          │
+│    cgm.core     ──→ cgm.face     ──→ cgm.vr             │
 │    auth + fetch     PIL drawing      pyopenvr           │
 │                                                         │
-│    main.py: 60s fetch loop / 1s draw loop               │
+│    cgm.main: 60s fetch loop / 1s draw loop              │
 └────────────────────┬───────────────────────────────────┘
                      │ SetOverlayTransformTrackedDeviceRelative
            ┌─────────▼──────────┐
@@ -104,9 +104,16 @@ already-open terminal resolves.
 ```bash
 py -3.14 -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -e ".[vr]"
 cp config.example.toml config.toml
 ```
+
+`-e` because the package is installed from this checkout rather than
+copied out of it: editing a file under `src/` changes what runs, with no
+reinstall. `[vr]` adds the SteamVR bindings, which only the overlay
+itself loads: `pip install -e .` on its own is enough for `--dry-run`,
+the tests and every script under `tools/`, since the two that reach into
+the overlay stub the bindings out rather than needing them.
 
 Every later command in this file assumes that environment is active.
 
@@ -118,14 +125,14 @@ share or commit it.
 Check the API before involving SteamVR.
 
 ```bash
-python src/main.py --dry-run
+vr-cgm-overlay --dry-run
 ```
 
 A glucose value on the console and a `preview.png` on disk means the API
 side is done. Then leave it running.
 
 ```bash
-python src/main.py
+vr-cgm-overlay
 ```
 
 ## Tuning
@@ -137,7 +144,7 @@ need a restart, and the log says so when one of them changes.
 
 Getting the watch face where you want it is trial and error. The loop is:
 
-1. Start `python src/main.py` and put the headset on.
+1. Start `vr-cgm-overlay` and put the headset on.
 2. Bring up the desktop view in SteamVR so you can edit `config.toml`
    without taking the headset off.
 3. Change one value, save, and look at your wrist.
