@@ -17,8 +17,9 @@ import logging
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from librelink import AuthError, LibreLinkError, Reading
+from librelink import AuthError, GlucosePoint, LibreLinkError, Reading
 from main import MAX_BACKOFF_SEC, Poller
+from renderer import TrendTuning
 
 INTERVAL = 60.0
 
@@ -35,14 +36,22 @@ def setUpModule():
     logging.getLogger("vrcgm").addHandler(logging.NullHandler())
 
 
-def reading(mgdl: float = 100.0) -> Reading:
+def reading(mgdl: float = 100.0, slope: float | None = None) -> Reading:
+    taken_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    history = ()
+    if slope is not None:
+        history = tuple(
+            GlucosePoint(taken_at - timedelta(minutes=ago), mgdl - slope * ago)
+            for ago in range(20, -1, -1)
+        )
     return Reading(
         value_mgdl=mgdl,
         value_mmol=mgdl / 18.0,
         trend=3,
-        timestamp_utc=datetime.now(timezone.utc) - timedelta(minutes=1),
+        timestamp_utc=taken_at,
         is_high=False,
         is_low=False,
+        history=history,
     )
 
 
@@ -186,6 +195,41 @@ class IntervalChange(PollerTestCase):
     def test_the_fetch_after_that_uses_the_new_interval(self):
         self.poller.poll(2000.0)
         self.assertWaits(self.poller, 2000.0, 300.0)
+
+
+class FetchLog(unittest.TestCase):
+    """What a session's log says about where the arrow came from.
+
+    Whether the local trend behaves on a real arm can only be judged
+    from this line -- there is no other way to see it without a headset
+    and a day of readings -- so it has to say which of the two sources
+    was used, and it has to not raise while saying it.
+    """
+
+    def log_line(self, entry: Reading, trend: TrendTuning | None = None) -> str:
+        poller = Poller(FakeClient(entry), INTERVAL, trend)
+        with self.assertLogs("vrcgm", level="INFO") as caught:
+            poller.poll(0.0)
+        return caught.output[0]
+
+    def test_a_fitted_slope_is_logged_as_a_rate(self):
+        self.assertIn("+1.50 mg/dL/min", self.log_line(reading(slope=1.5)))
+
+    def test_a_fall_keeps_its_sign(self):
+        self.assertIn("-2.00 mg/dL/min", self.log_line(reading(slope=-2.0)))
+
+    def test_the_fallback_says_it_came_from_the_api(self):
+        # Otherwise a session where the fit never once succeeded would
+        # look exactly like one where it always did.
+        self.assertIn("(API)", self.log_line(reading()))
+
+    def test_switching_the_fit_off_is_logged_as_the_api_arrow(self):
+        # The reading can be fitted; the config says not to. The log has
+        # to follow the config, or it describes an arrow the face is not
+        # drawing.
+        line = self.log_line(reading(slope=1.5), TrendTuning(local=False))
+        self.assertIn("(API)", line)
+        self.assertNotIn("mg/dL/min", line)
 
 
 if __name__ == "__main__":

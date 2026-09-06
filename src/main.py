@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import config as config_mod
 from librelink import AuthError, LibreLinkError, LibreLinkUp
-from renderer import Theme, WatchFaceRenderer
+from renderer import Theme, TrendTuning, WatchFaceRenderer
 
 log = logging.getLogger("vrcgm")
 
@@ -89,9 +89,16 @@ class Poller:
     only raises the odds of being cut off.
     """
 
-    def __init__(self, client: LibreLinkUp, interval: float) -> None:
+    def __init__(
+        self,
+        client: LibreLinkUp,
+        interval: float,
+        trend: TrendTuning | None = None,
+    ) -> None:
         self._client = client
         self._interval = interval
+        # Only the log line uses this; run() always passes the config's.
+        self._trend = trend or TrendTuning()
         self._next_at = 0.0
         self._failures = 0
 
@@ -105,6 +112,10 @@ class Poller:
         """Change the fetch interval, effective from the next fetch."""
         self._interval = interval
 
+    def set_trend(self, trend: TrendTuning) -> None:
+        """Change the tuning the logged trend is worked out with."""
+        self._trend = trend
+
     def poll(self, now: float) -> bool:
         """Attempt one fetch. True when a new reading arrived."""
         got_new = False
@@ -113,10 +124,19 @@ class Poller:
             self.error = None
             self._failures = 0
             got_new = True
+            # Say which source the arrow came from, not just where it
+            # points. Whether the local fit is actually being used can
+            # only be seen against live data, and this is where it shows.
+            slope = self._trend.slope_for(self.reading)
+            trend = (
+                f"{self.reading.arrow} (API)"
+                if slope is None
+                else f"{slope:+.2f} mg/dL/min"
+            )
             log.info(
                 "fetched: %.0f mg/dL %s (%.1f min old)",
                 self.reading.value_mgdl,
-                self.reading.arrow,
+                trend,
                 self.reading.age_minutes(),
             )
         except AuthError as exc:
@@ -188,6 +208,20 @@ def build_theme(cfg: config_mod.Config) -> Theme:
     )
 
 
+def build_trend(cfg: config_mod.Config) -> TrendTuning:
+    return TrendTuning(
+        local=cfg.trend_local,
+        window_min=cfg.trend_window_min,
+        fast_mgdl_min=cfg.trend_fast_mgdl_min,
+    )
+
+
+def build_renderer(cfg: config_mod.Config) -> WatchFaceRenderer:
+    return WatchFaceRenderer(
+        theme=build_theme(cfg), unit=cfg.unit, trend=build_trend(cfg)
+    )
+
+
 def apply_config(
     cfg: config_mod.Config,
     previous: config_mod.Config,
@@ -202,6 +236,7 @@ def apply_config(
     overlay.set_opacity(cfg.opacity)
     overlay.set_flip_vertical(cfg.flip_vertical)
     poller.set_interval(cfg.poll_interval_sec)
+    poller.set_trend(build_trend(cfg))
 
     changed = [k for k in RESTART_ONLY if getattr(cfg, k) != getattr(previous, k)]
     if changed:
@@ -220,8 +255,8 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
         region=cfg.region,
         version=cfg.api_version,
     )
-    renderer = WatchFaceRenderer(theme=build_theme(cfg), unit=cfg.unit)
-    poller = Poller(client, cfg.poll_interval_sec)
+    renderer = build_renderer(cfg)
+    poller = Poller(client, cfg.poll_interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
 
     with fine_timer(), WristOverlay(
@@ -275,9 +310,7 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
                 edited = watcher.poll()
                 if edited is not None:
                     apply_config(edited, cfg, overlay, poller)
-                    renderer = WatchFaceRenderer(
-                        theme=build_theme(edited), unit=edited.unit
-                    )
+                    renderer = build_renderer(edited)
                     cfg = edited
                     log.info("reloaded %s", config_path)
 
@@ -326,7 +359,7 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
         region=cfg.region,
         version=cfg.api_version,
     )
-    renderer = WatchFaceRenderer(theme=build_theme(cfg), unit=cfg.unit)
+    renderer = build_renderer(cfg)
 
     reading = client.get_latest()
     print(
@@ -334,6 +367,18 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
         f"{'mmol/L' if cfg.unit == 'mmol' else 'mg/dL'} {reading.arrow}  "
         f"({reading.age_minutes():.1f} min old)"
     )
+    # The graph endpoint's history is the one part of the response no
+    # test can check, because only the live API says what shape it
+    # arrives in. Print what came back so a dry run can confirm it.
+    trend = build_trend(cfg)
+    slope = trend.slope_for(reading)
+    if slope is not None:
+        detail = f"trend {slope:+.2f} mg/dL/min over {trend.window_min:.0f} min"
+    elif not trend.local:
+        detail = f"local trend off, using the API arrow {reading.arrow}"
+    else:
+        detail = f"too few to fit, falling back to the API arrow {reading.arrow}"
+    print(f"history: {len(reading.history)} points; {detail}")
     renderer.render(reading, stale_after_min=cfg.stale_after_min).save(out)
     print(f"preview image: {out}")
     return 0

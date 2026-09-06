@@ -93,9 +93,10 @@ python -m compileall -q src tools tests
 ```
 
 `tests/` covers what can be asserted without a device: timestamp
-parsing, the fetch schedule and its backoff, config validation and the
-live reload, and the colour thresholds. It deliberately does not mock
-the LibreLinkUp HTTP calls — the real risk there is the unofficial API
+parsing, the trend fit and the arrow angle it maps to, the fetch
+schedule and its backoff, config validation and the live reload, and the
+colour thresholds. It deliberately does not mock the LibreLinkUp HTTP
+calls — the real risk there is the unofficial API
 changing shape, which only `--dry-run` can see — and it does not touch
 `src/overlay.py`.
 

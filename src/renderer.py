@@ -130,7 +130,56 @@ STATUS_MARKERS = {
 # TrendArrow value -> arrow angle in degrees. 0 points right, positive up.
 # Arrows are drawn rather than typeset: Segoe UI and the other stock
 # Windows fonts have no U+2197/U+2198 glyphs and render tofu boxes.
+#
+# This is the fallback only. When there is enough history to fit a slope
+# the angle comes from TrendTuning instead, and is not restricted to
+# these five.
 TREND_ANGLES = {1: -90.0, 2: -45.0, 3: 0.0, 4: 45.0, 5: 90.0}
+
+
+@dataclass
+class TrendTuning:
+    """How a fitted rate of change becomes an arrow angle.
+
+    Abbott's TrendArrow is five buckets on thresholds it does not
+    publish and nothing here can adjust. The slope behind it can be
+    fitted from the history the same response already carries, and the
+    arrow is drawn as a vector anyway, so it can point anywhere rather
+    than snapping to five positions -- a reading climbing gently and one
+    climbing hard both come out as the same arrow otherwise.
+
+    One number sets the whole scale: fast_mgdl_min is the rate at which
+    the arrow stands straight up, and everything below it is in
+    proportion -- half that rate is the familiar 45 degree diagonal.
+    Nothing steeper than 90 exists to draw, so that is where it stops.
+
+    This lives with the renderer rather than the API client because the
+    fit is cheap and `config.toml` is re-read while running: computing
+    the angle at draw time is what lets a tuning edit land within a
+    second, the same as placement does. `local` rides on the same
+    reload, so the two arrows can be compared by switching between them
+    with the headset on rather than by restarting twice.
+    """
+
+    local: bool = True
+    window_min: float = 60.0
+    fast_mgdl_min: float = 2.0
+
+    def slope_for(self, reading) -> float | None:
+        """The slope to draw from, or None to defer to the API's arrow.
+
+        The one place that choice is made. The face and the fetch log
+        both ask here, so the log cannot end up claiming a source the
+        face is not using.
+        """
+        if not self.local:
+            return None
+        return reading.slope_mgdl_per_min(self.window_min)
+
+    def angle_for_slope(self, slope: float) -> float:
+        """Map mg/dL per minute onto an angle, 0 level and +/-90 vertical."""
+        fraction = slope / self.fast_mgdl_min
+        return 90.0 * max(-1.0, min(1.0, fraction))
 
 
 def _draw_arrow(
@@ -191,9 +240,15 @@ class WatchFaceRenderer:
     every later frame.
     """
 
-    def __init__(self, theme: Theme | None = None, unit: str = "mgdl") -> None:
+    def __init__(
+        self,
+        theme: Theme | None = None,
+        unit: str = "mgdl",
+        trend: TrendTuning | None = None,
+    ) -> None:
         self.theme = theme or Theme()
         self.unit = unit
+        self.trend = trend or TrendTuning()
         self._font_value = _load_font(150)
         self._font_small = _load_font(38)
         self._font_message = _load_font(52)
@@ -227,7 +282,7 @@ class WatchFaceRenderer:
         value_right = 44 + draw.textlength(value_text, font=self._font_value)
 
         # The arrow sits right next to the number to minimise eye travel.
-        angle = TREND_ANGLES.get(reading.trend)
+        angle = self._trend_angle(reading)
         if angle is not None:
             _draw_arrow(draw, (value_right + 66, 116), angle, 84, color)
 
@@ -271,6 +326,20 @@ class WatchFaceRenderer:
         return img
 
     # -- internals ----------------------------------------------------------
+
+    def _trend_angle(self, reading) -> float | None:
+        """Angle for the arrow, preferring the locally fitted slope.
+
+        The API's own TrendArrow is used instead when the fit is turned
+        off, and as the fallback when it is on but there is too little
+        history to fit -- a fresh sensor, or a gap in scanning. Either
+        way the arrow snaps back to the five official positions, which
+        is what the face drew before any of this.
+        """
+        slope = self.trend.slope_for(reading)
+        if slope is not None:
+            return self.trend.angle_for_slope(slope)
+        return TREND_ANGLES.get(reading.trend)
 
     def _new_canvas(self, accent: tuple[int, int, int], marker: str):
         """Rounded background card with the status marker on one edge."""

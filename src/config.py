@@ -12,6 +12,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
+
 log = logging.getLogger(__name__)
 
 
@@ -40,6 +42,10 @@ class Config:
     high_mgdl: float = 180.0
     very_high_mgdl: float = 240.0
 
+    trend_local: bool = True
+    trend_window_min: float = 60.0
+    trend_fast_mgdl_min: float = 2.0
+
     poll_interval_sec: float = 60.0
     alert_on_low: bool = True
 
@@ -55,6 +61,7 @@ def load(path: Path) -> Config:
     account = raw.get("account", {})
     display = raw.get("display", {})
     thresholds = raw.get("thresholds", {})
+    trend = raw.get("trend", {})
     polling = raw.get("polling", {})
 
     cfg = Config()
@@ -82,6 +89,12 @@ def load(path: Path) -> Config:
     cfg.low_mgdl = float(thresholds.get("low_mgdl", cfg.low_mgdl))
     cfg.high_mgdl = float(thresholds.get("high_mgdl", cfg.high_mgdl))
     cfg.very_high_mgdl = float(thresholds.get("very_high_mgdl", cfg.very_high_mgdl))
+
+    cfg.trend_local = bool(trend.get("local", cfg.trend_local))
+    cfg.trend_window_min = float(trend.get("window_min", cfg.trend_window_min))
+    cfg.trend_fast_mgdl_min = float(
+        trend.get("fast_mgdl_min", cfg.trend_fast_mgdl_min)
+    )
 
     cfg.poll_interval_sec = float(polling.get("interval_sec", cfg.poll_interval_sec))
     cfg.alert_on_low = bool(polling.get("alert_on_low", cfg.alert_on_low))
@@ -119,6 +132,32 @@ def _validate(cfg: Config) -> None:
         raise ValueError(
             "thresholds must satisfy low < high < very_high: "
             f"{cfg.low_mgdl} / {cfg.high_mgdl} / {cfg.very_high_mgdl}"
+        )
+
+    # These are checked whether or not the fit is switched on. `local`
+    # is flipped from inside the headset like everything else here, and
+    # a setting that is only rejected at the moment it starts being used
+    # is rejected at the worst possible moment.
+    #
+    # The history arrives at one point every GRAPH_RESOLUTION_MIN, so a
+    # window has to be long enough for MIN_FIT_POINTS of them to land in
+    # it. Shorter and the arrow silently falls back to the API's five
+    # buckets forever, rather than failing where it was set -- which is
+    # exactly what a window of 15 did before this floor existed.
+    window_floor = MIN_FIT_POINTS * GRAPH_RESOLUTION_MIN
+    if cfg.trend_window_min < window_floor:
+        raise ValueError(
+            f"trend.window_min must be at least {window_floor:.0f}; the API "
+            f"sends one point every ~{GRAPH_RESOLUTION_MIN:.0f} minutes, so a "
+            f"shorter window will not reliably hold the {MIN_FIT_POINTS} "
+            f"needed to fit a slope: {cfg.trend_window_min}"
+        )
+    # It divides the slope, so zero is a crash on the first reading
+    # rather than a wrong angle.
+    if cfg.trend_fast_mgdl_min <= 0:
+        raise ValueError(
+            "trend.fast_mgdl_min must be positive: "
+            f"{cfg.trend_fast_mgdl_min}"
         )
 
     # Polling harder than the official app risks being rate limited or cut
