@@ -103,15 +103,18 @@ always_on_top = true
 # read at a desk, where a few hours of history is worth the space it
 # takes, and the overlay is glanced at mid-game, where the whole point
 # is the number in half a second. Turning it on grows the card from
-# 512x256 to 512x376 -- the window resizes, and in VR the face keeps its
+# 512x256 to 512x404 -- the window resizes, and in VR the face keeps its
 # width in metres and gets taller.
 in_window = true
 in_vr = false
 
-# How far back it shows, in minutes. The history arrives at one point
-# every 15 minutes, so 30 is the floor -- below that there are not two
-# points to draw a line between. Much past 3 hours and the points are a
-# few pixels apart, which is a texture rather than a shape.
+# How far back it shows, in minutes. 0 means all of it -- every point
+# the response carried, about twelve hours, with the time axis running
+# from the oldest reading to the newest rather than a fixed length.
+# Any other value is a length, and 30 is then the floor: the history
+# arrives at one point every 15 minutes, so anything shorter has no two
+# points to draw a line between. A fixed window is the one that holds
+# the axis still between fetches.
 window_min = 180.0
 
 # The top and bottom of the Y axis, in mg/dL like every other threshold
@@ -121,6 +124,10 @@ window_min = 180.0
 # alarming. Readings past either end ride the edge rather than vanish.
 # The axis has to contain low_mgdl and high_mgdl, since the target range
 # is drawn as a band across it.
+#
+# low_mgdl and very_high_mgdl also get a red dashed line each, labelled
+# with the level. Those labels follow display.unit -- 3.9 and 13.3 in
+# mmol mode -- and so do none of the comparisons behind them.
 axis_low_mgdl = 40.0
 axis_high_mgdl = 300.0
 

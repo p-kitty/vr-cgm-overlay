@@ -74,9 +74,26 @@ def gapped(mgdl: float, trend: int, age_min: float) -> Reading:
     )
 
 
+# Twelve hours, at the fifteen minutes apart the API sends: an
+# overnight flat stretch, breakfast, and the settle after it. This is
+# what `window_min = 0` actually has to draw.
+DAY = [
+    118, 112, 106, 101, 98, 96, 95, 97, 99, 102, 104, 103,
+    101, 99, 97, 96, 95, 94, 96, 98, 101, 105, 112, 128,
+    154, 181, 203, 214, 211, 199, 184, 170, 158, 148, 141, 136,
+    132, 128, 125, 122, 119, 117, 115, 114, 113, 112, 111, 110,
+]
+
+
 def main() -> int:
     plain = WatchFaceRenderer()
     graphed = WatchFaceRenderer(graph=GraphTuning())
+    # window_min = 0: everything the response carried, with the X axis
+    # as long as the history rather than a fixed length.
+    allday = WatchFaceRenderer(graph=GraphTuning(window_min=0))
+    # The labels are the one part of the face that changes with the
+    # display unit, so one tile has to be drawn in the other one.
+    mmol = WatchFaceRenderer(unit="mmol", graph=GraphTuning())
 
     # Every status appears once, because each one now has a marker edge of
     # its own and the point of the sheet is to see them side by side: left
@@ -129,6 +146,15 @@ def main() -> int:
             reading(134, 3, 31, [151, 148, 141, 137, 133, 130, 134])
         ),
         graphed.render_message("NO CONNECTION", detail="no reading yet"),
+        # All twelve hours. The times underneath step to whatever keeps
+        # them to four labels, so this and the three-hour tiles above
+        # should not be labelled at the same interval.
+        allday.render(reading(110, 3, 1, DAY)),
+        # And the same graph in mmol/L: the level labels convert, the
+        # arithmetic behind them does not.
+        mmol.render(
+            reading(147, 4, 1, [104, 99, 102, 118, 163, 194, 188, 171, 158, 147])
+        ),
     ]
 
     # The tiles are no longer all one size, so the grid is measured off

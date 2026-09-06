@@ -513,15 +513,21 @@ axis_high_mgdl = 300.0
 |---|---|
 | `in_window` (true) | Draw it in the desktop window |
 | `in_vr` (false) | Draw it on the controller face |
-| `window_min` (180) | How far back it shows. The floor is 30: the history arrives at one point every 15 minutes, so a shorter window has no two points to draw a line between |
+| `window_min` (180) | How far back it shows. **`0` means all of it** — everything the response carried, about twelve hours, with the time axis running from the oldest reading to the newest. Any other value is a length, and the floor is then 30: the history arrives at one point every 15 minutes, so anything shorter has no two points to draw a line between |
 | `axis_low_mgdl` (40) / `axis_high_mgdl` (300) | The bottom and top of the Y axis. Must contain `low_mgdl` and `high_mgdl` |
+
+A fixed window and `0` are for different things. `0` shows the most, and
+the axis is as long as the history behind it, so it never draws empty
+space where a sensor had not been running yet. A fixed window holds the
+axis still between fetches, which is what you want if you are glancing
+rather than reading.
 
 **The two frontends are separate settings on purpose.** A window is read
 at a desk, where a few hours of history is worth the room it takes. The
 overlay is glanced at mid-game, where the number in half a second is the
 whole design goal, so it stays off there unless you ask for it.
 
-Turning it on grows the card from 512x256 to 512x376. The window resizes
+Turning it on grows the card from 512x256 to 512x404. The window resizes
 itself on the next frame; in VR the face keeps the width `width_m` gives
 it and gets taller, so expect to revisit `offset` if you switch it on
 there.
@@ -540,9 +546,17 @@ What it draws, and why each of these is a rule rather than a preference:
 - **The line breaks across gaps rather than spanning them.** A stretch
   where the phone was not scanning gets no line drawn through it,
   because a line there would be measurements that were never taken.
+- **`low_mgdl` and `very_high_mgdl` each get a red dashed line**,
+  labelled with the level. They are the two the band does not mark —
+  its lower edge is `low_mgdl`, but a change of shade is not a line, and
+  `very_high_mgdl` is outside it altogether.
 - **The newest point is marked in the status colour**, the same colour
   as the digits. It is the one place the graph and the number are the
   same fact, and it says which end is now.
+- **The labels follow `display.unit` and your own clock.** The levels
+  read 70 and 240 in mg/dL mode and 3.9 and 13.3 in mmol/L; the times
+  along the bottom are local, and step to whatever keeps them to four
+  or so. The comparisons behind all of it stay in mg/dL.
 
 `tools/preview.py` draws all of it — a meal rise, a quiet run, a fall
 into a low, a reading off the top of the axis, a scanning gap, and a

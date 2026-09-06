@@ -52,8 +52,8 @@ Nothing has exercised these yet. Each says how to check it.
   `GRAPH_RESOLUTION_MIN`.
 - **The sparkline on a controller.** `graph.in_vr` has never been run on
   a headset; everything below was decided at a desk with `--window`. It
-  grows the card from 512x256 to 512x376, and the overlay is sized by
-  width, so at `width_m = 0.14` the face becomes about 10cm tall instead
+  grows the card from 512x256 to 512x404, and the overlay is sized by
+  width, so at `width_m = 0.14` the face becomes about 11cm tall instead
   of 7 and grows around its centre — which means `offset` was tuned for
   a shorter card and will want revisiting. The question a device answers
   and a desk cannot is whether three hours of trace is legible at arm's
