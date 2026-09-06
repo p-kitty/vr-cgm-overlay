@@ -115,11 +115,14 @@ class Graph:
     in_vr: bool = False
     # How far back to draw. 0 is "all of it": every point the response
     # carried, with the X axis spanning the oldest to the newest rather
-    # than a fixed length.
-    window_min: float = 180.0
-    # The axis the trace is drawn against, fixed rather than fitted to
-    # the data. See cgm.face.graph for why fitting it would lie.
-    axis_low_mgdl: float = 40.0
+    # than a fixed length. Eight hours by default -- long enough to hold
+    # a night, short enough that the points are not touching.
+    window_min: float = 480.0
+    # The axis the trace is drawn against. The low is a floor the graph
+    # never goes below, the high a minimum it grows past only to keep a
+    # reading on the chart. See cgm.face.graph for why it does not fit
+    # itself to the data instead.
+    axis_low_mgdl: float = 50.0
     axis_high_mgdl: float = 300.0
 
 
@@ -495,7 +498,8 @@ def _validate(cfg: Config) -> None:
     # can be read without an axis drawn beside it. An axis that does not
     # contain the range clips the band against an edge, where it stops
     # looking like a band and starts looking like the graph having a
-    # floor or a ceiling.
+    # floor or a ceiling. The top only ever grows from here, so checking
+    # the configured value is checking the smallest axis there can be.
     if not (gr.axis_low_mgdl <= th.low_mgdl and th.high_mgdl <= gr.axis_high_mgdl):
         raise ValueError(
             "the graph axis must contain the target range: "

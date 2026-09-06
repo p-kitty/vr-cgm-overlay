@@ -9,9 +9,14 @@ cache and no storage; it is a second reading of data already in hand.
 Four rules decide what gets drawn, and each one is there because the
 obvious alternative lies:
 
-  - **The Y axis is fixed**, not fitted to the data. Auto-scaling turns
-    a quiet flat stretch into a mountain range, which makes a calm
-    reading look alarming at exactly the glance this face exists for.
+  - **The Y axis does not shrink to the data.** Its bottom never moves
+    at all and its top never drops below the configured one, so a quiet
+    flat stretch stays a flat line -- fitting the axis to whatever the
+    last few hours happened to do would turn that into a mountain range
+    and make a calm reading look alarming. What it will do is grow
+    upwards, and only far enough to hold a reading that would otherwise
+    have been clipped: a real hyper is the one thing worth redrawing the
+    scale for, and the top label says when that has happened.
   - **The target range is a band behind the line**, so where the trace
     sits reads without anyone measuring it against an axis. The two
     thresholds a reading must not cross get a dashed line each on top
@@ -24,9 +29,11 @@ obvious alternative lies:
     that looks like a sensor that stopped rather than one that has not
     been running that long.
 
-Values are clamped into the axis rather than pushed off it, so a reading
-past the top rides the edge. It is still visibly past the band, and the
-number above says how far.
+A reading below the bottom is clamped onto it rather than pushed off,
+so a 42 draws where a 50 would. That is deliberate -- the floor is the
+one part of the scale the eye can rely on being in the same place -- and
+it is safe here because it is the *number* that says how low a low is,
+in digits the size of the card, on a face that has gone red.
 
 The axis labels are the one part of the face that is not fixed text.
 They follow `display.unit`, because a "240" shown to someone reading
@@ -36,6 +43,7 @@ local, because that is the clock the reader is comparing them against.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -68,6 +76,19 @@ BAND_TINT = 0.18
 LABEL_COLOR = (150, 155, 168)
 LABEL_PAD = 8
 
+# How close two level labels may come before the lower-priority one is
+# dropped. They are written centred on their own level, so anything
+# under about the height of a line of them overlaps into mush. At the
+# default axis this is what silently drops the low threshold's label:
+# 50 and 70 are eight percent of the scale apart, and no plot tall
+# enough to separate them would fit on a wrist.
+LABEL_MIN_GAP = 24
+
+# What the axis top is rounded up to when a reading goes above it. Round
+# numbers, so an axis that has moved still reads as a scale rather than
+# as the value of whatever the highest sample happened to be.
+AXIS_STEP_MGDL = 50.0
+
 # The dashed threshold lines. A dash long enough to read as a line and a
 # gap wide enough that it does not read as a solid one.
 DASH_ON = 9
@@ -93,13 +114,19 @@ class GraphTuning:
     window is the one for glancing at it, because the axis does not
     move underneath you between fetches.
 
-    The axis bounds are mg/dL like every other threshold in this
-    project, including under `display.unit = "mmol"`. The labels are
-    converted on the way out; the arithmetic never is.
+    `axis_low_mgdl` is a floor and `axis_high_mgdl` is a minimum. The
+    bottom of the graph is always exactly the floor; the top is the
+    minimum, or as far above it as a reading needs, rounded up to
+    AXIS_STEP_MGDL. So the scale is the one asked for on an ordinary
+    day and grows only to keep a hyper on the chart.
+
+    Both are mg/dL like every other threshold in this project, including
+    under `display.unit = "mmol"`. The labels are converted on the way
+    out; the arithmetic never is.
     """
 
-    window_min: float = 180.0
-    axis_low_mgdl: float = 40.0
+    window_min: float = 480.0
+    axis_low_mgdl: float = 50.0
     axis_high_mgdl: float = 300.0
 
     @property
@@ -117,6 +144,23 @@ def format_value(mgdl: float, unit: str) -> str:
     if unit == "mmol":
         return f"{mgdl / 18.0:.1f}"
     return f"{mgdl:.0f}"
+
+
+def axis_top(points, tuning: GraphTuning) -> float:
+    """The top of the Y axis for these points.
+
+    The configured minimum, unless something rose above it, in which
+    case the next round step over the highest reading. It never comes
+    back down below the configured value, so the axis only ever moves
+    for a reason the reader can see on the chart.
+    """
+    top = tuning.axis_high_mgdl
+    if not points:
+        return top
+    peak = max(p.mgdl for p in points)
+    if peak <= top:
+        return top
+    return math.ceil(peak / AXIS_STEP_MGDL) * AXIS_STEP_MGDL
 
 
 def recent(points, window_min: float, now: datetime) -> list:
@@ -227,12 +271,18 @@ def draw_sparkline(
     # would put it into the low marker's room.
     top += HEAD_RADIUS
     bottom -= HEAD_RADIUS
-    span_mgdl = tuning.axis_high_mgdl - tuning.axis_low_mgdl
     span_px = bottom - top
 
+    # The points are windowed first because how high the axis reaches
+    # depends on them, and every line below is drawn against that.
+    shown = recent(points, tuning.window_min, now)
+    floor = tuning.axis_low_mgdl
+    ceiling = axis_top(shown, tuning)
+    span_mgdl = ceiling - floor
+
     def y_for(mgdl: float) -> float:
-        clamped = max(tuning.axis_low_mgdl, min(tuning.axis_high_mgdl, mgdl))
-        return bottom - (clamped - tuning.axis_low_mgdl) / span_mgdl * span_px
+        clamped = max(floor, min(ceiling, mgdl))
+        return bottom - (clamped - floor) / span_mgdl * span_px
 
     # The band goes down first, so everything else crosses it rather
     # than disappearing behind it. It is drawn whether or not there is
@@ -247,19 +297,36 @@ def draw_sparkline(
     # The two levels a reading is not supposed to be on the wrong side
     # of. The band already marks low_mgdl as its own lower edge, but a
     # band edge is a change of shade and these two deserve a line: they
-    # are the levels the face turns a colour for.
-    for level in (theme.low_mgdl, theme.very_high_mgdl):
-        _dashed_line(draw, y_for(level), left, right, theme.color_low)
-        if font is not None:
-            draw.text(
-                (left - LABEL_PAD, y_for(level)),
-                format_value(level, unit),
-                font=font,
-                fill=LABEL_COLOR,
-                anchor="rm",
-            )
+    # are the levels the face turns a colour for. Each takes the colour
+    # it turns, so the line and the card agree about which end of the
+    # scale is which.
+    for level, color in (
+        (theme.low_mgdl, theme.color_low),
+        (theme.very_high_mgdl, theme.color_very_high),
+    ):
+        _dashed_line(draw, y_for(level), left, right, color)
 
-    shown = recent(points, tuning.window_min, now)
+    if font is not None:
+        # Priority order, and it is not the order they appear in.
+        #
+        # The floor first: it never moves, so it is the one number the
+        # eye can place the rest against. Then very_high, which is the
+        # level worth reading off. The ceiling comes third on purpose --
+        # at the default axis it sits 60 mg/dL above very_high, close
+        # enough to be dropped, and that is the right outcome: the top
+        # is then exactly what the config says and needs no label. The
+        # moment a hyper pushes it up, the gap opens and the number
+        # appears, which is how the reader is told the scale moved.
+        #
+        # The low threshold is last and never survives at the defaults:
+        # 70 sits eight percent of the scale above a floor of 50, and no
+        # plot that fits on a wrist can separate them. Its line is still
+        # drawn, with the floor's own label right underneath it.
+        _draw_levels(
+            draw, left, y_for, (floor, theme.very_high_mgdl, ceiling,
+                                theme.low_mgdl), unit, font
+        )
+
     if not shown:
         return
 
@@ -298,6 +365,29 @@ def draw_sparkline(
     # the number are the same fact, and it says which end is now.
     newest = shown[-1]
     _dot(draw, (x_for(newest.at), y_for(newest.mgdl)), HEAD_RADIUS, accent)
+
+
+def _draw_levels(draw, left: float, y_for, levels, unit: str, font) -> None:
+    """Write the level labels into the gutter, most important first.
+
+    A label that would land on top of one already written is dropped
+    rather than drawn over it: two levels can be any distance apart, and
+    the axis moves, so which pairs collide is not something the layout
+    can be tuned around once and left.
+    """
+    placed: list[float] = []
+    for level in levels:
+        y = y_for(level)
+        if any(abs(y - taken) < LABEL_MIN_GAP for taken in placed):
+            continue
+        draw.text(
+            (left - LABEL_PAD, y),
+            format_value(level, unit),
+            font=font,
+            fill=LABEL_COLOR,
+            anchor="rm",
+        )
+        placed.append(y)
 
 
 def _dashed_line(draw, y: float, left: float, right: float, color) -> None:
