@@ -12,19 +12,19 @@ the face composites over any SteamVR title.
 
 ```
 ┌─ LibreLinkUp Cloud (api-jp.libreview.io and friends) ─┐
-│  POST /llu/auth/login              → token, region     │
-│  GET  /llu/connections             → patientId         │
-│  GET  /llu/connections/{id}/graph                      │
-└────────────────────┬───────────────────────────────────┘
+│  POST /llu/auth/login              → token, region    │
+│  GET  /llu/connections             → patientId        │
+│  GET  /llu/connections/{id}/graph                     │
+└────────────────────┬──────────────────────────────────┘
                      │ HTTPS every 60s (jitter + exponential backoff)
-┌────────────────────▼───────────────────────────────────┐
-│  vr-cgm-overlay (resident, single process)              │
-│                                                         │
-│    cgm.core     ──→ cgm.face     ──→ cgm.vr             │
-│    auth + fetch     PIL drawing      pyopenvr           │
-│                                                         │
-│    cgm.main: 60s fetch loop / 1s draw loop              │
-└────────────────────┬───────────────────────────────────┘
+┌────────────────────▼──────────────────────────────────┐
+│  vr-cgm-overlay (resident, single process)            │
+│                                                       │
+│    cgm.core     ──→ cgm.face     ──→ cgm.vr           │
+│    auth + fetch     PIL drawing      pyopenvr         │
+│                                                       │
+│    cgm.main: 60s fetch loop / 1s draw loop            │
+└────────────────────┬──────────────────────────────────┘
                      │ SetOverlayTransformTrackedDeviceRelative
            ┌─────────▼──────────┐
            │ SteamVR Compositor │ → wrist-tracked, over every game
