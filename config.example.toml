@@ -118,4 +118,34 @@ fast_mgdl_min = 2.0
 
 [polling]
 interval_sec = 60    # must be at least 30; the sensor updates ~once a minute
-alert_on_low = true  # buzz the controller once when a low starts
+
+# The master switch for announcing a low. The channels under it are
+# supplements: the face going red is the alert, and neither of these is
+# a substitute for looking at it.
+alert_on_low = true
+
+# Buzz the controller. Only the VR overlay has one, and the call is the
+# legacy haptic API that a driver is free to ignore -- it does nothing
+# on a Quest 3 through Virtual Desktop. Harmless to leave on.
+alert_haptic = true
+
+# Play a sound. This is the one channel that reaches you without looking
+# at your wrist, and it works the same in VR and in --window.
+alert_sound = true
+
+# Empty plays your Windows "Exclamation" sound. Set it to a .wav to use
+# your own -- forward slashes, and only .wav, since anything else would
+# need a decoder this does not carry.
+sound_path = ""
+
+# How far above low_mgdl the reading has to climb before the next dip
+# counts as a new low. Without it a reading hovering on the threshold
+# announces every wobble; the sensor's own noise is a couple of mg/dL.
+# 0 goes back to the bare threshold test.
+rearm_margin_mgdl = 5.0
+
+# 0 fires once, on the way in. Set it to a number of minutes to be told
+# again while the low lasts -- worth it if sleeping through one is the
+# worry, at the cost of the nuisance that gets alerts muted. Must be at
+# least 1: a new reading only arrives about once a minute.
+repeat_every_min = 0.0
