@@ -594,10 +594,11 @@ What it draws, and why each of these is a rule rather than a preference:
   grown, so a number appearing there means the scale is no longer the
   one in the config.
 
-`tools/preview.py` draws all of it — a meal rise, a quiet run, a fall
-into a low, a reading off the top of the axis, a scanning gap, and a
-fresh sensor with two points to its name — to `preview-states.png`,
-with no network and no headset.
+`tools/preview.py` draws the face with no network and no headset. On its
+own it writes `preview-states.png`, the four states at the top of this
+file; `--debug` writes `preview-debug.png` instead, which is the working
+sheet — every marker edge side by side, the message card, a line
+breaking across a scanning gap, and the labels in mmol/L.
 
 ## Known limits
 

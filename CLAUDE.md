@@ -113,7 +113,7 @@ of them need a VR headset or network access:
 
 ```bash
 python -m unittest discover -s tests  # the logic that runs headless
-python tools/preview.py               # every watch face state, to a PNG
+python tools/preview.py --debug       # every watch face state, to a PNG
 python tools/check_orbit.py           # the orbit placement geometry
 python tools/check_gaze.py            # the gaze fade and the rules on it
 python tools/check_palette.py         # the palette under colour blindness

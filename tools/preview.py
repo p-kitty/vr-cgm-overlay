@@ -1,30 +1,31 @@
-"""Render the watch face states onto one sheet, with no network and no VR.
+"""Render watch face states to a PNG, with no network and no VR.
 
-Guards against discovering the face is unreadable only once the headset
-is on.
+Two sheets, because they have two audiences.
 
-    python tools/preview.py
+    python tools/preview.py            -> preview-states.png
+    python tools/preview.py --debug    -> preview-debug.png
 
-**One tile per thing worth looking at, and no more.** The sheet is for
-eyes, and a sheet nobody scrolls to the bottom of has stopped being
-that. Anything provable by assertion belongs in `tests/`, which already
-covers the status bands, the marker edges, the trend angle, the gap
-rule and the axis; a tile earns its place here only by showing
-something a person has to judge.
+**`preview-states.png` is the picture at the top of `README.md`**, and
+it is the first thing anyone curious about this project sees. Four
+tiles: what the face looks like when everything is fine, when it is
+low, when it is high, and what it shrinks to on a controller. Nothing
+that needs a paragraph to explain, and nothing anyone has to scroll.
 
-So there are two groups and no overlap between them:
+**`preview-debug.png` is the working sheet.** One tile per thing a
+person has to judge and no assertion can: every marker edge side by
+side, the message card, a line breaking across a scanning gap, the
+labels in mmol/L. It is not committed and not linked from anywhere;
+render it when changing the face and look at it.
 
-  - **The face on its own**, 512x256, which is what the overlay draws.
-    One tile per marker edge, because the whole point of the edges is
-    being told apart at a glance, and that is a judgement.
-  - **The face with a graph**, which is what `--window` draws. One tile
-    per drawing rule that changes the picture -- the axis growing, the
-    floor holding, a line breaking, the labels converting. The statuses
-    are not repeated here: they are the same colours on a taller card.
+Neither sheet is a substitute for `tests/`. Anything with an edge in it
+-- which status a value falls in, where a line may break, how far the
+axis grows -- is asserted there. A tile earns its place on either sheet
+only by showing something that has to be looked at.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -38,21 +39,26 @@ from cgm.face.renderer import WatchFaceRenderer
 GAP = 24
 BACKDROP = (48, 50, 58, 255)
 
-# Eight hours at the fifteen minutes apart the API sends, which is the
-# default window. An overnight flat stretch, breakfast, and the settle
-# after it.
+# Exactly the default window: 480 minutes at one point every fifteen is
+# 33 of them, and the count matters. One short and the trace starts a
+# few pixels in from the left of the plot while the band and the rules
+# run the whole width, which reads as the graph having been clipped
+# rather than as the sample data being fifteen minutes thin.
+POINTS = 33
+
+# An overnight flat stretch, breakfast, and the settle after it.
 DAY = [
-    101, 99, 97, 96, 95, 94, 96, 98, 101, 105, 112, 128,
-    154, 181, 203, 214, 211, 199, 184, 170, 158, 148, 141, 136,
-    132, 128, 125, 122, 119, 117, 115, 110,
+    103, 101, 99, 97, 96, 95, 94, 96, 98, 101, 105, 112,
+    128, 154, 181, 203, 214, 211, 199, 184, 170, 158, 148, 141,
+    136, 132, 128, 125, 122, 119, 117, 115, 110,
 ]
 
 # The same day ending in a hyper that runs off the configured top of the
 # axis, which is the one thing that moves it.
-HYPER = DAY[:20] + [178, 192, 221, 258, 288, 321, 356, 372, 361, 340, 318, 297]
+HYPER = DAY[:21] + [178, 192, 221, 258, 288, 321, 356, 372, 361, 340, 318, 297]
 
 # And ending under the floor, which does not move.
-UNDER = DAY[:22] + [131, 122, 110, 96, 84, 73, 64, 55, 48, 44]
+UNDER = DAY[:23] + [131, 122, 110, 96, 84, 73, 64, 55, 48, 44]
 
 
 def history(taken_at: datetime, values, step_min: float = GRAPH_RESOLUTION_MIN):
@@ -82,14 +88,15 @@ def reading(mgdl: float, trend: int, age_min: float, values=None) -> Reading:
 
 
 def gapped(mgdl: float, trend: int) -> Reading:
-    """A reading whose history stops for two hours in the middle.
+    """A reading whose history stops for an hour and a half in the middle.
 
     The sensor not being scanned is ordinary, and the line has to break
     across it rather than draw a straight run through a stretch nothing
-    was measured in.
+    was measured in. Both halves together still fill the window, so the
+    only thing missing from the picture is the thing being shown.
     """
     taken_at = datetime.now(timezone.utc)
-    before = history(taken_at - timedelta(minutes=195), DAY[:14])
+    before = history(taken_at - timedelta(minutes=195), DAY[:20])
     after = history(taken_at, [126, 118, 110, 104, 99, 103, 108, mgdl])
     return Reading(
         value_mgdl=mgdl,
@@ -101,36 +108,36 @@ def gapped(mgdl: float, trend: int) -> Reading:
     )
 
 
-def main() -> int:
-    plain = WatchFaceRenderer()
-    graphed = WatchFaceRenderer(graph=GraphTuning())
-    mmol = WatchFaceRenderer(unit="mmol", graph=GraphTuning())
-
-    tiles = [
-        # The face the overlay draws. One per marker edge: left for in
-        # range, top for high, a heavier top for very high, bottom for
-        # low, the full outline for stale.
+def showcase(plain: WatchFaceRenderer, graphed: WatchFaceRenderer) -> list:
+    """What README.md shows. Four states, no explanation needed."""
+    return [
+        # Everything is fine, and the graph says how it got there.
+        graphed.render(reading(110, 3, 1, DAY)),
+        # Low: red, and the trace on the floor.
+        graphed.render(reading(44, 1, 1, UNDER)),
+        # High: orange, and the axis grown to keep the peak on the chart.
+        graphed.render(reading(297, 2, 1, HYPER)),
+        # And the same face without the graph, which is what rides the
+        # controller in VR.
         plain.render(reading(112, 3, 1)),
+    ]
+
+
+def debug(
+    plain: WatchFaceRenderer, graphed: WatchFaceRenderer, mmol: WatchFaceRenderer
+) -> list:
+    """The working sheet: what the showcase leaves out."""
+    return [
+        # Every marker edge, to be told apart at a glance: top for high,
+        # a heavier top for very high, bottom for low.
         plain.render(reading(214, 5, 3)),
         plain.render(reading(268, 4, 2)),
         plain.render(reading(64, 1, 1)),
-        # Stale, on a low reading, because that is where the two rules
-        # meet: an hour-old 58 must go grey and outlined rather than red
-        # and bottom-lit, or it would still be claiming the arm is
-        # dropping now.
+        # Stale, on a low reading, because that is where two rules meet:
+        # an hour-old 58 must go grey and outlined rather than red and
+        # bottom-lit, or it would still be claiming the arm is dropping.
         plain.render(reading(58, 2, 41)),
         plain.render_message("NO CONNECTION", detail="no reading yet"),
-        # The face --window draws, and the everyday one: a meal rise
-        # inside the band, the floor ruled, both thresholds dashed, and
-        # eight hours of times underneath.
-        graphed.render(reading(110, 3, 1, DAY)),
-        # The axis moving. It grows to the next round 50 above the peak
-        # rather than flattening it against the top, and the number that
-        # appears up there is how that is announced.
-        graphed.render(reading(297, 2, 1, HYPER)),
-        # The axis not moving. The floor stays where it is and the trace
-        # runs along it; the digits are what say 44.
-        graphed.render(reading(44, 1, 1, UNDER)),
         # A gap in scanning. The line breaks rather than spanning it.
         graphed.render(gapped(107, 2)),
         # And in mmol/L, where the level labels convert and nothing
@@ -138,27 +145,56 @@ def main() -> int:
         mmol.render(reading(110, 3, 1, DAY)),
     ]
 
-    # The tiles are not all one size, so the grid is measured off them
-    # rather than off a pair of constants.
-    cols = 2
+
+def sheet(tiles: list, cols: int = 2) -> Image.Image:
+    """Lay the tiles out in a grid, measured off the tiles themselves.
+
+    They are not all one size -- a card with a graph is taller -- so a
+    row is as tall as its tallest tile and the shorter ones are centred
+    in it rather than left hanging from the top.
+    """
     rows = [tiles[i : i + cols] for i in range(0, len(tiles), cols)]
     col_width = max(tile.width for tile in tiles)
-    sheet = Image.new(
+    row_heights = [max(t.height for t in row) for row in rows]
+    image = Image.new(
         "RGBA",
         (
             cols * col_width + (cols + 1) * GAP,
-            sum(max(t.height for t in row) for row in rows) + (len(rows) + 1) * GAP,
+            sum(row_heights) + (len(rows) + 1) * GAP,
         ),
         BACKDROP,
     )
     y = GAP
-    for row in rows:
+    for row, height in zip(rows, row_heights):
         for i, tile in enumerate(row):
-            sheet.alpha_composite(tile, (GAP + i * (col_width + GAP), y))
-        y += max(t.height for t in row) + GAP
+            image.alpha_composite(
+                tile,
+                (GAP + i * (col_width + GAP), y + (height - tile.height) // 2),
+            )
+        y += height + GAP
+    return image
 
-    out = Path(__file__).parent.parent / "preview-states.png"
-    sheet.save(out)
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="render the working sheet instead of the one README shows",
+    )
+    args = parser.parse_args(argv)
+
+    plain = WatchFaceRenderer()
+    graphed = WatchFaceRenderer(graph=GraphTuning())
+    mmol = WatchFaceRenderer(unit="mmol", graph=GraphTuning())
+
+    if args.debug:
+        tiles, name = debug(plain, graphed, mmol), "preview-debug.png"
+    else:
+        tiles, name = showcase(plain, graphed), "preview-states.png"
+
+    out = Path(__file__).parent.parent / name
+    sheet(tiles).save(out)
     print(f"wrote: {out}")
     return 0
 
