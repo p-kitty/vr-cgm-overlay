@@ -267,8 +267,10 @@ because each one becomes a real failure.
 
 ## Known limits
 
-The low-glucose buzz does not work on Quest 3 controllers, and may be
-ignored by any device on the newer input system. **Haptics are a
+The low-glucose buzz is silent on a Quest 3 running through Virtual
+Desktop, which is the one setup this has been tried on. It uses the
+legacy haptic call, which a driver is free to ignore, so whether it
+buzzes on yours is a question only running it answers. **Haptics are a
 supplement; the face itself is the real alert.**
 
 ## Cautions
