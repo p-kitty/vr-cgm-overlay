@@ -320,6 +320,30 @@ class WristOverlay:
             return None
         return index
 
+    def _device_name(self, index: int) -> str:
+        """What the driver calls this controller, for the attach log line.
+
+        A device-dependent finding here -- the low buzz staying silent, the
+        offset defaults sitting wrong -- usually belongs to the driver
+        presenting the controller rather than to the controller itself, and
+        the same Quest 3 arrives through a different driver over Link than
+        over Virtual Desktop. Naming both at attach is what lets a later
+        report say which stack it came from.
+        """
+        names = []
+        for prop in (
+            openvr.Prop_ControllerType_String,
+            openvr.Prop_TrackingSystemName_String,
+        ):
+            try:
+                name = self._system.getStringTrackedDeviceProperty(index, prop)
+            except Exception as exc:  # not every driver fills these in
+                log.debug("no string property %d on device %d: %s", prop, index, exc)
+                continue
+            if name:
+                names.append(name)
+        return "/".join(names) or "unnamed"
+
     def _head_in_controller_space(self, index: int) -> tuple[float, float, float] | None:
         """Where the headset is, in the controller's own frame.
 
@@ -423,7 +447,12 @@ class WristOverlay:
             self._attached_index = index
             self._orbit_angle = None
             self._orbit_at = None
-            log.info("attached to the %s controller (index=%d)", self._hand, index)
+            log.info(
+                "attached to the %s controller (index=%d, %s)",
+                self._hand,
+                index,
+                self._device_name(index),
+            )
 
         if self._orbit or self._guide is not None:
             head = self._head_in_controller_space(index)
