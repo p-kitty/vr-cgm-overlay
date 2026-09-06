@@ -21,8 +21,8 @@ ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
 
 
 def setUpModule():
-    # The watcher logs a warning for every edit it rejects, which two of
-    # these tests provoke on purpose.
+    # The watcher logs a warning for every edit it rejects, which
+    # several of these tests provoke on purpose.
     logging.getLogger("vrcgm").addHandler(logging.NullHandler())
 
 
@@ -105,6 +105,13 @@ class BadEdit(WatcherTestCase):
 
     def test_a_rejected_setting_is_ignored(self):
         self.write(body(interval=5))
+        self.assertIsNone(self.watcher.poll())
+
+    def test_a_key_nothing_reads_is_ignored(self):
+        # A typo saved with the headset on is the likeliest way to reach
+        # this: the edit is refused, the running config stays, and the
+        # log says which key it was.
+        self.write(body() + "\n[trend]\nwindowmin = 30\n")
         self.assertIsNone(self.watcher.poll())
 
     def test_a_deleted_file_is_ignored(self):

@@ -16,9 +16,10 @@ there is no existing file for it to break.
 
 from __future__ import annotations
 
+import difflib
 import logging
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
@@ -146,13 +147,151 @@ class Config:
     polling: Polling = field(default_factory=Polling)
 
 
+def _keys_of(*classes: type) -> frozenset[str]:
+    return frozenset(f.name for cls in classes for f in fields(cls))
+
+
+# What each section of the file is allowed to contain. Read off the
+# dataclasses rather than written out a second time: every field above is
+# loaded under its own name, so a key is recognised exactly when some
+# dataclass has a field called that, and adding a setting cannot forget
+# to register it here. `[display]` is the one section that fills two
+# dataclasses -- see the module docstring for why it stays one section.
+SECTION_KEYS: dict[str, frozenset[str]] = {
+    "account": _keys_of(Account),
+    "display": _keys_of(Display, Vr),
+    "window": _keys_of(Window),
+    "thresholds": _keys_of(Thresholds),
+    "trend": _keys_of(Trend),
+    "polling": _keys_of(Polling),
+}
+
+# [account] is in that table like everything else. It was briefly exempt,
+# on the grounds that it gets pasted in from other clients and an extra
+# key there is harmless -- but once an exempt section had to warn anyway
+# to be any use, the exemption bought nothing but a second rule. One rule
+# is also the direction that can be undone: relaxing a section later
+# accepts files that used to be refused, where tightening one later
+# refuses files that used to work, at a commit with nothing to do with
+# the setting that suddenly stops the app.
+
+
+def _homes(key: str) -> list[str]:
+    """Which sections do recognise `key`. Empty when none do."""
+    return sorted(name for name, keys in SECTION_KEYS.items() if key in keys)
+
+
+def _nearest(word: str, candidates) -> str | None:
+    """The nearest thing that would have worked, or None.
+
+    A misspelling is the common mistake and the hardest to see by
+    rereading, so where there is a near miss the message names it.
+    """
+    near = difflib.get_close_matches(word, sorted(candidates), n=1, cutoff=0.7)
+    return near[0] if near else None
+
+
+def _listed(names) -> str:
+    return ", ".join(sorted(names))
+
+
+def _check_keys(raw: dict) -> None:
+    """Refuse a file that contains anything nothing reads.
+
+    Every setting below is read with `.get(key, default)`, which cannot
+    tell a key that is absent from one that is misspelled or filed under
+    the wrong section. Both then do nothing, silently, and the only
+    evidence is a setting that appears not to work -- which reads as a
+    broken feature rather than a typo. `[thresholds]` is why this is an
+    error and not a warning: someone raising `low_mgdl` to match their
+    own low would otherwise find out when an alert did not fire.
+
+    Every rejection carries something to act on. A near miss is named, a
+    misfiled key is sent to its section, and a key that resembles nothing
+    -- invented, or carried over from another client -- gets the list of
+    what the section does take, because that one has no other clue in it
+    and "not a setting" alone leaves the reader to go and find the list.
+
+    Every section is treated the same way, `[account]` included: an
+    `api_verison` that kept the default silently would otherwise surface
+    as a login the API rejects, hours later, with nothing pointing back
+    at the file.
+
+    Raising here also covers the live reload for free, since
+    `ConfigWatcher.poll` already keeps the running config when a re-read
+    raises. The cost is that a config.toml written against a newer commit
+    stops an older checkout from starting -- see README.md.
+    """
+    problems: list[str] = []
+    for name, body in raw.items():
+        if not isinstance(body, dict):
+            # A key above the first [section] header, so nothing ever
+            # looks for it. TOML puts it at the top level; we do not.
+            homes = _homes(name)
+            near = _nearest(name, set().union(*SECTION_KEYS.values()))
+            if homes:
+                problems.append(
+                    f"{name} sits outside any section; it belongs under [{homes[0]}]"
+                )
+            elif near:
+                problems.append(
+                    f"{name} sits outside any section; did you mean {near}, "
+                    f"under [{_homes(near)[0]}]?"
+                )
+            else:
+                problems.append(
+                    f"{name} sits outside any section, and is not a setting in "
+                    "any of them"
+                )
+            continue
+
+        allowed = SECTION_KEYS.get(name)
+        if allowed is None:
+            near = _nearest(name, SECTION_KEYS)
+            hint = (
+                f"did you mean [{near}]?"
+                if near
+                else "the sections are " + _listed(f"[{s}]" for s in SECTION_KEYS)
+            )
+            problems.append(f"[{name}] is not a section; {hint}")
+            continue
+
+        for key in body:
+            if key in allowed:
+                continue
+            homes = _homes(key)
+            near = _nearest(key, allowed)
+            if homes:
+                hint = f"it belongs under [{homes[0]}]"
+            elif near:
+                hint = f"did you mean {near}?"
+            else:
+                hint = f"[{name}] takes {_listed(allowed)}"
+            problems.append(f"{name}.{key} is not a setting; {hint}")
+
+    if problems:
+        raise ValueError(
+            "config.toml holds settings nothing reads, so they would do "
+            "nothing without saying so:\n  "
+            + "\n  ".join(problems)
+        )
+
+
 def load(path: Path) -> Config:
-    """Read the config file, falling back to defaults for absent keys."""
+    """Read the config file, falling back to defaults for absent keys.
+
+    Absent is not the same as unrecognised: a key nothing reads is an
+    error, not a default. See `_check_keys`.
+    """
     if not path.exists():
         raise FileNotFoundError(f"{path} not found; copy config.example.toml to create it")
 
     with path.open("rb") as fh:
         raw = tomllib.load(fh)
+
+    # Before anything is read, while the file's own keys still exist.
+    # Past this point the unrecognised ones have already been dropped.
+    _check_keys(raw)
 
     account = raw.get("account", {})
     display = raw.get("display", {})
