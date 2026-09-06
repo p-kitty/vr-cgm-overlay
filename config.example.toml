@@ -70,6 +70,19 @@ flip_vertical = false   # set true if the face renders upside down
 stale_after_min = 10.0  # readings older than this go grey
 
 
+# Only `vr-cgm-overlay --window` reads this section: the same watch face
+# in a desktop window instead of on a controller. The overlay ignores it,
+# the same way the window ignores every placement key above. Both are
+# re-read while running.
+[window]
+# Size, as a multiple of the face's own 512x256. Between 0.25 and 4.0.
+scale = 1.0
+
+# Keep the window above whatever else you are using. It is a glucose
+# readout, so having to go and find it defeats the point.
+always_on_top = true
+
+
 [thresholds]
 # All mg/dL. These are used even when displaying mmol/L.
 # The face is red below low, green up to high, yellow up to very_high,
