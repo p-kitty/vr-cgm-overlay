@@ -16,9 +16,17 @@ the dangerous failure.
 The draw loop also watches config.toml, so placement can be tuned with
 the headset still on.
 
-Only the loop and the wiring are here. The fetch schedule and the config
-watcher live in `cgm.core`, because neither has anything to do with VR
-and a second frontend should not have to import this file to get them.
+There is a second frontend, `--window`, which puts the same face in a
+desktop window. It runs the same core and the same renderer with the VR
+half left out, so anything that is not about placement can be watched
+without a headset on -- which is most of what is still unverified in
+`NOTES.md`. Its loop belongs to tkinter rather than to us, so the fetch
+schedule moves onto a thread there; see `cgm.core.fetcher`.
+
+Only the loops and the wiring are here. The fetch schedule and the
+config watcher live in `cgm.core`, because neither has anything to do
+with VR and a second frontend should not have to import this file to get
+them.
 """
 
 from __future__ import annotations
@@ -47,12 +55,15 @@ from cgm.core.librelink import (  # noqa: E402
     LibreLinkError,
     LibreLinkUp,
 )
+from cgm.core.fetcher import Fetcher  # noqa: E402
 from cgm.core.poller import Poller  # noqa: E402
 from cgm.core.watcher import ConfigWatcher  # noqa: E402
 from cgm.face.renderer import (  # noqa: E402
     Theme,
     TrendTuning,
     WatchFaceRenderer,
+    face_image,
+    unit_label,
 )
 
 log = logging.getLogger("vrcgm")
@@ -61,17 +72,26 @@ DRAW_INTERVAL_SEC = 1.0
 # Used only when the headset will not say what it refreshes at.
 FALLBACK_TRACK_HZ = 90.0
 
-# Settings a reload cannot apply: the overlay picks its controller role
-# once, and the API client is built with the account. Keyed by the name
-# in config.toml, because that is the file the message sends you to.
-RESTART_ONLY = {
-    "display.hand": "vr.hand",
+# Settings a reload cannot apply, keyed by the name in config.toml,
+# because that is the file the message sends you to.
+#
+# The account is built into the API client once, whichever frontend is
+# running, so this half is everybody's.
+RESTART_ONLY_ACCOUNT = {
     "account.email": "account.email",
     "account.password": "account.password",
     "account.patient_id": "account.patient_id",
     "account.region": "account.region",
     "account.api_version": "account.api_version",
 }
+# `hand` is the overlay's alone: it picks its controller role once at
+# startup. A window has no controller, so editing `hand` there is not a
+# change waiting on a restart, it is a key that frontend does not read --
+# and saying "restart to apply" about it would send someone off to
+# restart and find nothing different.
+RESTART_ONLY_VR = {"display.hand": "vr.hand"}
+
+RESTART_ONLY = RESTART_ONLY_ACCOUNT | RESTART_ONLY_VR
 
 
 @contextlib.contextmanager
@@ -130,6 +150,25 @@ def build_renderer(cfg: config_mod.Config) -> WatchFaceRenderer:
     )
 
 
+def warn_restart_only(
+    cfg: config_mod.Config, previous: config_mod.Config, settings: dict[str, str]
+) -> list[str]:
+    """Name the edited settings this frontend cannot pick up, and say so.
+
+    Silently doing nothing is the worst of the three possible
+    behaviours: the file says one thing, the screen shows another, and
+    nothing connects them.
+    """
+    changed = [
+        name
+        for name, path in settings.items()
+        if _setting(cfg, path) != _setting(previous, path)
+    ]
+    if changed:
+        log.warning("restart to apply: %s", ", ".join(changed))
+    return changed
+
+
 def apply_config(
     cfg: config_mod.Config,
     previous: config_mod.Config,
@@ -152,13 +191,7 @@ def apply_config(
     poller.set_interval(cfg.polling.interval_sec)
     poller.set_trend(build_trend(cfg))
 
-    changed = [
-        name
-        for name, path in RESTART_ONLY.items()
-        if _setting(cfg, path) != _setting(previous, path)
-    ]
-    if changed:
-        log.warning("restart to apply: %s", ", ".join(changed))
+    warn_restart_only(cfg, previous, RESTART_ONLY)
 
 
 def run(cfg: config_mod.Config, config_path: Path) -> int:
@@ -245,27 +278,29 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
                     time.sleep(DRAW_INTERVAL_SEC)
                     continue
 
-                if poller.reading is not None:
-                    image = renderer.render(
-                        poller.reading, stale_after_min=cfg.display.stale_after_min
-                    )
-                    # Buzz only on the transition into a low, not while it
-                    # lasts: a repeating alert is intolerable mid-game.
-                    is_low = poller.reading.value_mgdl < cfg.thresholds.low_mgdl
-                    if cfg.polling.alert_on_low and is_low and not was_low:
-                        overlay.pulse()
-                    was_low = is_low
-                    # The buzz is once; this lasts. A gaze fade must not
-                    # dim the one state the colour is there to shout.
-                    overlay.set_alert(is_low)
-                else:
-                    image = renderer.render_message(
-                        poller.error or "WAITING", detail="no reading yet"
-                    )
-                    # No reading has ever arrived: there is no low on the
-                    # face to protect. A failed fetch does not land here,
-                    # because the last reading stays up.
-                    overlay.set_alert(False)
+                reading = poller.reading
+                image = face_image(
+                    renderer,
+                    reading,
+                    poller.error,
+                    stale_after_min=cfg.display.stale_after_min,
+                )
+
+                # No reading has ever arrived: there is no low on the
+                # face to protect. A failed fetch does not land here,
+                # because the last reading stays up.
+                is_low = (
+                    reading is not None
+                    and reading.value_mgdl < cfg.thresholds.low_mgdl
+                )
+                # Buzz only on the transition into a low, not while it
+                # lasts: a repeating alert is intolerable mid-game.
+                if cfg.polling.alert_on_low and is_low and not was_low:
+                    overlay.pulse()
+                was_low = is_low
+                # The buzz is once; this lasts. A gaze fade must not
+                # dim the one state the colour is there to shout.
+                overlay.set_alert(is_low)
 
                 overlay.set_image(image)
 
@@ -277,6 +312,100 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
                 time.sleep(delay)
             else:
                 next_tick = time.perf_counter()  # fell behind; do not chase it
+
+
+def _window_title(reading, error: str | None, unit: str) -> str:
+    """What the taskbar shows, so a covered window still reports.
+
+    The number and its unit only. Not the trend arrow: the API's arrow
+    and the one on the face disagree by design whenever the local fit is
+    in use, and a title bar is the wrong place to explain which is
+    which.
+    """
+    if reading is None:
+        return f"{error or 'waiting'} - vr-cgm-overlay"
+    return f"{reading.display_value(unit)} {unit_label(unit)} - vr-cgm-overlay"
+
+
+def window(cfg: config_mod.Config, config_path: Path) -> int:
+    """Show the face in a desktop window instead of on a controller.
+
+    The same core, the same renderer, and no VR at all. What changes is
+    who owns the loop: tkinter does, so the fetch goes on a thread
+    rather than blocking the one thing that has to keep repainting.
+
+    Reloads work the way they do in the overlay -- and `window.scale`
+    and `window.always_on_top` reload too, so this is also where the
+    watcher gets exercised without a headset.
+    """
+    # tkinter is a stdlib module some builds of Python leave out, and
+    # PIL.ImageTk needs it in turn. Importing it lazily keeps --dry-run
+    # and the overlay working on such a build; tests/test_imports.py
+    # walks the AST so the name here cannot go stale unnoticed.
+    from cgm.desk.window import FaceWindow
+
+    client = LibreLinkUp(
+        cfg.account.email,
+        cfg.account.password,
+        patient_id=cfg.account.patient_id,
+        region=cfg.account.region,
+        version=cfg.account.api_version,
+    )
+    renderer = build_renderer(cfg)
+    poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
+    watcher = ConfigWatcher(config_path)
+    was_low = False
+
+    with Fetcher(poller), FaceWindow(
+        scale=cfg.window.scale, always_on_top=cfg.window.always_on_top
+    ) as win:
+        win.set_image(renderer.render_message("CONNECTING"))
+
+        def tick() -> None:
+            nonlocal cfg, renderer, was_low
+
+            edited = watcher.poll()
+            if edited is not None:
+                # `hand` and the placement keys are not this frontend's
+                # to apply or to complain about, so only the account is
+                # checked here. See RESTART_ONLY_VR.
+                warn_restart_only(edited, cfg, RESTART_ONLY_ACCOUNT)
+                poller.set_interval(edited.polling.interval_sec)
+                poller.set_trend(build_trend(edited))
+                win.set_scale(edited.window.scale)
+                win.set_always_on_top(edited.window.always_on_top)
+                renderer = build_renderer(edited)
+                cfg = edited
+                log.info("reloaded %s", config_path)
+
+            # One read each. The fetch thread replaces both with a
+            # single assignment, and `error` is only consulted when
+            # there is no reading, so a pair caught mid-swap still
+            # describes a state the poller was really in.
+            reading = poller.reading
+            win.set_image(
+                face_image(
+                    renderer,
+                    reading,
+                    poller.error,
+                    stale_after_min=cfg.display.stale_after_min,
+                )
+            )
+            win.set_title(_window_title(reading, poller.error, cfg.display.unit))
+
+            is_low = (
+                reading is not None and reading.value_mgdl < cfg.thresholds.low_mgdl
+            )
+            # Once, on the way in -- the same rule as the controller
+            # buzz. There is no gaze fade here to hold off, because a
+            # window does not dim itself.
+            if cfg.polling.alert_on_low and is_low and not was_low:
+                win.pulse()
+            was_low = is_low
+
+        win.run(tick, interval_ms=int(DRAW_INTERVAL_SEC * 1000))
+
+    return 0
 
 
 def dry_run(cfg: config_mod.Config, out: Path) -> int:
@@ -296,7 +425,7 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
     reading = client.get_latest()
     print(
         f"glucose: {reading.display_value(cfg.display.unit)} "
-        f"{'mmol/L' if cfg.display.unit == 'mmol' else 'mg/dL'} {reading.arrow}  "
+        f"{unit_label(cfg.display.unit)} {reading.arrow}  "
         f"({reading.age_minutes():.1f} min old)"
     )
     # The graph endpoint's history is the one part of the response no
@@ -335,10 +464,18 @@ def main(argv: list[str] | None = None) -> int:
         default=Path(__file__).resolve().parents[2] / "config.toml",
         help="path to the config file",
     )
-    parser.add_argument(
+    # Both of these say "run something other than the overlay", so
+    # asking for two at once is a question with no answer.
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--dry-run",
         action="store_true",
         help="fetch one live reading and write a PNG, without using SteamVR",
+    )
+    mode.add_argument(
+        "--window",
+        action="store_true",
+        help="show the face in a desktop window instead of in VR",
     )
     parser.add_argument(
         "--out", type=Path, default=Path("preview.png"), help="output path for --dry-run"
@@ -361,6 +498,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.dry_run:
             return dry_run(cfg, args.out)
+        if args.window:
+            return window(cfg, args.config)
         return run(cfg, args.config)
     except KeyboardInterrupt:
         log.info("shutting down")
