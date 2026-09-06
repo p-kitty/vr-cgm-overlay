@@ -65,6 +65,33 @@ Nothing has exercised these yet. Each says how to check it.
   a shorter card and will want revisiting. The question a device answers
   and a desk cannot is whether three hours of trace is legible at arm's
   length at all, or whether it is just texture under the number.
+- **`LAST_GAP_MIN` is a guess, and the number it is guarding against
+  has never been bounded.** The sparkline joins its newest point across
+  a gap of up to an hour, because that gap is `graphData` being
+  published late rather than the sensor not reading. An hour was picked
+  as comfortably past the largest lag anyone has seen -- 18 minutes
+  measured on 2026-09-07, 30 in the entry below -- and nothing has ever
+  watched the lag long enough to say how far it really goes.
+
+  It can be wrong in both directions, and each shows differently:
+
+  - **Too low**: the trace breaks in front of the newest point again,
+    the way it did at 30. That means a lag over an hour, which would be
+    news. Measure it before raising the constant -- compare the last
+    `FactoryTimestamp` in `graphData` against the one on
+    `glucoseMeasurement`, both in the same response.
+  - **Too high**: a stretch where the phone genuinely was not scanning
+    gets joined up, and the graph draws a straight line across hours
+    nobody measured. That is the failure worth catching, because unlike
+    a visible break it does not look wrong. A long `--window` session
+    with the log open is where it would show: the reading's own age
+    climbs during a real scanning gap, and the trace should break.
+
+  The two cases are indistinguishable from inside `cgm.face.graph`,
+  which sees only timestamps. If the bound turns out to need tuning
+  rather than a one-off correction, the thing to reach for is the
+  reading's age -- during a real scanning gap the current measurement
+  is stale too, and during a publication lag it is not.
 - **The palette against real colour vision deficiency.** It is validated
   by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
   and asserts the separations. That model is dichromacy — full absence of

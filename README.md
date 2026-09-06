@@ -570,9 +570,10 @@ What it draws, and why each of these is a rule rather than a preference:
   up to an hour. Past an hour it is left stranded, because a phone that
   really stopped scanning looks identical from here and joining across
   an afternoon would draw one that never happened.
-- **The floor gets a quiet gridline**, saying where the scale starts.
-  Eventually there will be one every 50 mg/dL in that colour; this is
-  the first of them.
+- **The floor gets a quiet gridline** — a solid hairline, thinner and
+  fainter than the dashed threshold lines above it, saying where the
+  scale starts. Eventually there will be one every 50 mg/dL in that
+  colour; this is the first of them.
 - **`low_mgdl` and `very_high_mgdl` each get a dashed line**, in the
   colour the face turns at that level — red below, deep orange above.
   They are the two the band does not mark: its lower edge is `low_mgdl`,

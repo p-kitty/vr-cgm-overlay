@@ -124,7 +124,13 @@ DASH_WIDTH = 2
 # Quiet enough to be scenery -- a scale you can measure against when you
 # look for it, and not something competing with the trace or with the
 # two lines that actually mean something.
+#
+# Solid and a single pixel, where the threshold lines are dashed and
+# two. That is the whole difference in weight between "this is where the
+# paper is ruled" and "this is a level you care about", and it has to
+# survive there being a row of these one day.
 GRID_COLOR = (58, 62, 74)
+GRID_WIDTH = 1
 
 # What the time axis is allowed to step by, in minutes, smallest first.
 # The first one that fits the span in MAX_TIME_TICKS intervals wins, so
@@ -346,7 +352,7 @@ def draw_sparkline(
     # starts here", which is worth being able to see and not worth
     # noticing. One day there will be one of these every
     # AXIS_STEP_MGDL; this is the first.
-    _dashed_line(draw, y_for(floor), left, right, GRID_COLOR)
+    _grid_line(draw, y_for(floor), left, right)
 
     # The two levels a reading is not supposed to be on the wrong side
     # of. The band already marks low_mgdl as its own lower edge, but a
@@ -441,6 +447,11 @@ def draw_sparkline(
     # the number are the same fact, and it says which end is now.
     newest = shown[-1]
     _dot(draw, (x_for(newest.at), y_for(newest.mgdl)), HEAD_RADIUS, accent)
+
+
+def _grid_line(draw, y: float, left: float, right: float) -> None:
+    """A hairline rule. Solid, unlike the threshold lines above it."""
+    draw.line([(left, y), (right, y)], fill=GRID_COLOR, width=GRID_WIDTH)
 
 
 def _dashed_line(draw, y: float, left: float, right: float, color) -> None:

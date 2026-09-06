@@ -386,6 +386,20 @@ class Drawing(unittest.TestCase):
             max(y for _, y in self.coloured(THEME.color_low)),
         )
 
+    def test_the_floor_is_solid_and_a_hairline(self):
+        # The weight is the difference between a ruled line and a level
+        # that means something: one row of pixels, unbroken, where the
+        # thresholds are two and dashed.
+        self.sparkline(())
+        floor = self.coloured(GRID_COLOR)
+        rows = {y for _, y in floor}
+        self.assertEqual(len(rows), 1, f"the gridline is {len(rows)} rows deep")
+        xs = sorted(x for x, _ in floor)
+        self.assertTrue(
+            all(b - a == 1 for a, b in zip(xs, xs[1:])),
+            "the gridline came out dashed",
+        )
+
     def test_the_threshold_lines_are_dashed_and_not_solid(self):
         self.sparkline(())
         row = min(y for _, y in self.coloured(THEME.color_low))
