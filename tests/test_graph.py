@@ -24,7 +24,9 @@ from cgm.core.librelink import GRAPH_RESOLUTION_MIN, GlucosePoint, Reading
 from cgm.face.graph import (
     AXIS_FLOOR_MGDL,
     AXIS_STEP_MGDL,
+    GRID_COLOR,
     HEAD_RADIUS,
+    LAST_GAP_MIN,
     MAX_GAP_MIN,
     MAX_TIME_TICKS,
     TRACE_COLOR,
@@ -215,7 +217,12 @@ class Segments(unittest.TestCase):
         self.assertEqual(len(segments(points)), 1)
 
     def test_just_past_the_threshold_breaks(self):
-        points = series((MAX_GAP_MIN + 1, 100), (0, 110))
+        # Three points, so the break is an interior one. A break in
+        # front of the newest point is the publication lag and is
+        # treated separately -- see PublicationLag below.
+        points = series(
+            (MAX_GAP_MIN + 71, 100), (MAX_GAP_MIN + 1, 104), (15, 108), (0, 110)
+        )
         self.assertEqual(len(segments(points)), 2)
 
     def test_every_point_survives_the_split(self):
@@ -225,6 +232,44 @@ class Segments(unittest.TestCase):
 
     def test_nothing_splits_into_nothing(self):
         self.assertEqual(segments([]), [])
+
+
+class PublicationLag(unittest.TestCase):
+    """The gap in front of the newest point is not a scanning gap.
+
+    One response carries both the current measurement and the history,
+    and they are not equally fresh: graphData's newest entry trails
+    glucoseMeasurement by a quarter of an hour or more. The reading at
+    the end of that gap exists, which is the proof the sensor was
+    reading throughout it, so the line is joined across -- up to a
+    bound, because a phone that really stopped scanning looks the same
+    from here and joining across an afternoon would draw one.
+    """
+
+    def test_the_newest_point_is_joined_across_the_lag(self):
+        # The last gap is 40 minutes, which breaks the line anywhere else.
+        points = series((55, 100), (40, 104), (0, 112))
+        self.assertEqual(len(segments(points)), 1)
+
+    def test_a_gap_past_the_bound_leaves_it_stranded(self):
+        points = series((LAST_GAP_MIN + 16, 100), (LAST_GAP_MIN + 1, 104), (0, 112))
+        runs = segments(points)
+        self.assertEqual([[p.mgdl for p in run] for run in runs], [[100, 104], [112]])
+
+    def test_the_bound_itself_still_joins(self):
+        points = series((LAST_GAP_MIN + 15, 100), (LAST_GAP_MIN, 104), (0, 112))
+        self.assertEqual(len(segments(points)), 1)
+
+    def test_an_interior_gap_is_still_a_gap(self):
+        # Only the newest point gets the exception. A hole in the middle
+        # of the night is missing data however fresh the reading is.
+        points = series((240, 96), (225, 99), (30, 104), (0, 112))
+        runs = segments(points)
+        self.assertEqual([[p.mgdl for p in run] for run in runs], [[96, 99], [104, 112]])
+
+    def test_the_exception_can_be_switched_off(self):
+        points = series((55, 100), (40, 104), (0, 112))
+        self.assertEqual(len(segments(points, last_gap_min=0)), 2)
 
 
 class CanvasSize(unittest.TestCase):
@@ -327,6 +372,18 @@ class Drawing(unittest.TestCase):
         # Screen Y grows downwards, so the low line is the lower one.
         self.assertGreater(
             min(y for _, y in low), max(y for _, y in very_high)
+        )
+
+    def test_the_floor_gets_a_line_of_its_own(self):
+        # It says where the scale starts. Quiet, because that is worth
+        # being able to see and not worth noticing.
+        self.sparkline(())
+        floor = self.coloured(GRID_COLOR)
+        self.assertTrue(floor, "the floor has no line")
+        # Below both thresholds, because it is the bottom of the axis.
+        self.assertGreater(
+            min(y for _, y in floor),
+            max(y for _, y in self.coloured(THEME.color_low)),
         )
 
     def test_the_threshold_lines_are_dashed_and_not_solid(self):

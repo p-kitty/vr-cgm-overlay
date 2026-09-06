@@ -50,6 +50,13 @@ Nothing has exercised these yet. Each says how to check it.
   minute a minute, a 45 minute window -- the floor -- fell back at a
   lag of 30, and 60 held on to 45. Check the lag before suspecting
   `GRAPH_RESOLUTION_MIN`.
+
+  The sparkline shows the same lag from the other side. Past 30 minutes
+  it exceeded `MAX_GAP_MIN` and the trace broke in front of the newest
+  point, which looked like a fault and was not one; `LAST_GAP_MIN` now
+  joins that one gap up to an hour. So a break there again means a lag
+  over an hour, which nothing has yet seen, and is worth measuring
+  rather than assuming.
 - **The sparkline on a controller.** `graph.in_vr` has never been run on
   a headset; everything below was decided at a desk with `--window`. It
   grows the card from 512x256 to 512x404, and the overlay is sized by

@@ -23,7 +23,9 @@ obvious alternative lies:
     of that, because those are the two the band alone does not mark.
   - **The line breaks across gaps** rather than spanning them. A joined
     line over a stretch the sensor was not scanning draws data that was
-    never measured.
+    never measured. The newest point is the exception, because the gap
+    in front of it is the service publishing late rather than the sensor
+    not reading -- see LAST_GAP_MIN.
   - **The X axis is only as long as the data**, when asked for all of
     it. A window drawn wider than the history behind it is empty space
     that looks like a sensor that stopped rather than one that has not
@@ -54,6 +56,24 @@ from datetime import datetime, timedelta
 # number is repeated here rather than imported because cgm.face imports
 # nothing from cgm.core; tests/test_graph.py holds the two in step.
 MAX_GAP_MIN = 30.0
+
+# The exception to that rule, and it applies to the newest point only.
+#
+# One response carries both the current measurement and the history, but
+# they are not equally fresh: graphData's newest entry trails
+# glucoseMeasurement, by eighteen minutes when this was last measured
+# and by thirty in NOTES.md. That trailing distance is how long the
+# service takes to publish a sample into the array, not a stretch the
+# sensor was not scanning -- the reading at the end of it exists, which
+# is the proof it was scanning throughout. So the last point is joined
+# across a gap that would break the line anywhere else.
+#
+# Bounded, because the two cases do look alike from here. If the phone
+# really stopped scanning for hours, graphData stops and so does the
+# measurement, and joining across that would draw a straight line
+# through an afternoon nobody measured. An hour is well past any
+# publication lag seen and well short of a gap worth drawing.
+LAST_GAP_MIN = 60.0
 
 # The trace is deliberately not the status colour. The digits, the arrow
 # and the marker all say what the reading is *now*; colouring an hour of
@@ -94,11 +114,17 @@ AXIS_FLOOR_MGDL = 50.0
 # as the value of whatever the highest sample happened to be.
 AXIS_STEP_MGDL = 50.0
 
-# The dashed threshold lines. A dash long enough to read as a line and a
+# The dashed reference lines. A dash long enough to read as a line and a
 # gap wide enough that it does not read as a solid one.
 DASH_ON = 9
 DASH_OFF = 7
 DASH_WIDTH = 2
+
+# Gridlines: the floor for now, and eventually one every AXIS_STEP_MGDL.
+# Quiet enough to be scenery -- a scale you can measure against when you
+# look for it, and not something competing with the trace or with the
+# two lines that actually mean something.
+GRID_COLOR = (58, 62, 74)
 
 # What the time axis is allowed to step by, in minutes, smallest first.
 # The first one that fits the span in MAX_TIME_TICKS intervals wins, so
@@ -185,12 +211,23 @@ def recent(points, window_min: float, now: datetime) -> list:
     return [p for p in points if cutoff <= p.at <= now]
 
 
-def segments(points, max_gap_min: float = MAX_GAP_MIN) -> list[list]:
+def segments(
+    points,
+    max_gap_min: float = MAX_GAP_MIN,
+    last_gap_min: float = LAST_GAP_MIN,
+) -> list[list]:
     """Split a series wherever the sensor stopped reporting.
 
     Each returned run is a stretch that may be joined up. A run of one
     is legal and means a single measurement with nothing either side of
     it close enough to connect to.
+
+    The newest point is the exception. It is the current measurement,
+    folded into the series by `_parse_graph_data` because graphData
+    stops short of it, and the distance back to graphData's own newest
+    entry is publication lag rather than missing data -- see
+    LAST_GAP_MIN. It is joined across up to that much, and left stranded
+    beyond it.
     """
     runs: list[list] = []
     for point in points:
@@ -198,6 +235,14 @@ def segments(points, max_gap_min: float = MAX_GAP_MIN) -> list[list]:
             runs[-1].append(point)
         else:
             runs.append([point])
+
+    # Only ever one point can be stranded this way: it is the one the
+    # series was extended with, and everything before it came out of the
+    # same array at the same resolution.
+    if len(runs) > 1 and len(runs[-1]) == 1:
+        newest, previous = runs[-1][0], runs[-2][-1]
+        if (newest.at - previous.at).total_seconds() / 60 <= last_gap_min:
+            runs[-2].append(runs.pop()[0])
     return runs
 
 
@@ -296,6 +341,12 @@ def draw_sparkline(
         (left, y_for(theme.high_mgdl), right, y_for(theme.low_mgdl)),
         fill=(*_mix(card[:3], theme.color_in_range, BAND_TINT), card[3]),
     )
+
+    # The floor. A gridline rather than a threshold: it means "the scale
+    # starts here", which is worth being able to see and not worth
+    # noticing. One day there will be one of these every
+    # AXIS_STEP_MGDL; this is the first.
+    _dashed_line(draw, y_for(floor), left, right, GRID_COLOR)
 
     # The two levels a reading is not supposed to be on the wrong side
     # of. The band already marks low_mgdl as its own lower edge, but a

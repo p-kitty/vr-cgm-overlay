@@ -560,6 +560,19 @@ What it draws, and why each of these is a rule rather than a preference:
 - **The line breaks across gaps rather than spanning them.** A stretch
   where the phone was not scanning gets no line drawn through it,
   because a line there would be measurements that were never taken.
+- **Except in front of the newest point.** One response carries both the
+  current measurement and the history, but they are not equally fresh:
+  `graphData`'s newest entry trails `glucoseMeasurement` — 18 minutes
+  when this was last measured against the live API, and 30 in
+  `NOTES.md`. That is the service publishing a sample into the array
+  late, not the sensor failing to read, and the proof is the reading
+  sitting at the end of the gap. So the last point is joined across it,
+  up to an hour. Past an hour it is left stranded, because a phone that
+  really stopped scanning looks identical from here and joining across
+  an afternoon would draw one that never happened.
+- **The floor gets a quiet gridline**, saying where the scale starts.
+  Eventually there will be one every 50 mg/dL in that colour; this is
+  the first of them.
 - **`low_mgdl` and `very_high_mgdl` each get a dashed line**, in the
   colour the face turns at that level — red below, deep orange above.
   They are the two the band does not mark: its lower edge is `low_mgdl`,
