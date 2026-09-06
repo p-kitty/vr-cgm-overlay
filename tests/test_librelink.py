@@ -152,7 +152,11 @@ class ReadingDisplay(unittest.TestCase):
 
     def test_arrow_for_each_trend(self):
         self.assertEqual(reading(trend=1).arrow, "↓")
+        # The two cp932 has no glyph for, and so the two that decided
+        # whether a redirected run crashed. See tests/test_console.py.
+        self.assertEqual(reading(trend=2).arrow, "↘")
         self.assertEqual(reading(trend=3).arrow, "→")
+        self.assertEqual(reading(trend=4).arrow, "↗")
         self.assertEqual(reading(trend=5).arrow, "↑")
 
     def test_unknown_trend_has_no_arrow(self):
