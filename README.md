@@ -84,6 +84,7 @@ have actually been reported against existing clients.
 | Login answers with a region redirect | Follow `data.redirect` and log in again (once) |
 | `account-id` header (SHA256 of the user id) required | Derived at login, sent on every later call |
 | `Timestamp` is local time with no zone | Age is computed from `FactoryTimestamp` (UTC) |
+| `Value` is in the account's own unit, which follows its country | Only `ValueInMgPerDl` is read; mmol/L is derived from it |
 | No token while terms or email verification are pending | `step.type` is detected and explained |
 | Tokens expire with no refresh endpoint and no warning | A 401 triggers one automatic re-login |
 | `TrendArrow` is five buckets on undocumented thresholds | The trend is fitted from `graphData`; `TrendArrow` is the fallback |

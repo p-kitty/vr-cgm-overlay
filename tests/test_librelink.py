@@ -46,7 +46,6 @@ def reading(mgdl=100.0, trend=3, age_min=0.0, slope=None) -> Reading:
     taken_at = datetime.now(timezone.utc) - timedelta(minutes=age_min)
     return Reading(
         value_mgdl=mgdl,
-        value_mmol=mgdl / 18.0,
         trend=trend,
         timestamp_utc=taken_at,
         is_high=False,
@@ -135,6 +134,14 @@ class ParseFactoryTimestamp(unittest.TestCase):
 class ReadingDisplay(unittest.TestCase):
     def test_mgdl_is_whole_numbers(self):
         self.assertEqual(reading(mgdl=112.4).display_value("mgdl"), "112")
+
+    def test_mmol_is_derived_from_mgdl(self):
+        # The API's own Value field is in the account's display unit,
+        # which follows its country, so a mg/dL account sends the mg/dL
+        # number there. Reading it back drew 112 where 6.2 belonged --
+        # a number no arm has ever produced. Only ValueInMgPerDl is
+        # guaranteed, so mmol/L has to be computed from it.
+        self.assertAlmostEqual(reading(mgdl=112.0).value_mmol, 112.0 / 18.0)
 
     def test_mmol_keeps_one_decimal(self):
         # 6.2 rather than 6, which is the whole reason for the unit split.
@@ -291,7 +298,6 @@ class ReadingTrend(unittest.TestCase):
         taken_at = datetime.now(timezone.utc) - timedelta(hours=3)
         entry = Reading(
             value_mgdl=100.0,
-            value_mmol=5.6,
             trend=3,
             timestamp_utc=taken_at,
             is_high=False,
@@ -365,7 +371,7 @@ class ParseGraphData(unittest.TestCase):
 class ReadingAge(unittest.TestCase):
     def test_age_against_a_given_now(self):
         stamp = datetime(2026, 9, 4, 12, 0, 0, tzinfo=timezone.utc)
-        entry = Reading(100.0, 5.6, 3, stamp, False, False)
+        entry = Reading(100.0, 3, stamp, False, False)
         now = stamp + timedelta(minutes=7, seconds=30)
         self.assertAlmostEqual(entry.age_minutes(now), 7.5)
 
