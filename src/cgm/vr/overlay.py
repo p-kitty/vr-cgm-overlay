@@ -26,7 +26,7 @@ import time
 import openvr
 from PIL import Image
 
-from armguide import MARKER_COUNT, ArmGuide
+from cgm.vr.armguide import MARKER_COUNT, ArmGuide
 
 log = logging.getLogger(__name__)
 
@@ -191,7 +191,7 @@ def _gaze_alpha(
 
     Full opacity within `full_deg` of the centre of view, `min_alpha`
     past `fade_deg`, and a straight line between the two. The result
-    never drops below `min_alpha`, which config.py refuses to let reach
+    never drops below `min_alpha`, which cgm.core.config refuses to let reach
     zero: a face that vanished outright would look exactly like the
     process having died, which is the failure this exists to avoid.
     """

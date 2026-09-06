@@ -55,7 +55,7 @@ REGION_URLS = {
 }
 
 # TrendArrow value -> arrow used in logs and CLI output. The overlay draws
-# its own arrows as vectors instead (see renderer.py).
+# its own arrows as vectors instead (see cgm.face.renderer).
 # 1=falling fast 2=falling 3=flat 4=rising 5=rising fast
 TREND_ARROWS = {1: "↓", 2: "↘", 3: "→", 4: "↗", 5: "↑"}
 

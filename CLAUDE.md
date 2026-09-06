@@ -11,6 +11,21 @@ Glucose data comes from the unofficial LibreLinkUp API.
 Single Python process. See `README.md` for the architecture and for the
 list of LibreLinkUp API quirks the client works around.
 
+The code is one installed package, `src/cgm/`, in three layers:
+
+| Layer | Holds | Needs |
+|---|---|---|
+| `cgm.core` | API client, config, poller, config watcher | nothing special |
+| `cgm.face` | the watch face drawing | Pillow |
+| `cgm.vr` | the SteamVR overlay and its arm guide | a headset |
+
+**Put new code in the shallowest layer that can hold it.** The split
+exists so a second frontend can show the same face outside VR, and that
+only pays off while `cgm.vr` stays the small half. `cgm.face` imports
+nothing from `cgm.core`; the one crossing is `cgm.core.poller` reaching
+up for `TrendTuning`, so the fetch log cannot name a trend source the
+face is not drawing.
+
 `NOTES.md` holds what is still open: unverified paths, limits that are
 not going away, decisions that still stand. Keep it out of `README.md`,
 which is for people running the thing.
@@ -82,36 +97,36 @@ Two ways to supply one password was confusing with no real benefit.
 ## Verification
 
 Before committing, confirm the code still runs, on Python 3.14 — the
-version the project targets. None of these need a VR headset or network
-access:
+version the project targets. All of these import `cgm`, so the package
+has to be installed first (`pip install -e .`, once per checkout). None
+of them need a VR headset or network access:
 
 ```bash
-python -m unittest discover -s tests -t .  # the logic that runs headless
-python tools/preview.py                    # every watch face state, to a PNG
-python tools/check_orbit.py                # the orbit placement geometry
-python tools/check_gaze.py                 # the gaze fade and the rules on it
-python tools/check_palette.py              # the palette under colour blindness
+python -m unittest discover -s tests  # the logic that runs headless
+python tools/preview.py               # every watch face state, to a PNG
+python tools/check_orbit.py           # the orbit placement geometry
+python tools/check_gaze.py            # the gaze fade and the rules on it
+python tools/check_palette.py         # the palette under colour blindness
 python -m compileall -q src tools tests
 ```
 
 `tests/` covers what can be asserted without a device: timestamp
 parsing, the trend fit and the arrow angle it maps to, the fetch
-schedule and its backoff, config validation and the live reload, and the
-colour thresholds. It deliberately does not mock the LibreLinkUp HTTP
+schedule and its backoff, config validation, the live reload and which
+settings it cannot apply, the colour thresholds, and that every import
+inside the package resolves -- including the lazy one in `run()`, which
+only executes with a headset attached. It deliberately does not mock the LibreLinkUp HTTP
 calls — the real risk there is the unofficial API
 changing shape, which only `--dry-run` can see — and it does not touch
-`src/overlay.py`.
-
-`-t .` is needed: `tests` is a package, and its `__init__.py` is what
-puts `src` on the path.
+`cgm.vr`.
 
 To check the API client against the live service (needs `config.toml`):
 
 ```bash
-python src/main.py --dry-run
+vr-cgm-overlay --dry-run
 ```
 
-Anything in `src/overlay.py` requires a headset and SteamVR to verify. Do
+Anything under `src/cgm/vr/` requires a headset and SteamVR to verify. Do
 not claim overlay behaviour is confirmed without a device — say it is
 untested instead.
 
@@ -128,10 +143,10 @@ untested instead.
   not delivered, it is homework. Load the file once afterwards to prove
   it still parses, and say what was added. Leave values the user has
   already tuned alone unless the change is about those values.
-- **Target Python 3.14, and do not lower the floors in
-  `requirements.txt`.** Each one is the first release of that package
+- **Target Python 3.14, and do not lower the dependency floors in
+  `pyproject.toml`.** Each one is the first release of that package
   that runs on 3.14; below them the install succeeds and the import
-  fails. `src/main.py` refuses an older interpreter, so keep that guard
-  and the floors in step.
+  fails. `src/cgm/main.py` refuses an older interpreter, so keep that
+  guard and the floors in step.
 - Range checks are always done in mg/dL, even when displaying mmol/L.
 - This is not a medical device. Keep the disclaimer in `README.md`.

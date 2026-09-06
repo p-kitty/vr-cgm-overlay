@@ -37,7 +37,7 @@ Nothing has exercised these yet. Each says how to check it.
   meal rise while it is still rising. That takes a session with the log
   open. Every fetch logs either a slope in mg/dL/min or the API arrow
   marked `(API)`, so the log says which source was used and how the
-  number moved; `python src/main.py --dry-run` prints the same thing
+  number moved; `vr-cgm-overlay --dry-run` prints the same thing
   once. Watch for `(API)` while the sensor is scanning normally: that
   would mean the resolution has changed again.
 - **The palette against real colour vision deficiency.** It is validated

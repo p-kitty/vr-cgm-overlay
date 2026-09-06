@@ -13,7 +13,7 @@ looks level. Both are decided by `fit_slope`, and both are asserted
 below against series with a known answer.
 
 What none of this can check is the shape `graphData` actually arrives
-in -- only `python src/main.py --dry-run` sees that.
+in -- only `vr-cgm-overlay --dry-run` sees that.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from librelink import (
+from cgm.core.librelink import (
     GRAPH_RESOLUTION_MIN,
     MIN_FIT_POINTS,
     MIN_FIT_SPAN_MIN,

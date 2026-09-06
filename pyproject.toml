@@ -1,0 +1,50 @@
+# Packaging metadata. The point of installing rather than running from
+# src/ is that `import cgm` then means one thing everywhere -- tests,
+# tools and both entry points -- instead of five copies of a sys.path
+# insertion each guessing at the layout.
+#
+#   pip install -e .        core plus the watch face; no SteamVR needed
+#   pip install -e .[vr]    adds the overlay
+#
+# The dependency floors below are not style: each is the first release of
+# that package that runs on Python 3.14. Below them the install succeeds
+# and the import fails, so do not lower them. src/cgm/main.py refuses an
+# older interpreter; keep that guard and these floors in step.
+
+[build-system]
+requires = ["setuptools>=80"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vr-cgm-overlay"
+version = "0.1.0"
+description = "SteamVR overlay showing blood glucose on your wrist in VR"
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "p-kitty" }]
+
+dependencies = [
+    "requests>=2.33",
+    # 11.3 was the first with cp314 wheels, but as of this bump it still
+    # carries 18 open CVEs. 12.3 is the first with none. Nothing here
+    # decodes an untrusted image, so this is hygiene rather than a fix.
+    "Pillow>=12.3",
+]
+
+[project.optional-dependencies]
+# The SteamVR half. A desktop-only install has no use for these bindings,
+# and cgm.vr is the only thing that imports them -- lazily, so --dry-run
+# already worked on a machine without SteamVR.
+vr = [
+    # 2.12.1401 replaced pkg_resources with importlib.resources. Earlier
+    # releases import pkg_resources, which 3.14 no longer ships.
+    "openvr>=2.12.1401",
+]
+
+[project.scripts]
+vr-cgm-overlay = "cgm.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

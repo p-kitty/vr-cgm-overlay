@@ -13,8 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import config as config_mod
-from librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
+from cgm.core import config as config_mod
+from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
 
@@ -35,10 +35,10 @@ class Loading(ConfigTestCase):
         # config.example.toml is not exhaustive and a user's file need not
         # be either; every section below [account] is optional.
         cfg = self.load()
-        self.assertEqual(cfg.unit, "mgdl")
-        self.assertEqual(cfg.hand, "left")
-        self.assertEqual(cfg.poll_interval_sec, 60.0)
-        self.assertEqual(cfg.low_mgdl, 70.0)
+        self.assertEqual(cfg.display.unit, "mgdl")
+        self.assertEqual(cfg.vr.hand, "left")
+        self.assertEqual(cfg.polling.interval_sec, 60.0)
+        self.assertEqual(cfg.thresholds.low_mgdl, 70.0)
 
     def test_values_are_read_from_the_file(self):
         cfg = self.load(
@@ -46,85 +46,85 @@ class Loading(ConfigTestCase):
             "\n[thresholds]\nlow_mgdl = 80\nhigh_mgdl = 170\nvery_high_mgdl = 250\n"
             "\n[polling]\ninterval_sec = 90\nalert_on_low = false\n"
         )
-        self.assertEqual(cfg.unit, "mmol")
-        self.assertEqual(cfg.hand, "right")
-        self.assertEqual(cfg.width_m, 0.2)
-        self.assertEqual(cfg.low_mgdl, 80.0)
-        self.assertEqual(cfg.poll_interval_sec, 90.0)
-        self.assertFalse(cfg.alert_on_low)
+        self.assertEqual(cfg.display.unit, "mmol")
+        self.assertEqual(cfg.vr.hand, "right")
+        self.assertEqual(cfg.vr.width_m, 0.2)
+        self.assertEqual(cfg.thresholds.low_mgdl, 80.0)
+        self.assertEqual(cfg.polling.interval_sec, 90.0)
+        self.assertFalse(cfg.polling.alert_on_low)
 
     def test_integers_in_the_file_arrive_as_floats(self):
         # TOML distinguishes 70 from 70.0; the comparisons downstream
         # should not have to.
         cfg = self.load("\n[thresholds]\nlow_mgdl = 70\n")
-        self.assertIsInstance(cfg.low_mgdl, float)
+        self.assertIsInstance(cfg.thresholds.low_mgdl, float)
 
     def test_placement_arrives_as_a_tuple(self):
         cfg = self.load(
             "\n[display]\noffset = [0.0, -0.02, 0.1]\nrotation_deg = [-40, 0, 90]\n"
         )
-        self.assertEqual(cfg.offset, (0.0, -0.02, 0.1))
-        self.assertEqual(cfg.rotation_deg, (-40, 0, 90))
+        self.assertEqual(cfg.vr.offset, (0.0, -0.02, 0.1))
+        self.assertEqual(cfg.vr.rotation_deg, (-40, 0, 90))
 
     def test_orbit_defaults_to_off(self):
         # Fixed placement is what has been tuned on a real arm, so orbit
         # is opt in and its own settings still have to have values.
         cfg = self.load()
-        self.assertFalse(cfg.orbit)
-        self.assertFalse(cfg.arm_guide)
-        self.assertEqual(cfg.orbit_radius_m, 0.06)
-        self.assertEqual(cfg.orbit_limit_deg, 120.0)
+        self.assertFalse(cfg.vr.orbit)
+        self.assertFalse(cfg.vr.arm_guide)
+        self.assertEqual(cfg.vr.orbit_radius_m, 0.06)
+        self.assertEqual(cfg.vr.orbit_limit_deg, 120.0)
 
     def test_orbit_settings_are_read(self):
         cfg = self.load(
             "\n[display]\norbit = true\norbit_radius_m = 0.05\n"
             "orbit_limit_deg = 100\narm_guide = true\n"
         )
-        self.assertTrue(cfg.orbit)
-        self.assertTrue(cfg.arm_guide)
-        self.assertEqual(cfg.orbit_radius_m, 0.05)
-        self.assertEqual(cfg.orbit_limit_deg, 100.0)
+        self.assertTrue(cfg.vr.orbit)
+        self.assertTrue(cfg.vr.arm_guide)
+        self.assertEqual(cfg.vr.orbit_radius_m, 0.05)
+        self.assertEqual(cfg.vr.orbit_limit_deg, 100.0)
 
     def test_trend_defaults_to_an_hour_window(self):
         cfg = self.load()
-        self.assertTrue(cfg.trend_local)
-        self.assertEqual(cfg.trend_window_min, 60.0)
-        self.assertEqual(cfg.trend_fast_mgdl_min, 2.0)
+        self.assertTrue(cfg.trend.local)
+        self.assertEqual(cfg.trend.window_min, 60.0)
+        self.assertEqual(cfg.trend.fast_mgdl_min, 2.0)
 
     def test_trend_settings_are_read(self):
         cfg = self.load(
             "\n[trend]\nlocal = false\nwindow_min = 90\nfast_mgdl_min = 1.5\n"
         )
-        self.assertFalse(cfg.trend_local)
-        self.assertEqual(cfg.trend_window_min, 90.0)
-        self.assertEqual(cfg.trend_fast_mgdl_min, 1.5)
+        self.assertFalse(cfg.trend.local)
+        self.assertEqual(cfg.trend.window_min, 90.0)
+        self.assertEqual(cfg.trend.fast_mgdl_min, 1.5)
 
     def test_gaze_fade_defaults_to_off(self):
         # A glucose readout is not a desktop window, so the fade is opt
         # in; its settings still have to have values, since they are read
         # whether or not it is on.
         cfg = self.load()
-        self.assertFalse(cfg.gaze_fade)
-        self.assertEqual(cfg.gaze_full_deg, 20.0)
-        self.assertEqual(cfg.gaze_fade_deg, 45.0)
-        self.assertEqual(cfg.gaze_min_alpha, 0.25)
+        self.assertFalse(cfg.vr.gaze_fade)
+        self.assertEqual(cfg.vr.gaze_full_deg, 20.0)
+        self.assertEqual(cfg.vr.gaze_fade_deg, 45.0)
+        self.assertEqual(cfg.vr.gaze_min_alpha, 0.25)
 
     def test_gaze_settings_are_read(self):
         cfg = self.load(
             "\n[display]\ngaze_fade = true\ngaze_full_deg = 15\n"
             "gaze_fade_deg = 60\ngaze_min_alpha = 0.4\n"
         )
-        self.assertTrue(cfg.gaze_fade)
-        self.assertEqual(cfg.gaze_full_deg, 15.0)
-        self.assertEqual(cfg.gaze_fade_deg, 60.0)
-        self.assertEqual(cfg.gaze_min_alpha, 0.4)
+        self.assertTrue(cfg.vr.gaze_fade)
+        self.assertEqual(cfg.vr.gaze_full_deg, 15.0)
+        self.assertEqual(cfg.vr.gaze_fade_deg, 60.0)
+        self.assertEqual(cfg.vr.gaze_min_alpha, 0.4)
 
     def test_a_blank_patient_id_means_unset(self):
         # An empty string would be sent as a patient id and 404; absent
         # means "work it out from the connections list".
         cfg = self.load(account=ACCOUNT + 'patient_id = ""\nregion = ""\n')
-        self.assertIsNone(cfg.patient_id)
-        self.assertIsNone(cfg.region)
+        self.assertIsNone(cfg.account.patient_id)
+        self.assertIsNone(cfg.account.region)
 
     def test_a_missing_file_says_what_to_do(self):
         missing = Path(self._dir.name) / "nope.toml"
@@ -178,7 +178,7 @@ class Validation(ConfigTestCase):
         # 180 each way is the whole circle: the most travel that can be
         # asked for, rather than one degree too much.
         cfg = self.load("\n[display]\norbit_limit_deg = 180\n")
-        self.assertEqual(cfg.orbit_limit_deg, 180.0)
+        self.assertEqual(cfg.vr.orbit_limit_deg, 180.0)
 
     def test_orbit_is_checked_even_when_it_is_switched_off(self):
         # Orbit is turned on from inside the headset. A radius that is
@@ -212,7 +212,7 @@ class Validation(ConfigTestCase):
         # A floor of 1 is a fade that does nothing. Pointless rather than
         # wrong, and rejecting it would only be a trap while tuning.
         cfg = self.load("\n[display]\ngaze_min_alpha = 1.0\n")
-        self.assertEqual(cfg.gaze_min_alpha, 1.0)
+        self.assertEqual(cfg.vr.gaze_min_alpha, 1.0)
 
     def test_gaze_is_checked_even_when_it_is_switched_off(self):
         # Like orbit, the fade is turned on from inside the headset. A
@@ -247,7 +247,7 @@ class Validation(ConfigTestCase):
     def test_the_window_floor_itself_is_allowed(self):
         floor = MIN_FIT_POINTS * GRAPH_RESOLUTION_MIN
         cfg = self.load(f"\n[trend]\nwindow_min = {floor}\n")
-        self.assertEqual(cfg.trend_window_min, floor)
+        self.assertEqual(cfg.trend.window_min, floor)
 
     def test_trend_settings_are_checked_even_when_the_fit_is_off(self):
         # local is flipped from inside the headset like everything else
@@ -272,7 +272,7 @@ class Validation(ConfigTestCase):
 
     def test_exactly_thirty_seconds_is_allowed(self):
         cfg = self.load("\n[polling]\ninterval_sec = 30\n")
-        self.assertEqual(cfg.poll_interval_sec, 30.0)
+        self.assertEqual(cfg.polling.interval_sec, 30.0)
 
 
 if __name__ == "__main__":

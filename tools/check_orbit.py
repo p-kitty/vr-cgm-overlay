@@ -23,13 +23,10 @@ from __future__ import annotations
 
 import math
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-# openvr is not installed everywhere this runs, and the geometry does not
-# need it: only the matrix type it returns. A stub keeps the check able to
-# run on a machine with no SteamVR.
+# openvr is an optional extra (`pip install -e .[vr]`), and the geometry
+# does not need it: only the matrix type it returns. A stub keeps the
+# check able to run on a core-only install, or with no SteamVR at all.
 try:
     import openvr  # noqa: F401
 except ModuleNotFoundError:
@@ -43,8 +40,8 @@ except ModuleNotFoundError:
     stub.HmdMatrix34_t = _HmdMatrix34_t  # type: ignore[attr-defined]
     sys.modules["openvr"] = stub
 
-from armguide import MARKER_COUNT as MARKERS  # noqa: E402
-from overlay import _billboard, _orbit_transform  # noqa: E402
+from cgm.vr.armguide import MARKER_COUNT as MARKERS  # noqa: E402
+from cgm.vr.overlay import _billboard, _orbit_transform  # noqa: E402
 
 CENTRE = (0.0, -0.02, 0.10)
 RADIUS = 0.06

@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from main import ConfigWatcher
+from cgm.core.watcher import ConfigWatcher
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
 
@@ -68,7 +68,7 @@ class GoodEdit(WatcherTestCase):
         self.write(body(width=0.255))
         cfg = self.watcher.poll()
         self.assertIsNotNone(cfg)
-        self.assertEqual(cfg.width_m, 0.255)
+        self.assertEqual(cfg.vr.width_m, 0.255)
 
     def test_the_same_edit_is_reported_once(self):
         self.write(body(width=0.255))
@@ -82,7 +82,7 @@ class GoodEdit(WatcherTestCase):
         os.utime(self.path, (0, 0))
         cfg = self.watcher.poll()
         self.assertIsNotNone(cfg)
-        self.assertEqual(cfg.width_m, 0.99)
+        self.assertEqual(cfg.vr.width_m, 0.99)
 
     def test_a_same_timestamp_edit_is_caught_by_the_size(self):
         # The other half of the pair: editors can save twice inside the
@@ -93,7 +93,7 @@ class GoodEdit(WatcherTestCase):
         os.utime(self.path, (stamp, stamp))
         cfg = self.watcher.poll()
         self.assertIsNotNone(cfg)
-        self.assertEqual(cfg.width_m, 0.123456)
+        self.assertEqual(cfg.vr.width_m, 0.123456)
 
 
 class BadEdit(WatcherTestCase):
@@ -120,7 +120,7 @@ class BadEdit(WatcherTestCase):
         self.write(body(width=0.255, interval=120))
         cfg = self.watcher.poll()
         self.assertIsNotNone(cfg)
-        self.assertEqual(cfg.width_m, 0.255)
+        self.assertEqual(cfg.vr.width_m, 0.255)
 
     def test_a_file_restored_after_deletion_is_noticed(self):
         self.path.unlink()
@@ -129,7 +129,7 @@ class BadEdit(WatcherTestCase):
         self.write(body(width=0.255))
         cfg = self.watcher.poll()
         self.assertIsNotNone(cfg)
-        self.assertEqual(cfg.width_m, 0.255)
+        self.assertEqual(cfg.vr.width_m, 0.255)
 
 
 if __name__ == "__main__":
