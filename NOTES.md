@@ -19,9 +19,6 @@ Nothing has exercised these yet. Each says how to check it.
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and
   the face should come back.
-- **Stale greying.** Set `display.stale_after_min = 1.0` and watch the
-  value and the age readout go grey within a couple of minutes. Put it
-  back to `10.0`. No headset needed: `--window` shows the same face.
 - **A long session.** Leave it running for an hour or two, then check
   the log still shows `fetched:` about once a minute, with no `fetch
   failed` streak stretching the interval out. `--window` counts — this
@@ -41,8 +38,18 @@ Nothing has exercised these yet. Each says how to check it.
   headset, since the fit is `cgm.core` and `cgm.face` with no VR in it. Every fetch logs either a slope in mg/dL/min or the API arrow
   marked `(API)`, so the log says which source was used and how the
   number moved; `vr-cgm-overlay --dry-run` prints the same thing
-  once. Watch for `(API)` while the sensor is scanning normally: that
-  would mean the resolution has changed again.
+  once. `(API)` while the sensor is scanning
+  normally does not mean the resolution has changed. It means the
+  window came up short of `MIN_FIT_POINTS`, and the usual cause is
+  `graphData` falling behind the current measurement rather than the
+  gaps between its points changing. The current reading is folded into
+  the series (see `_parse_graph_data`), so it always holds the right
+  edge of the window and every other point has to come from
+  `graphData`; the further that lags, the fewer of them are still
+  inside. Measured today with the lag at 26 minutes and growing a
+  minute a minute, a 45 minute window -- the floor -- fell back at a
+  lag of 30, and 60 held on to 45. Check the lag before suspecting
+  `GRAPH_RESOLUTION_MIN`.
 - **The palette against real colour vision deficiency.** It is validated
   by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
   and asserts the separations. That model is dichromacy — full absence of

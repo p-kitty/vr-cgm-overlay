@@ -67,7 +67,17 @@ gaze_min_alpha = 0.25   # how much is left when you look away; at least 0.1
 
 opacity = 1.0
 flip_vertical = false   # set true if the face renders upside down
-stale_after_min = 10.0  # readings older than this go grey
+# Readings older than this go grey. The floor here is set by the poll
+# cycle rather than by taste. A value already carries some age when it
+# arrives -- the gap between the sensor publishing it and this asking for
+# it -- and that gap drifts through the whole 0 to 60 seconds as the two
+# cycles slide past each other. On top of it the value is held for
+# interval_sec plus a few seconds of jitter, so on screen the age peaks
+# at up to about 122 seconds with nothing wrong at all. Under 2.1 the
+# face blinks grey every minute for part of that drift and not at all for
+# the rest of it. 2.5 clears the whole cycle and still greys about a
+# minute after one update actually goes missing.
+stale_after_min = 2.5
 
 
 # Only `vr-cgm-overlay --window` reads this section: the same watch face
