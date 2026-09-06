@@ -41,6 +41,7 @@ if sys.version_info < (3, 14):
     )
 
 from cgm.core import config as config_mod  # noqa: E402
+from cgm.core.console import force_utf8_output  # noqa: E402
 from cgm.core.librelink import (  # noqa: E402
     AuthError,
     LibreLinkError,
@@ -316,6 +317,11 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Before argparse, before the first print: everything below this
+    # line can put a trend arrow on stdout or in the log, and a
+    # redirected stream would otherwise be encoding it as cp932.
+    force_utf8_output()
+
     parser = argparse.ArgumentParser(
         description="SteamVR overlay showing blood glucose on your wrist in VR"
     )
