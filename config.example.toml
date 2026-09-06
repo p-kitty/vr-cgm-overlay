@@ -120,25 +120,26 @@ in_vr = false
 # fetches.
 window_min = 480.0
 
-# The Y axis, in mg/dL like every other threshold here.
-#
-# axis_low_mgdl is a floor: the bottom of the graph is always exactly
-# this, and a reading under it is drawn on it rather than off the card.
-# axis_high_mgdl is a minimum: the top sits here on an ordinary day and
+# The top of the Y axis, in mg/dL like every other threshold here, and
+# a minimum rather than a ceiling: it sits here on an ordinary day and
 # grows, to the next round 50, only far enough to keep a hyper on the
 # chart. So the scale holds still while nothing unusual happens -- fit
 # it to the data instead and a quiet flat stretch becomes a mountain
 # range, which makes a calm reading look alarming -- and it never clips
-# a reading that matters. The axis has to contain low_mgdl and
-# high_mgdl, since the target range is drawn as a band across it.
+# the one reading worth seeing clearly. It has to be above high_mgdl,
+# since the target range is drawn as a band across the axis.
+#
+# The BOTTOM is fixed at 50 and is not a setting. Every graph starts in
+# the same place, so the eye learns where the floor is once rather than
+# per config file; a reading under it is drawn on it, and the digits
+# above are what say how far under. low_mgdl therefore cannot be set
+# below 50.
 #
 # low_mgdl gets a dashed line in the low colour and very_high_mgdl one
 # in the very high colour -- each marks the level the face turns that
-# colour at. The levels are labelled in the left margin, in whatever
-# display.unit is set to, and a label is dropped rather than drawn over
-# a nearer one: at these defaults 70 sits too close to the 50 floor to
-# fit, so its line is there without a number beside it.
-axis_low_mgdl = 50.0
+# colour at. 50 and both thresholds are always labelled in the left
+# margin, in whatever display.unit is set to. The top is labelled only
+# when it has grown, which is how you can tell that it has.
 axis_high_mgdl = 300.0
 
 

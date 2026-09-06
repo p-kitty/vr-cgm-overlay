@@ -505,7 +505,6 @@ twelve hours of history, and until now only the trend arrow read it.
 in_window = true
 in_vr = false
 window_min = 480.0
-axis_low_mgdl = 50.0
 axis_high_mgdl = 300.0
 ```
 
@@ -514,8 +513,13 @@ axis_high_mgdl = 300.0
 | `in_window` (true) | Draw it in the desktop window |
 | `in_vr` (false) | Draw it on the controller face |
 | `window_min` (480) | How far back it shows — eight hours by default, long enough to hold a night. **`0` means all of it**: everything the response carried, about twelve hours, with the time axis running from the oldest reading to the newest. Any other value is a length, and the floor is then 30, since the history arrives at one point every 15 minutes |
-| `axis_low_mgdl` (50) | The bottom of the Y axis, and it never moves. A reading under it is drawn on it |
 | `axis_high_mgdl` (300) | The **minimum** top. It grows to the next round 50 above anything higher, so a hyper is never clipped |
+
+The bottom of the axis is **50 mg/dL and is not a setting**. Every graph
+starts in the same place, so the eye learns where the floor is once
+rather than per config file, and two of these are comparable. It follows
+that `low_mgdl` cannot be set below 50; the app says so at startup if it
+is.
 
 A fixed window and `0` are for different things. `0` shows the most, and
 the axis is as long as the history behind it, so it never draws empty
@@ -568,12 +572,13 @@ What it draws, and why each of these is a rule rather than a preference:
   read 50 and 240 in mg/dL mode and 2.8 and 13.3 in mmol/L; the times
   along the bottom are local, and step to whatever keeps them to four
   or so. The comparisons behind all of it stay in mg/dL.
-- **A level label is dropped rather than drawn over a nearer one.** The
-  floor comes first, then `very_high_mgdl`, then the top of the axis,
-  then `low_mgdl`. At the defaults that leaves 50 and 240: 70 is eight
-  percent of the scale above the floor and no plot this size can
-  separate them, and the top is only labelled once it has grown. The
-  lines themselves are always drawn.
+- **50, `low_mgdl` and `very_high_mgdl` are always labelled.** They are
+  the scale: where it starts and the two levels it is read against. The
+  floor and `low_mgdl` are only twenty apart, which is what the height
+  of the plot is set by — the labels have to fit rather than the plot
+  having to be filled. The top of the axis is labelled only once it has
+  grown, so a number appearing there means the scale is no longer the
+  one in the config.
 
 `tools/preview.py` draws all of it — a meal rise, a quiet run, a fall
 into a low, a reading off the top of the axis, a scanning gap, and a
