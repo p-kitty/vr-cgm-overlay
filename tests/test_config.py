@@ -321,6 +321,14 @@ class Validation(ConfigTestCase):
         self.assertIn("graph.window_min", message)
         self.assertIn("15 minutes", message)
 
+    def test_a_graph_window_of_zero_means_all_of_it(self):
+        # Not a length under the floor: a different request entirely.
+        cfg = self.load("\n[graph]\nwindow_min = 0\n")
+        self.assertEqual(cfg.graph.window_min, 0.0)
+
+    def test_a_negative_graph_window_is_not_a_third_meaning(self):
+        self.assertRejected("\n[graph]\nwindow_min = -60\n")
+
     def test_the_graph_window_floor_itself_is_allowed(self):
         floor = 2 * GRAPH_RESOLUTION_MIN
         cfg = self.load(f"\n[graph]\nwindow_min = {floor}\n")

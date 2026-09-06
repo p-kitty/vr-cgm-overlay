@@ -24,11 +24,14 @@ from cgm.core.librelink import GRAPH_RESOLUTION_MIN, GlucosePoint, Reading
 from cgm.face.graph import (
     HEAD_RADIUS,
     MAX_GAP_MIN,
+    MAX_TIME_TICKS,
     TRACE_COLOR,
     GraphTuning,
     draw_sparkline,
+    format_value,
     recent,
     segments,
+    time_ticks,
 )
 from cgm.face.renderer import GRAPH_HEIGHT, HEIGHT, WIDTH, Theme, WatchFaceRenderer
 
@@ -78,6 +81,74 @@ class Windowing(unittest.TestCase):
 
     def test_an_empty_series_windows_to_nothing(self):
         self.assertEqual(recent((), 180, NOW), [])
+
+    def test_a_window_of_zero_keeps_everything(self):
+        # "All of it" -- the twelve hours the response carried, rather
+        # than a length. This is what `graph.window_min = 0` asks for.
+        points = series((700, 88), (400, 92), (200, 100), (0, 110))
+        self.assertEqual(len(recent(points, 0, NOW)), 4)
+
+    def test_all_of_it_still_stops_at_the_anchor(self):
+        # However far back it reaches, nothing newer than the reading is
+        # part of the stretch that reading describes.
+        points = series((400, 92), (0, 110), (-30, 140))
+        self.assertEqual([p.mgdl for p in recent(points, 0, NOW)], [92, 110])
+
+
+class Formatting(unittest.TestCase):
+    def test_a_level_label_matches_what_the_digits_would_say(self):
+        # format_value is a copy of Reading.display_value, because
+        # cgm.face may not import cgm.core. A graph labelled 240 beside
+        # digits reading 13.3 would be two units on one card.
+        for unit in ("mgdl", "mmol"):
+            for mgdl in (40.0, 70.0, 103.0, 180.0, 240.0, 300.0):
+                with self.subTest(unit=unit, mgdl=mgdl):
+                    same = Reading(
+                        value_mgdl=mgdl,
+                        trend=3,
+                        timestamp_utc=NOW,
+                        is_high=False,
+                        is_low=False,
+                    )
+                    self.assertEqual(
+                        format_value(mgdl, unit), same.display_value(unit)
+                    )
+
+
+class TimeAxis(unittest.TestCase):
+    def spans(self, hours: float):
+        return NOW - timedelta(hours=hours), NOW
+
+    def test_the_labels_stay_few_enough_to_read(self):
+        for hours in (0.5, 1, 3, 6, 12, 24):
+            with self.subTest(hours=hours):
+                ticks = time_ticks(*self.spans(hours))
+                self.assertLessEqual(len(ticks), MAX_TIME_TICKS + 1)
+
+    def test_every_tick_is_inside_the_span(self):
+        start, end = self.spans(12)
+        for tick in time_ticks(start, end):
+            with self.subTest(tick=tick):
+                moment = tick.astimezone(timezone.utc)
+                self.assertGreaterEqual(moment, start)
+                self.assertLessEqual(moment, end)
+
+    def test_a_longer_span_steps_more_coarsely(self):
+        def step(hours):
+            ticks = time_ticks(*self.spans(hours))
+            return (ticks[1] - ticks[0]) if len(ticks) > 1 else None
+
+        self.assertLess(step(3), step(12))
+
+    def test_the_ticks_land_on_round_times(self):
+        # They are there to be compared against a clock, so they have to
+        # be times someone would read off one.
+        for tick in time_ticks(*self.spans(12)):
+            with self.subTest(tick=tick):
+                self.assertEqual((tick.minute, tick.second), (0, 0))
+
+    def test_no_span_has_no_ticks(self):
+        self.assertEqual(time_ticks(NOW, NOW), [])
 
 
 class Segments(unittest.TestCase):
@@ -198,6 +269,28 @@ class Drawing(unittest.TestCase):
         high = min(y for _, y in self.coloured((255, 0, 255)))
         # Screen Y grows downwards, so higher glucose is a smaller y.
         self.assertLess(high, low)
+
+    def test_both_thresholds_get_a_dashed_line(self):
+        # The two levels the face changes colour at. The band marks the
+        # target range, but its edges are a change of shade; these are
+        # drawn.
+        self.sparkline(())
+        rows = sorted({y for _, y in self.coloured(THEME.color_low)})
+        self.assertTrue(rows, "no threshold line was drawn")
+        # Two runs of rows, one line each, well clear of one another.
+        breaks = [b for a, b in zip(rows, rows[1:]) if b - a > 2]
+        self.assertEqual(len(breaks), 1, f"expected two lines, rows were {rows}")
+
+    def test_the_threshold_lines_are_dashed_and_not_solid(self):
+        self.sparkline(())
+        top = min(y for _, y in self.coloured(THEME.color_low))
+        xs = [x for x, y in self.coloured(THEME.color_low) if y == top]
+        # A solid rule would run without a break from one end to the
+        # other; a dashed one leaves gaps in the middle of its own row.
+        self.assertTrue(
+            any(b - a > 1 for a, b in zip(xs, xs[1:])),
+            "the threshold line came out solid",
+        )
 
     def test_a_single_point_still_leaves_a_mark(self):
         # A run of one cannot be a line. It has to be drawn as a dot or
