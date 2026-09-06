@@ -504,8 +504,8 @@ twelve hours of history, and until now only the trend arrow read it.
 [graph]
 in_window = true
 in_vr = false
-window_min = 180.0
-axis_low_mgdl = 40.0
+window_min = 480.0
+axis_low_mgdl = 50.0
 axis_high_mgdl = 300.0
 ```
 
@@ -513,8 +513,9 @@ axis_high_mgdl = 300.0
 |---|---|
 | `in_window` (true) | Draw it in the desktop window |
 | `in_vr` (false) | Draw it on the controller face |
-| `window_min` (180) | How far back it shows. **`0` means all of it** — everything the response carried, about twelve hours, with the time axis running from the oldest reading to the newest. Any other value is a length, and the floor is then 30: the history arrives at one point every 15 minutes, so anything shorter has no two points to draw a line between |
-| `axis_low_mgdl` (40) / `axis_high_mgdl` (300) | The bottom and top of the Y axis. Must contain `low_mgdl` and `high_mgdl` |
+| `window_min` (480) | How far back it shows — eight hours by default, long enough to hold a night. **`0` means all of it**: everything the response carried, about twelve hours, with the time axis running from the oldest reading to the newest. Any other value is a length, and the floor is then 30, since the history arrives at one point every 15 minutes |
+| `axis_low_mgdl` (50) | The bottom of the Y axis, and it never moves. A reading under it is drawn on it |
+| `axis_high_mgdl` (300) | The **minimum** top. It grows to the next round 50 above anything higher, so a hyper is never clipped |
 
 A fixed window and `0` are for different things. `0` shows the most, and
 the axis is as long as the history behind it, so it never draws empty
@@ -534,11 +535,20 @@ there.
 
 What it draws, and why each of these is a rule rather than a preference:
 
-- **The Y axis is fixed, not fitted to the data.** Scaling to whatever
-  the last three hours happened to do turns a quiet flat stretch into a
+- **The Y axis does not shrink to the data.** Scaling to whatever the
+  last few hours happened to do turns a quiet flat stretch into a
   mountain range, which makes a calm reading look alarming at exactly
-  the glance this face exists for. A reading past either end rides the
-  edge; the number above says how far past.
+  the glance this face exists for. So the bottom never moves at all,
+  and the top never drops below `axis_high_mgdl`.
+- **It does grow upwards, and only to hold a hyper.** A reading over
+  the top takes the axis to the next round 50 above it rather than
+  being flattened against the edge. That is the one case worth
+  redrawing the scale for, and you can tell it has happened because a
+  number appears at the top of the axis, which is not there otherwise.
+  Under the floor is the other way round: a 42 is drawn on the 50 line,
+  because the floor is the one part of the scale that can be relied on
+  to stay put — and the digits above are saying 42 in red at the size
+  of the card.
 - **The target range is a band behind the line**, so where the trace
   sits reads without an axis drawn next to it. That is what the axis has
   to contain the range for: clipped against an edge, a band stops
@@ -546,17 +556,24 @@ What it draws, and why each of these is a rule rather than a preference:
 - **The line breaks across gaps rather than spanning them.** A stretch
   where the phone was not scanning gets no line drawn through it,
   because a line there would be measurements that were never taken.
-- **`low_mgdl` and `very_high_mgdl` each get a red dashed line**,
-  labelled with the level. They are the two the band does not mark —
-  its lower edge is `low_mgdl`, but a change of shade is not a line, and
-  `very_high_mgdl` is outside it altogether.
+- **`low_mgdl` and `very_high_mgdl` each get a dashed line**, in the
+  colour the face turns at that level — red below, deep orange above.
+  They are the two the band does not mark: its lower edge is `low_mgdl`,
+  but a change of shade is not a line, and `very_high_mgdl` is outside
+  it altogether.
 - **The newest point is marked in the status colour**, the same colour
   as the digits. It is the one place the graph and the number are the
   same fact, and it says which end is now.
 - **The labels follow `display.unit` and your own clock.** The levels
-  read 70 and 240 in mg/dL mode and 3.9 and 13.3 in mmol/L; the times
+  read 50 and 240 in mg/dL mode and 2.8 and 13.3 in mmol/L; the times
   along the bottom are local, and step to whatever keeps them to four
   or so. The comparisons behind all of it stay in mg/dL.
+- **A level label is dropped rather than drawn over a nearer one.** The
+  floor comes first, then `very_high_mgdl`, then the top of the axis,
+  then `low_mgdl`. At the defaults that leaves 50 and 240: 70 is eight
+  percent of the scale above the floor and no plot this size can
+  separate them, and the top is only labelled once it has grown. The
+  lines themselves are always drawn.
 
 `tools/preview.py` draws all of it — a meal rise, a quiet run, a fall
 into a low, a reading off the top of the axis, a scanning gap, and a

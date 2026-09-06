@@ -74,6 +74,15 @@ def gapped(mgdl: float, trend: int, age_min: float) -> Reading:
     )
 
 
+# A hyper that runs off the configured top of the axis, which is the one
+# thing that moves it: it grows to the next round step above the peak
+# rather than clipping the trace flat.
+HYPER = [132, 148, 191, 243, 288, 321, 356, 372, 361, 340, 318, 297]
+
+# And a low that goes under the floor. The floor does not move, so this
+# is drawn on it -- the digits above are what say how far under.
+UNDER = [104, 96, 88, 79, 71, 63, 55, 47, 44]
+
 # Twelve hours, at the fifteen minutes apart the API sends: an
 # overnight flat stretch, breakfast, and the settle after it. This is
 # what `window_min = 0` actually has to draw.
@@ -87,7 +96,11 @@ DAY = [
 
 def main() -> int:
     plain = WatchFaceRenderer()
-    graphed = WatchFaceRenderer(graph=GraphTuning())
+    # The default: eight hours. The tiles that show one drawing rule at
+    # a time use three, because their series are that long and a window
+    # wider than its data is a different thing to look at.
+    graphed = WatchFaceRenderer(graph=GraphTuning(window_min=180))
+    eight = WatchFaceRenderer(graph=GraphTuning())
     # window_min = 0: everything the response carried, with the X axis
     # as long as the history rather than a fixed length.
     allday = WatchFaceRenderer(graph=GraphTuning(window_min=0))
@@ -146,15 +159,24 @@ def main() -> int:
             reading(134, 3, 31, [151, 148, 141, 137, 133, 130, 134])
         ),
         graphed.render_message("NO CONNECTION", detail="no reading yet"),
-        # All twelve hours. The times underneath step to whatever keeps
-        # them to four labels, so this and the three-hour tiles above
-        # should not be labelled at the same interval.
+        # The default window, eight hours of the same day. The times
+        # underneath step to whatever keeps them to four labels, so this
+        # and the three-hour tiles above should not be labelled at the
+        # same interval.
+        eight.render(reading(110, 3, 1, DAY)),
+        # All twelve. The axis is as long as the history, so this one
+        # reaches further left without leaving any of it empty.
         allday.render(reading(110, 3, 1, DAY)),
-        # And the same graph in mmol/L: the level labels convert, the
-        # arithmetic behind them does not.
-        mmol.render(
-            reading(147, 4, 1, [104, 99, 102, 118, 163, 194, 188, 171, 158, 147])
-        ),
+        # A hyper past the top of the axis: it grows to the next round
+        # step, and the number that appears at the top is how the reader
+        # is told the scale is no longer the one in the config.
+        eight.render(reading(297, 2, 1, HYPER)),
+        # And under the floor, which does not move. The trace runs along
+        # the bottom; the digits say 44.
+        eight.render(reading(44, 1, 1, UNDER)),
+        # The same graph in mmol/L: the level labels convert, and
+        # nothing behind them does.
+        mmol.render(reading(110, 3, 1, DAY)),
     ]
 
     # The tiles are no longer all one size, so the grid is measured off

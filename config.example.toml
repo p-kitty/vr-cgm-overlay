@@ -108,27 +108,37 @@ always_on_top = true
 in_window = true
 in_vr = false
 
-# How far back it shows, in minutes. 0 means all of it -- every point
-# the response carried, about twelve hours, with the time axis running
-# from the oldest reading to the newest rather than a fixed length.
-# Any other value is a length, and 30 is then the floor: the history
-# arrives at one point every 15 minutes, so anything shorter has no two
-# points to draw a line between. A fixed window is the one that holds
-# the axis still between fetches.
-window_min = 180.0
-
-# The top and bottom of the Y axis, in mg/dL like every other threshold
-# here. It is fixed rather than fitted to the data on purpose: scaling
-# to whatever the last three hours happened to do turns a quiet flat
-# stretch into a mountain range, which makes a calm reading look
-# alarming. Readings past either end ride the edge rather than vanish.
-# The axis has to contain low_mgdl and high_mgdl, since the target range
-# is drawn as a band across it.
+# How far back it shows, in minutes. Eight hours by default, which is
+# long enough to hold a night.
 #
-# low_mgdl and very_high_mgdl also get a red dashed line each, labelled
-# with the level. Those labels follow display.unit -- 3.9 and 13.3 in
-# mmol mode -- and so do none of the comparisons behind them.
-axis_low_mgdl = 40.0
+# 0 means all of it -- every point the response carried, about twelve
+# hours, with the time axis running from the oldest reading to the
+# newest rather than a fixed length. Any other value is a length, and
+# 30 is then the floor: the history arrives at one point every 15
+# minutes, so anything shorter has no two points to draw a line
+# between. A fixed window is the one that holds the axis still between
+# fetches.
+window_min = 480.0
+
+# The Y axis, in mg/dL like every other threshold here.
+#
+# axis_low_mgdl is a floor: the bottom of the graph is always exactly
+# this, and a reading under it is drawn on it rather than off the card.
+# axis_high_mgdl is a minimum: the top sits here on an ordinary day and
+# grows, to the next round 50, only far enough to keep a hyper on the
+# chart. So the scale holds still while nothing unusual happens -- fit
+# it to the data instead and a quiet flat stretch becomes a mountain
+# range, which makes a calm reading look alarming -- and it never clips
+# a reading that matters. The axis has to contain low_mgdl and
+# high_mgdl, since the target range is drawn as a band across it.
+#
+# low_mgdl gets a dashed line in the low colour and very_high_mgdl one
+# in the very high colour -- each marks the level the face turns that
+# colour at. The levels are labelled in the left margin, in whatever
+# display.unit is set to, and a label is dropped rather than drawn over
+# a nearer one: at these defaults 70 sits too close to the 50 floor to
+# fit, so its line is there without a number beside it.
+axis_low_mgdl = 50.0
 axis_high_mgdl = 300.0
 
 
