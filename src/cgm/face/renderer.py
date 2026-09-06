@@ -54,20 +54,27 @@ WIDTH, HEIGHT = 512, 256
 # cgm.face.graph), which spends most of the height on room the reading
 # is not using -- the target range alone is 110 of those 260 mg/dL. At
 # the 64px the issue first proposed, an ordinary 30 mg/dL move came out
-# 7px tall and the whole strip read as a bar rather than a graph. 120
-# gives that move 13px and the band 46, which is the point at which the
-# shape of a meal is visible at a glance.
-GRAPH_HEIGHT = 120
+# 7px tall and the whole strip read as a bar rather than a graph. The
+# 104px of plot below gives that move 12px and the band 44, which is
+# the point at which the shape of a meal is visible at a glance. The
+# rest of the strip is the row of times underneath.
+GRAPH_HEIGHT = 148
 
-# Where the trace lives inside that strip. The sides line up with the
-# text above -- the value starts at 44, the age ends at WIDTH - 44 -- so
-# the graph reads as the same column of information rather than a panel
-# bolted on. The bottom stops short of the card edge to leave the low
-# marker its own room; the two must not touch, or a low would look like
-# the graph had a floor drawn under it.
+# Where the trace lives inside that strip.
+#
+# The right edge lines up with the text above -- the age ends at
+# WIDTH - 44 -- so the graph reads as the same column of information
+# rather than a panel bolted on. The left does not: it gives up a
+# gutter for the level labels, which are right-aligned into it and so
+# still start inside the 44 the rest of the face keeps.
+#
+# The bottom margin holds two things, the row of times and then the low
+# marker's own room. The marker must not touch the labels or the plot,
+# or a low would look like the graph had a floor drawn under it.
 GRAPH_MARGIN_X = 44
+GRAPH_LABEL_GUTTER = 58
 GRAPH_TOP = 244
-GRAPH_BOTTOM_MARGIN = 22
+GRAPH_BOTTOM_MARGIN = 56
 
 # Tried in order; all ship with Windows.
 FONT_CANDIDATES = [
@@ -330,6 +337,10 @@ class WatchFaceRenderer:
         self._font_value = _load_font(150)
         self._font_small = _load_font(38)
         self._font_message = _load_font(52)
+        # Smaller than anything else on the card on purpose: the axis
+        # labels are there to be read when you go looking for them, not
+        # to compete with the number for the half-second glance.
+        self._font_axis = _load_font(24)
 
     # -- public API ---------------------------------------------------------
 
@@ -391,6 +402,8 @@ class WatchFaceRenderer:
                 # over, so the arrow and the trace describe one window.
                 now=reading.timestamp_utc,
                 accent=color,
+                unit=self.unit,
+                font=self._font_axis,
             )
 
         return img
@@ -441,9 +454,14 @@ class WatchFaceRenderer:
         return TREND_ANGLES.get(reading.trend)
 
     def _graph_box(self) -> tuple[float, float, float, float]:
-        """Where the sparkline is drawn, in canvas coordinates."""
+        """The plot rectangle, in canvas coordinates.
+
+        The labels are drawn outside it -- levels in the gutter to its
+        left, times in the margin below -- so this is what decides how
+        much room each of them gets.
+        """
         return (
-            GRAPH_MARGIN_X,
+            GRAPH_MARGIN_X + GRAPH_LABEL_GUTTER,
             GRAPH_TOP,
             self.width - GRAPH_MARGIN_X,
             self.height - GRAPH_BOTTOM_MARGIN,

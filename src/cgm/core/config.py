@@ -113,6 +113,9 @@ class Graph:
 
     in_window: bool = True
     in_vr: bool = False
+    # How far back to draw. 0 is "all of it": every point the response
+    # carried, with the X axis spanning the oldest to the newest rather
+    # than a fixed length.
     window_min: float = 180.0
     # The axis the trace is drawn against, fixed rather than fitted to
     # the data. See cgm.face.graph for why fitting it would lie.
@@ -499,16 +502,19 @@ def _validate(cfg: Config) -> None:
             f"axis {gr.axis_low_mgdl}-{gr.axis_high_mgdl} does not hold "
             f"thresholds {th.low_mgdl}-{th.high_mgdl}"
         )
-    # Two points make a line, and they arrive one every
-    # GRAPH_RESOLUTION_MIN, so a shorter window can only ever draw a
-    # single dot -- the same failure trend.window_min has a floor for.
+    # 0 asks for all the history there is, so there is no length to
+    # check. Any other value is one, and it has to hold two points to
+    # draw a line between: they arrive one every GRAPH_RESOLUTION_MIN,
+    # so a shorter window can only ever manage a single dot -- the same
+    # failure trend.window_min has a floor for. A negative is not a
+    # third meaning; it lands here too.
     graph_floor = 2 * GRAPH_RESOLUTION_MIN
-    if gr.window_min < graph_floor:
+    if gr.window_min and gr.window_min < graph_floor:
         raise ValueError(
-            f"graph.window_min must be at least {graph_floor:.0f}; the API "
-            f"sends one point every ~{GRAPH_RESOLUTION_MIN:.0f} minutes, so a "
-            "shorter window cannot hold the two that make a line: "
-            f"{gr.window_min}"
+            f"graph.window_min must be 0, for all the history there is, or "
+            f"at least {graph_floor:.0f}; the API sends one point every "
+            f"~{GRAPH_RESOLUTION_MIN:.0f} minutes, so a shorter window cannot "
+            f"hold the two that make a line: {gr.window_min}"
         )
 
     # These are checked whether or not the fit is switched on. `local`
