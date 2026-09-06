@@ -173,11 +173,10 @@ always_on_top = true
 placement keys mean nothing here — there is no controller — so editing
 `hand` says nothing rather than asking you to restart for it.
 
-`alert_on_low` does nothing here yet. It buzzes a controller, and there
-is no controller; an audible alert to take its place is planned but not
-built. **The face itself is the real alert** — in a window as in VR —
-so a low is red and marked on the bottom edge whether or not anything
-makes a noise.
+`alert_on_low` works here through sound. The controller buzz is the one
+channel a window has no hardware for; everything about *when* to
+announce a low is shared, so the window and the headset cannot disagree
+about whether you have already been told.
 
 ## Tuning
 
@@ -378,6 +377,59 @@ cannot, and warns on the pairs the markers are covering. Run it if you
 change the colours — and if you remove a marker, read its warnings,
 because each one becomes a real failure.
 
+### Being told about a low
+
+The face going red is the alert. Everything in `[polling]` below
+`alert_on_low` is a supplement to it, for the case the face cannot
+cover: a low starting while you are looking at something else.
+
+```toml
+[polling]
+alert_on_low = true
+alert_haptic = true
+alert_sound = true
+sound_path = ""
+rearm_margin_mgdl = 5.0
+repeat_every_min = 0.0
+```
+
+`alert_on_low` is the master switch. Under it, **`alert_haptic` buzzes
+the controller** — VR only, and silent on some drivers, see **Known
+limits** — and **`alert_sound` plays a sound**, which works the same in
+VR and in `--window`. Sound is the channel that reaches you without
+looking at your wrist, which is exactly the case this is for.
+
+An empty `sound_path` plays your Windows *Exclamation* sound, so it is
+already whatever you chose. Point it at a `.wav` for something distinct.
+Only `.wav`: anything else would need a decoder, and the dependency list
+is deliberately short. Volume is the Windows mixer's, not this app's.
+
+Two rules decide *when*, and both exist because an alert that cries wolf
+gets muted, and a muted alert is worse than none because it is trusted.
+
+- **It fires on the way in, not throughout.** `repeat_every_min = 0`
+  means once per low. Set it to a number of minutes to be told again
+  while it lasts — worth it if sleeping through one is the worry.
+  The floor is 1, because a new reading only arrives about once a
+  minute.
+- **It waits for a real recovery before it will ring again.**
+  `rearm_margin_mgdl` is how far back up the reading has to come before
+  the next low counts as a new one. It is a margin on top of
+  `low_mgdl`, so at the defaults the recovery mark is 75:
+
+  | Reading | What happens |
+  |---|---|
+  | 68 | rings |
+  | 71 | silent — over 70, but not back to 75, so this is still the same low |
+  | 69 | silent — same low |
+  | 76 | recovered; the next dip counts again |
+  | 68 | rings |
+
+  Without it (`0`) a reading drifting around the threshold rings on
+  every crossing, and the sensor's own noise is a couple of mg/dL, so
+  69-71-69 is an ordinary thing for it to do. It changes only when the
+  sound fires — the face turns red at `low_mgdl` either way.
+
 `[trend]` sets how the arrow is worked out.
 
 | Setting | What it does |
@@ -402,11 +454,19 @@ flipped with the headset on to see both arrows against the same reading.
 
 ## Known limits
 
-The low-glucose buzz is silent on a Quest 3 running through Virtual
+The low-glucose **buzz** is silent on a Quest 3 running through Virtual
 Desktop, which is the one setup this has been tried on. It uses the
 legacy haptic call, which a driver is free to ignore, so whether it
-buzzes on yours is a question only running it answers. **Haptics are a
-supplement; the face itself is the real alert.**
+buzzes on yours is a question only running it answers. This is why
+`alert_sound` exists and defaults on: a sound reaches you whatever the
+controller driver decides to do with the buzz.
+
+The **sound** goes wherever Windows is sending audio, which for most
+setups — anything playing through the desktop and out to headphones
+— is already where you are listening. If your headset takes its own
+output device and you cannot hear the alert in VR, make it the default
+device in Windows. **Both are supplements; the face itself is the real
+alert.**
 
 ## Cautions
 

@@ -300,11 +300,79 @@ class Validation(ConfigTestCase):
         self.assertIn("fast_mgdl_min", message)
         self.assertRejected("\n[trend]\nfast_mgdl_min = -2\n")
 
+    def test_the_alert_channels_default_on(self):
+        # An existing config.toml keeps buzzing as it did, and gains
+        # the sound -- which is the channel that works on the stack
+        # where the buzz does not.
+        cfg = self.load()
+        self.assertTrue(cfg.polling.alert_on_low)
+        self.assertTrue(cfg.polling.alert_haptic)
+        self.assertTrue(cfg.polling.alert_sound)
+        self.assertEqual(cfg.polling.sound_path, "")
+
+    def test_the_alert_fires_once_by_default(self):
+        cfg = self.load()
+        self.assertEqual(cfg.polling.repeat_every_min, 0.0)
+        self.assertEqual(cfg.polling.rearm_margin_mgdl, 5.0)
+
+    def test_alert_settings_are_read(self):
+        cfg = self.load(
+            "\n[polling]\nalert_haptic = false\nalert_sound = false\n"
+            "rearm_margin_mgdl = 0\nrepeat_every_min = 15\n"
+        )
+        self.assertFalse(cfg.polling.alert_haptic)
+        self.assertFalse(cfg.polling.alert_sound)
+        self.assertEqual(cfg.polling.rearm_margin_mgdl, 0.0)
+        self.assertEqual(cfg.polling.repeat_every_min, 15.0)
+
     def test_polling_floor_is_thirty_seconds(self):
         # The sensor updates about once a minute. Anything faster returns
         # the same value and only risks the account being blocked.
         message = self.assertRejected("\n[polling]\ninterval_sec = 29\n")
         self.assertIn("30", message)
+
+    def test_a_negative_rearm_margin_is_rejected(self):
+        # It would re-arm below the threshold, so a reading sitting
+        # just under low_mgdl would announce itself over and over.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[polling]\nrearm_margin_mgdl = -5\n")
+        self.assertIn("rearm_margin_mgdl", str(caught.exception))
+
+    def test_a_zero_rearm_margin_is_allowed(self):
+        cfg = self.load("\n[polling]\nrearm_margin_mgdl = 0\n")
+        self.assertEqual(cfg.polling.rearm_margin_mgdl, 0.0)
+
+    def test_a_repeat_faster_than_the_sensor_is_rejected(self):
+        # A new reading only arrives about once a minute, so anything
+        # shorter would re-announce the same one.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[polling]\nrepeat_every_min = 0.5\n")
+        self.assertIn("repeat_every_min", str(caught.exception))
+
+    def test_zero_repeat_means_off_and_is_allowed(self):
+        cfg = self.load("\n[polling]\nrepeat_every_min = 0\n")
+        self.assertEqual(cfg.polling.repeat_every_min, 0.0)
+
+    def test_a_sound_path_must_be_a_wav(self):
+        with self.assertRaises(ValueError) as caught:
+            self.load(f'\n[polling]\nsound_path = "alert.mp3"\n')
+        self.assertIn(".wav", str(caught.exception))
+
+    def test_a_missing_sound_file_is_caught_at_load(self):
+        # Not at the moment a low arrives, which is the one time a
+        # typo in this path must not be what goes wrong.
+        with self.assertRaises(ValueError) as caught:
+            self.load(f'\n[polling]\nsound_path = "nowhere.wav"\n')
+        self.assertIn("does not exist", str(caught.exception))
+
+    def test_a_sound_file_that_is_there_is_accepted(self):
+        wav = self.path.parent / "beep.wav"
+        wav.write_bytes(b"RIFF")
+        body = f'\n[polling]\nsound_path = "{wav.as_posix()}"\n'
+        # Kept as written, not normalised: it is handed to PlaySound
+        # verbatim, and TOML needs forward slashes on Windows anyway
+        # because a backslash is an escape inside a basic string.
+        self.assertEqual(self.load(body).polling.sound_path, wav.as_posix())
 
     def test_exactly_thirty_seconds_is_allowed(self):
         cfg = self.load("\n[polling]\ninterval_sec = 30\n")

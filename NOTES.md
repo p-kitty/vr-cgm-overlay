@@ -135,6 +135,13 @@ controller type. That is a lot of work for a supplementary signal, so it
 is not planned unless Link turns out to be silent too: colour is the
 primary alert and haptics were only ever a supplement.
 
+**`alert_sound` has taken the pressure off this.** The gap the silent
+buzz left was that nothing reached the user who was not looking at their
+wrist, and a sound covers that on every stack, since it never goes near
+a controller driver. What is left here is a channel that does not work
+on one setup rather than a user who cannot be told, so the Link test is
+worth doing out of curiosity and no longer worth doing first.
+
 ## Placement defaults are tuned for one device
 
 `offset` and `rotation_deg` have only ever been tried on Quest 3

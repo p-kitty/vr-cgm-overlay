@@ -114,10 +114,25 @@ class Trend:
 
 @dataclass
 class Polling:
-    """[polling]. How often the API is asked, and what a low does."""
+    """[polling]. How often the API is asked, and what a low does.
+
+    `alert_on_low` is the master switch it has always been; what
+    changed is that there is now more than one way to answer it, so the
+    channels are named separately underneath. Both default on, which
+    keeps an existing config.toml doing what it did and adds the sound
+    -- the channel that works on the stack where the buzz does not.
+    """
 
     interval_sec: float = 60.0
     alert_on_low: bool = True
+    alert_haptic: bool = True
+    alert_sound: bool = True
+    sound_path: str = ""
+    # How far above low_mgdl a reading has to climb before the next dip
+    # counts as a new low. 0 restores the bare threshold test.
+    rearm_margin_mgdl: float = 5.0
+    # 0 is off: the alert fires once, on the way in.
+    repeat_every_min: float = 0.0
 
 
 @dataclass
@@ -197,8 +212,16 @@ def load(path: Path) -> Config:
     cfg.polling.interval_sec = float(
         polling.get("interval_sec", cfg.polling.interval_sec)
     )
-    cfg.polling.alert_on_low = bool(
-        polling.get("alert_on_low", cfg.polling.alert_on_low)
+    pol = cfg.polling
+    pol.alert_on_low = bool(polling.get("alert_on_low", pol.alert_on_low))
+    pol.alert_haptic = bool(polling.get("alert_haptic", pol.alert_haptic))
+    pol.alert_sound = bool(polling.get("alert_sound", pol.alert_sound))
+    pol.sound_path = str(polling.get("sound_path", pol.sound_path))
+    pol.rearm_margin_mgdl = float(
+        polling.get("rearm_margin_mgdl", pol.rearm_margin_mgdl)
+    )
+    pol.repeat_every_min = float(
+        polling.get("repeat_every_min", pol.repeat_every_min)
     )
 
     _validate(cfg)
@@ -291,6 +314,38 @@ def _validate(cfg: Config) -> None:
             "trend.fast_mgdl_min must be positive: "
             f"{cfg.trend.fast_mgdl_min}"
         )
+
+    # A negative margin would re-arm the alert below the threshold, so
+    # a reading sitting just under low_mgdl would announce itself over
+    # and over. Zero is allowed and means the bare threshold test.
+    if cfg.polling.rearm_margin_mgdl < 0:
+        raise ValueError(
+            "polling.rearm_margin_mgdl must not be negative: "
+            f"{cfg.polling.rearm_margin_mgdl}"
+        )
+    # Off, or slower than the fetch it reacts to. Anything under a
+    # minute would re-announce the same reading, since a new one only
+    # arrives about that often.
+    if cfg.polling.repeat_every_min and cfg.polling.repeat_every_min < 1:
+        raise ValueError(
+            "polling.repeat_every_min must be 0 (fire once) or at least 1; "
+            "the sensor updates about once a minute, so anything shorter "
+            f"would repeat on the same reading: {cfg.polling.repeat_every_min}"
+        )
+    # Caught here rather than at the moment a low arrives. A typo in
+    # this path is otherwise invisible until the one time it matters.
+    if cfg.polling.sound_path:
+        sound = Path(cfg.polling.sound_path)
+        if sound.suffix.lower() != ".wav":
+            raise ValueError(
+                "polling.sound_path must be a .wav; PlaySound reads nothing "
+                f"else, and a decoder is a dependency this does not carry: "
+                f"{cfg.polling.sound_path}"
+            )
+        if not sound.exists():
+            raise ValueError(
+                f"polling.sound_path does not exist: {cfg.polling.sound_path}"
+            )
 
     # Polling harder than the official app risks being rate limited or cut
     # off. The sensor itself only updates about once a minute, so a shorter

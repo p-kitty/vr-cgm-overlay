@@ -48,7 +48,9 @@ if sys.version_info < (3, 14):
         f"{sys.version.split()[0]}."
     )
 
+from cgm.core import alert as alert_mod  # noqa: E402
 from cgm.core import config as config_mod  # noqa: E402
+from cgm.core.alert import LowAlert  # noqa: E402
 from cgm.core.console import force_utf8_output  # noqa: E402
 from cgm.core.librelink import (  # noqa: E402
     AuthError,
@@ -144,6 +146,29 @@ def build_trend(cfg: config_mod.Config) -> TrendTuning:
     )
 
 
+def build_alert(cfg: config_mod.Config) -> LowAlert:
+    return LowAlert(
+        cfg.thresholds.low_mgdl,
+        rearm_mgdl=cfg.polling.rearm_margin_mgdl,
+        repeat_min=cfg.polling.repeat_every_min,
+    )
+
+
+def fire_alert(cfg: config_mod.Config, overlay=None) -> None:
+    """Announce a low on every channel this frontend has.
+
+    Sound is shared, because it is the one channel that reaches you
+    without looking at your wrist and works the same either side. The
+    buzz is the overlay's alone: a window has no controller to buzz.
+
+    Both are supplements. The face is the alert.
+    """
+    if cfg.polling.alert_sound:
+        alert_mod.play(cfg.polling.sound_path)
+    if overlay is not None and cfg.polling.alert_haptic:
+        overlay.pulse()
+
+
 def build_renderer(cfg: config_mod.Config) -> WatchFaceRenderer:
     return WatchFaceRenderer(
         theme=build_theme(cfg), unit=cfg.display.unit, trend=build_trend(cfg)
@@ -174,8 +199,9 @@ def apply_config(
     previous: config_mod.Config,
     overlay,
     poller: Poller,
+    alert: LowAlert,
 ) -> None:
-    """Push a reloaded config onto the running overlay and poller."""
+    """Push a reloaded config onto the running overlay, poller and alert."""
     overlay.set_placement(cfg.vr.offset, cfg.vr.rotation_deg)
     overlay.set_orbit(cfg.vr.orbit, cfg.vr.orbit_radius_m, cfg.vr.orbit_limit_deg)
     overlay.set_gaze(
@@ -190,6 +216,11 @@ def apply_config(
     overlay.set_flip_vertical(cfg.vr.flip_vertical)
     poller.set_interval(cfg.polling.interval_sec)
     poller.set_trend(build_trend(cfg))
+    alert.set_tuning(
+        cfg.thresholds.low_mgdl,
+        cfg.polling.rearm_margin_mgdl,
+        cfg.polling.repeat_every_min,
+    )
 
     warn_restart_only(cfg, previous, RESTART_ONLY)
 
@@ -212,6 +243,7 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
     renderer = build_renderer(cfg)
     poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
+    alert = build_alert(cfg)
 
     with fine_timer(), WristOverlay(
         hand=cfg.vr.hand,
@@ -240,7 +272,6 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
         log.info("tracking at %.0fHz", 1.0 / track_interval)
 
         last_draw = 0.0
-        was_low = False
         attached = False
         # perf_counter, not monotonic: on Windows monotonic comes off
         # GetTickCount64 and only moves in 15.6ms steps, which is coarser
@@ -267,7 +298,7 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
 
                 edited = watcher.poll()
                 if edited is not None:
-                    apply_config(edited, cfg, overlay, poller)
+                    apply_config(edited, cfg, overlay, poller, alert)
                     renderer = build_renderer(edited)
                     cfg = edited
                     log.info("reloaded %s", config_path)
@@ -293,13 +324,15 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
                     reading is not None
                     and reading.value_mgdl < cfg.thresholds.low_mgdl
                 )
-                # Buzz only on the transition into a low, not while it
-                # lasts: a repeating alert is intolerable mid-game.
-                if cfg.polling.alert_on_low and is_low and not was_low:
-                    overlay.pulse()
-                was_low = is_low
-                # The buzz is once; this lasts. A gaze fade must not
-                # dim the one state the colour is there to shout.
+                # When to announce is LowAlert's decision, not this
+                # loop's -- once on the way in, and not again until the
+                # reading has climbed clear of the threshold. The window
+                # asks the same object the same way.
+                value = reading.value_mgdl if reading is not None else None
+                if cfg.polling.alert_on_low and alert.update(value, now):
+                    fire_alert(cfg, overlay)
+                # The announcement is momentary; this lasts. A gaze fade
+                # must not dim the one state the colour is there to shout.
                 overlay.set_alert(is_low)
 
                 overlay.set_image(image)
@@ -338,14 +371,10 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
     and `window.always_on_top` reload too, so this is also where the
     watcher gets exercised without a headset.
 
-    `alert_on_low` does nothing here. The overlay answers it by buzzing
-    a controller and there is none to buzz, and the sound that would
-    take its place is the audible-alert issue (#4), which asks for one
-    low-transition object in `cgm.core` feeding both frontends. Copying
-    the edge test into this loop to get a beep sooner would leave two of
-    them for that work to merge back together, so the face carries the
-    low on its own until then -- which is the standing position anyway:
-    colour is the alert, everything else is a supplement.
+    `alert_on_low` reaches the sound channel here and stops there:
+    there is no controller to buzz. The decision of *when* to announce
+    is `LowAlert`'s, shared with the overlay, so the two cannot disagree
+    about whether you have already been told.
     """
     # tkinter is a stdlib module some builds of Python leave out, and
     # PIL.ImageTk needs it in turn. Importing it lazily keeps --dry-run
@@ -363,6 +392,7 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
     renderer = build_renderer(cfg)
     poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
+    alert = build_alert(cfg)
 
     with Fetcher(poller), FaceWindow(
         scale=cfg.window.scale, always_on_top=cfg.window.always_on_top
@@ -380,6 +410,11 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
                 warn_restart_only(edited, cfg, RESTART_ONLY_ACCOUNT)
                 poller.set_interval(edited.polling.interval_sec)
                 poller.set_trend(build_trend(edited))
+                alert.set_tuning(
+                    edited.thresholds.low_mgdl,
+                    edited.polling.rearm_margin_mgdl,
+                    edited.polling.repeat_every_min,
+                )
                 win.set_scale(edited.window.scale)
                 win.set_always_on_top(edited.window.always_on_top)
                 renderer = build_renderer(edited)
@@ -400,6 +435,13 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
                 )
             )
             win.set_title(_window_title(reading, poller.error, cfg.display.unit))
+
+            # No overlay argument: the buzz is the one channel that does
+            # not exist here. monotonic rather than perf_counter because
+            # only differences matter and this is not pacing a frame.
+            value = reading.value_mgdl if reading is not None else None
+            if cfg.polling.alert_on_low and alert.update(value, time.monotonic()):
+                fire_alert(cfg)
 
         win.run(tick, interval_ms=int(DRAW_INTERVAL_SEC * 1000))
 
