@@ -412,12 +412,23 @@ gets muted, and a muted alert is worse than none because it is trusted.
   while it lasts — worth it if sleeping through one is the worry.
   The floor is 1, because a new reading only arrives about once a
   minute.
-- **It re-arms above a margin, not at the threshold.** A reading
-  hovering on `low_mgdl` crosses it repeatedly — the sensor's own
-  noise is a couple of mg/dL, the same size as the moves being watched
-  — and every crossing would otherwise be announced as a fresh low.
-  `rearm_margin_mgdl = 5.0` means the reading has to reach 75 before a
-  dip below 70 counts again. Set it to `0` for the bare threshold test.
+- **It waits for a real recovery before it will ring again.**
+  `rearm_margin_mgdl` is how far back up the reading has to come before
+  the next low counts as a new one. It is a margin on top of
+  `low_mgdl`, so at the defaults the recovery mark is 75:
+
+  | Reading | What happens |
+  |---|---|
+  | 68 | rings |
+  | 71 | silent — over 70, but not back to 75, so this is still the same low |
+  | 69 | silent — same low |
+  | 76 | recovered; the next dip counts again |
+  | 68 | rings |
+
+  Without it (`0`) a reading drifting around the threshold rings on
+  every crossing, and the sensor's own noise is a couple of mg/dL, so
+  69-71-69 is an ordinary thing for it to do. It changes only when the
+  sound fires — the face turns red at `low_mgdl` either way.
 
 `[trend]` sets how the arrow is worked out.
 
@@ -450,11 +461,12 @@ buzzes on yours is a question only running it answers. This is why
 `alert_sound` exists and defaults on: a sound reaches you whatever the
 controller driver decides to do with the buzz.
 
-Whether that **sound** comes out of the headset rather than the desktop
-speakers is the runtime's business, not this app's. SteamVR normally
-makes the headset the default output device, in which case it simply
-works; if yours does not, set the headset as the default device in
-Windows. **Both are supplements; the face itself is the real alert.**
+The **sound** goes wherever Windows is sending audio, which for most
+setups — anything playing through the desktop and out to headphones
+— is already where you are listening. If your headset takes its own
+output device and you cannot hear the alert in VR, make it the default
+device in Windows. **Both are supplements; the face itself is the real
+alert.**
 
 ## Cautions
 

@@ -30,14 +30,6 @@ Nothing has exercised these yet. Each says how to check it.
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
   days is the cheap way to be there when it does.
-- **Where the alert sound comes out in VR.** SteamVR normally makes the
-  headset the default output device, so `winsound` should reach your
-  ears with no VR-specific code at all — but that is an assumption
-  about the runtime, not something this can check. Set
-  `thresholds.low_mgdl` above the current reading, start the overlay,
-  and listen. If it comes out of the desktop speakers instead, the fix
-  is to set the headset as the Windows default device; if that does not
-  work either, the fallback is documenting it rather than code.
 - **The fitted trend against a real day.** `graphData` itself is now
   confirmed: a dry run against the live API returned 48 points over 11.9
   hours at a median gap of 15.05 minutes, which is what
