@@ -84,6 +84,24 @@ stays visible as a unit of work in the history.
 git merge --no-ff <branch>
 ```
 
+**Work in this checkout. Use a worktree only when another session is
+already running on the repository.** A branch here is cheaper: the
+editable install points at `src/` in this directory, so the tools and the
+tests run with no environment set up. A worktree is for one thing only —
+keeping two sessions from fighting over the working tree — so cut one
+when a second is in progress, and not otherwise.
+
+In a worktree, two things need saying because neither is obvious:
+
+- **The editable install still points at the main checkout**, so `cgm`
+  imports from the wrong place unless every command runs with
+  `PYTHONPATH=src`. Check with `python -c "import cgm;
+  print(cgm.__file__)"` before trusting a test result. Do not fix it with
+  `pip install -e .` in the worktree: there is one venv, and that
+  repoints it away from the main checkout.
+- **`EnterWorktree` names the branch `worktree-<name>`.** Rename it to
+  the `<type>/<short-description>` form above.
+
 ## Commit messages
 
 Prefix every subject line with a Conventional Commits type:
