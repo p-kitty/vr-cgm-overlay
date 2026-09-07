@@ -131,6 +131,66 @@ class StatusMarkers(unittest.TestCase):
         self.assertEqual(len(set(STATUS_MARKERS.values())), len(STATUS_MARKERS))
 
 
+class CardCorners(unittest.TestCase):
+    """The arc is for a compositor, so a frontend without one drops it."""
+
+    @staticmethod
+    def corners(image):
+        return [
+            image.getpixel(xy)
+            for xy in (
+                (0, 0),
+                (image.width - 1, 0),
+                (0, image.height - 1),
+                (image.width - 1, image.height - 1),
+            )
+        ]
+
+    def test_the_rounded_card_leaves_its_corners_transparent(self):
+        # What the VR compositor shows the game through, and the default
+        # because the overlay is the frontend with something behind it.
+        face = WatchFaceRenderer().render(reading())
+        for pixel in self.corners(face):
+            self.assertEqual(pixel[3], 0)
+
+    def test_the_square_card_fills_them_in(self):
+        # The window flattens the face onto an opaque backdrop, so a
+        # transparent corner is a wedge bitten out of the picture rather
+        # than a shape.
+        face = WatchFaceRenderer(rounded=False).render(reading())
+        for pixel in self.corners(face):
+            self.assertEqual(pixel, THEME.color_bg)
+
+    def test_the_stale_frame_survives_square_corners(self):
+        # The outline is drawn 2px inside the card's own radius, which
+        # goes negative on a square card and Pillow raises on that.
+        stale = WatchFaceRenderer(rounded=False).render(
+            reading(), stale_after_min=0.0
+        )
+        self.assertEqual(
+            stale.getpixel((WIDTH // 2, 2)), (*THEME.color_stale, 255)
+        )
+
+    def test_the_marker_keeps_its_inset_either_way(self):
+        # The status signal is which edge lights up, and the bar being
+        # the same length in both frontends keeps that one thing
+        # identical however the face is being shown. In range lights the
+        # left edge, so the lit run down column 0 is the whole marker.
+        lit = [
+            {
+                y
+                for y in range(face.height)
+                if face.getpixel((0, y))[:3] == THEME.color_in_range
+            }
+            for face in (
+                WatchFaceRenderer().render(reading()),
+                WatchFaceRenderer(rounded=False).render(reading()),
+            )
+        ]
+        self.assertTrue(lit[0])
+        self.assertEqual(lit[0], lit[1])
+
+
 class TrendAngle(unittest.TestCase):
     """Slope to arrow angle: 0 is level, +90 straight up.
 

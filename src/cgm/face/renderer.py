@@ -152,11 +152,19 @@ class Theme:
         }[self.status(mgdl)]
 
 
+# The rounded card is the VR one: the corners are fully transparent, the
+# compositor shows the game through them, and the card reads as an object
+# floating over the scene. A window has nothing behind it, so it asks for
+# 0 instead -- see WatchFaceRenderer's `rounded`.
 CARD_RADIUS = 32
 MARKER_THICKNESS = 14
-# The corners are rounded, so a marker has to start past the arc or it
-# gets clipped into a wedge.
-MARKER_INSET = CARD_RADIUS
+# A marker starts this far in from the corner. It began as the arc's
+# radius, because a bar starting at the corner would be clipped into a
+# wedge by it, and it is a constant of its own now that a square card can
+# ask for no arc at all: the status signal is which edge lights up, and
+# the bar being the same length whichever frontend is showing it keeps
+# that one thing identical between them.
+MARKER_INSET = 32
 
 # Status -> which edge of the card lights up. Position is the half of the
 # signal that does not depend on colour vision: above range lights the
@@ -326,6 +334,7 @@ class WatchFaceRenderer:
         unit: str = "mgdl",
         trend: TrendTuning | None = None,
         graph: GraphTuning | None = None,
+        rounded: bool = True,
     ) -> None:
         self.theme = theme or Theme()
         self.unit = unit
@@ -335,6 +344,13 @@ class WatchFaceRenderer:
         # scaled, so the two cannot be set to disagree. Which frontend
         # gets one is `cgm.main`'s decision, not this class's.
         self.graph = graph
+        # The corner arc is for a compositor. Anything that keeps its
+        # alpha channel keeps it; the Tk window, which flattens the card
+        # onto an opaque backdrop, asks for square corners instead, or
+        # the four transparent arcs come out as wedges bitten out of the
+        # picture. Which frontend gets which is `cgm.main`'s decision,
+        # like the graph above it.
+        self.corner_radius = CARD_RADIUS if rounded else 0
         self.width = WIDTH
         self.height = HEIGHT + (GRAPH_HEIGHT if graph is not None else 0)
         self._font_value = _load_font(150)
@@ -482,12 +498,12 @@ class WatchFaceRenderer:
         )
 
     def _new_canvas(self, accent: tuple[int, int, int], marker: str):
-        """Rounded background card with the status marker on one edge."""
+        """Background card with the status marker on one edge."""
         img = Image.new("RGBA", (self.width, self.height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         draw.rounded_rectangle(
             (0, 0, self.width - 1, self.height - 1),
-            radius=CARD_RADIUS,
+            radius=self.corner_radius,
             fill=self.theme.color_bg,
         )
         self._draw_marker(draw, marker, accent)
@@ -514,7 +530,11 @@ class WatchFaceRenderer:
             # "do not read this as either".
             draw.rounded_rectangle(
                 (2, 2, self.width - 3, self.height - 3),
-                radius=CARD_RADIUS - 2,
+                # The outline runs 2px inside the card, so its radius
+                # is 2px tighter and follows the arc instead of cutting
+                # across it. Never below zero, though: a square card
+                # would take it to -2 and Pillow rejects that.
+                radius=max(0, self.corner_radius - 2),
                 outline=fill,
                 width=6,
             )

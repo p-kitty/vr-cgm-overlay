@@ -35,9 +35,12 @@ log = logging.getLogger("vrcgm")
 
 # The card is drawn translucent so the VR compositor can show the game
 # through it. A window has nothing behind it to show, so the alpha is
-# composited onto a flat backdrop rather than thrown away. A few shades
-# off black, not black: the card is nearly black itself, and its rounded
-# corners only read as a shape against something it is not.
+# composited onto a flat backdrop rather than thrown away. The corners
+# are square here -- an arc over nothing is just a bite out of the
+# picture -- but the card itself is still translucent, `color_bg` being
+# (14, 16, 22, 225), so what it is composited onto still tints it. A few
+# shades off black rather than black, so that tint is a shade of the
+# card and not a way of making it darker than it was drawn.
 BACKDROP = (32, 34, 40)
 
 
