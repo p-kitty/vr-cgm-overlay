@@ -57,14 +57,6 @@ Nothing has exercised these yet. Each says how to check it.
   joins that one gap up to an hour. So a break there again means a lag
   over an hour, which nothing has yet seen, and is worth measuring
   rather than assuming.
-- **The sparkline on a controller.** `graph.in_vr` has never been run on
-  a headset; everything below was decided at a desk with `--window`. It
-  grows the card from 512x256 to 512x404, and the overlay is sized by
-  width, so at `width_m = 0.14` the face becomes about 11cm tall instead
-  of 7 and grows around its centre — which means `offset` was tuned for
-  a shorter card and will want revisiting. The question a device answers
-  and a desk cannot is whether three hours of trace is legible at arm's
-  length at all, or whether it is just texture under the number.
 - **`LAST_GAP_MIN` is a guess, and the number it is guarding against
   has never been bounded.** The sparkline joins its newest point across
   a gap of up to an hour, because that gap is `graphData` being
@@ -83,9 +75,13 @@ Nothing has exercised these yet. Each says how to check it.
   - **Too high**: a stretch where the phone genuinely was not scanning
     gets joined up, and the graph draws a straight line across hours
     nobody measured. That is the failure worth catching, because unlike
-    a visible break it does not look wrong. A long `--window` session
-    with the log open is where it would show: the reading's own age
-    climbs during a real scanning gap, and the trace should break.
+    a visible break it does not look wrong.
+
+  **Neither case is being hunted.** No session is scheduled to bound the
+  lag; the constant stays where it is and gets corrected if ordinary use
+  turns one of the two up. Both are visible from the face itself -- a
+  break in front of the newest point, or a flat run under an age that
+  kept climbing -- so waiting for one costs nothing.
 
   The two cases are indistinguishable from inside `cgm.face.graph`,
   which sees only timestamps. If the bound turns out to need tuning
@@ -172,9 +168,19 @@ Three ways to reach it, cheapest first:
   both a button and the buzz end up needing it, the cost is paid once
   rather than twice, which changes the arithmetic.
 
-Until one of them lands, `in_vr = false` is the honest default: the
-overlay is glanced at mid-game, and a graph that cannot be dismissed is
-a graph that is always in the way.
+**The legibility question is settled and the dismissal one is not.**
+Run on a Quest 3 on 2026-09-07: eight hours of trace across a 378px plot
+reads as a shape at arm's length rather than as texture under the
+number, and it has been left on since. Growing the card from 7cm to 12cm
+around its centre wanted `offset` Y moved 0.02m, which is the whole
+retune. So nothing above is blocked on whether the graph is worth
+showing -- it is.
+
+What is still missing is the being-gone-again half. `in_vr = false`
+stays the shipped default, because that verdict came from one stack with
+`gaze_fade` on, which is doing the dismissing that none of the three
+options above are built to do. Somebody running without the fade has a
+graph that is always in the way and no way to put it down.
 
 ## The modelled arm drifts from the real one towards the elbow
 

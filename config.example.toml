@@ -103,7 +103,7 @@ always_on_top = true
 # read at a desk, where a few hours of history is worth the space it
 # takes, and the overlay is glanced at mid-game, where the whole point
 # is the number in half a second. Turning it on grows the card from
-# 512x256 to 512x404 -- the window resizes, and in VR the face keeps its
+# 512x256 to 512x440 -- the window resizes, and in VR the face keeps its
 # width in metres and gets taller.
 in_window = true
 in_vr = false
