@@ -56,12 +56,20 @@ Nothing has exercised these yet. Each says how to check it.
   `BEND_MAX_SPAN_MIN` the arrow gives up the bend and fits a line
   instead, which the log calls `(fit)` rather than `(bend)`.
 
-  Measured at a lag of 26 minutes and growing a minute a minute, which
-  puts the third point at 41 and the bend just inside its 45. So a day
-  with a lag much past 30 draws the old straight arrow for most of it,
-  and the log is the only place that shows it. Neither `(fit)` nor
-  `(API)` while the sensor is scanning normally means the resolution has
-  changed -- check the lag first.
+  A dry run on 2026-09-07 drew a bend from 48 points, so the path is
+  reachable and not theoretical. But the lag has also been measured at
+  26 minutes and growing a minute a minute, which puts the third point
+  at 41 and the bend just inside its 45. So a day with a lag much past
+  30 draws the old straight arrow for most of it, and the log is the
+  only place that shows it. Neither `(fit)` nor `(API)` while the sensor
+  is scanning normally means the resolution has changed -- check the lag
+  first.
+
+  What no session has watched is how the arrow behaves as the lag
+  crosses that line: the shape it draws changes under you, and whether
+  that reads as the arrow doing something or as the arrow breaking is
+  the question. It costs nothing to wait for -- a `--window` left open
+  logs `(bend)` and `(fit)` as it happens.
 
   The sparkline shows the same lag from the other side. Past 30 minutes
   it exceeded `MAX_GAP_MIN` and the trace broke in front of the newest
