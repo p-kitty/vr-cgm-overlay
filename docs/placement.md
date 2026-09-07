@@ -1,9 +1,9 @@
 # Placing the face in VR
 
 Everything in `[display]` that decides where the face sits on your arm
-and when it is lit. None of it applies to `--window`, which has no
-controller to follow. For the settings both frontends share, see
-[Configuration](configuration.md).
+and when it is lit. None of it reaches the desktop window, which has no
+controller to follow, so none of it applies at all under `--window`. For
+the settings both frontends share, see [Configuration](configuration.md).
 
 - [Getting it where you want it](#getting-it-where-you-want-it)
 - [What the numbers mean](#what-the-numbers-mean)

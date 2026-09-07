@@ -24,7 +24,7 @@ the face composites over any SteamVR title.
 │    cgm.core     ──→ cgm.face  ───┤   pyopenvr         │
 │    auth + fetch     PIL drawing  └─→ cgm.desk         │
 │                                      tkinter          │
-│    cgm.main: 60s fetch loop / 1s draw loop            │
+│    cgm.main: 1s draw loop, fetch and track on threads │
 └────────────────────┬──────────────────────────────────┘
                      │ SetOverlayTransformTrackedDeviceRelative
            ┌─────────▼──────────┐
@@ -32,9 +32,15 @@ the face composites over any SteamVR title.
            └────────────────────┘
 ```
 
-The same face has two places to go. `cgm.vr` puts it on a controller;
-`cgm.desk` (`--window`) puts it in a desktop window. Neither imports the
-other, and everything above them is shared.
+The same face has two places to go, and **one process runs both**.
+`cgm.vr` puts it on a controller and `cgm.desk` puts it in a desktop
+window; neither imports the other, and everything above them — the
+login, the fetch schedule, the low alert — happens once and is shared.
+So a low is announced once rather than once per screen, and the API sees
+one poller however many places you are reading it.
+
+Neither half is compulsory. `--window` leaves SteamVR alone, `--vr`
+leaves the window out, and the default is both.
 
 Why it behaves the way it does — separate fetch and draw rates, stale
 readings that look stale, a trend fitted here rather than taken from the
@@ -87,20 +93,29 @@ side is done. Then leave it running.
 vr-cgm-overlay
 ```
 
+That opens the desktop window and waits for SteamVR. **It does not need
+SteamVR to be up**: put the headset on whenever you like and the overlay
+appears, quit SteamVR and it goes, and the window carries on either way.
+Start it once and leave it there.
+
 Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning: see
 [Placing the face in VR](docs/placement.md).
 
 ## Without a headset
 
-The same watch face runs in a desktop window.
+The desktop window is up by default, so there is nothing to do but look
+at it. `--window` is for saying you want *only* that:
 
 ```bash
 vr-cgm-overlay --window
 ```
 
 No SteamVR, no `openvr`, no headset — a plain `pip install -e .` is
-enough. It is the same fetching and the same face, so everything in
+enough, and it is also what to reach for on a machine that has no
+SteamVR at all. (A plain `vr-cgm-overlay` there says so in the log and
+carries on with the window.) It is the same fetching and the same face,
+so everything in
 [Configuration](docs/configuration.md) that is not about placement
 applies here too: the colour bands, the units, the trend arrow, the
 stale greying, and `config.toml` being re-read while it runs.
@@ -119,15 +134,20 @@ if you would rather have the number alone.
 
 `alert_on_low` works here through sound. The controller buzz is the one
 channel a window has no hardware for; everything about *when* to
-announce a low is shared, so the window and the headset cannot disagree
-about whether you have already been told.
+announce a low is shared, so with both frontends up you are told once
+rather than twice.
+
+The other way round, `--vr` runs the overlay with no window at all —
+worth having when the window is one more thing on a taskbar you are not
+looking at.
 
 ## Settings
 
 Everything is in `config.toml`, which is **re-read while the app runs** —
 edit it with the headset on and the face changes within a second. Only
-`hand` and `[account]` need a restart, and a key nothing recognises stops
-the app rather than being silently ignored.
+`[account]` needs a restart (`hand` reopens the overlay by itself, which
+takes about a second), and a key nothing recognises stops the app rather
+than being silently ignored.
 
 | Where to look | For |
 |---|---|

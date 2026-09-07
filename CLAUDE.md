@@ -27,7 +27,9 @@ two frontends.
 **Put new code in the shallowest layer that can hold it.** The two
 frontends are the reason: whatever lives in one of them has to be
 written twice or go without. Neither imports the other, and `cgm.main`
-wires whichever was asked for.
+wires both -- one process runs the window and the overlay together, with
+one poller and one low alert between them, and `--window` and `--vr` ask
+for one half alone.
 
 **Prefer `--window` for anything that is not about placement.** It runs
 the same core and the same face with the VR half left out, so behaviour
@@ -145,15 +147,17 @@ python -m compileall -q src tools tests
 `tests/` covers what can be asserted without a device: timestamp
 parsing, the trend fit and the arrow angle it maps to, the fetch
 schedule and its backoff and the thread that drives it, config
-validation, the live reload and which settings each frontend cannot
-apply, the colour thresholds, the window's compositing and title, and
-that every import inside the package resolves -- including the lazy ones
-in `run()` and `window()`, one of which only executes with a headset
-attached. It deliberately does not mock the LibreLinkUp HTTP
-calls — the real risk there is the unofficial API
+validation, the live reload and which settings a restart is still
+needed for, the colour thresholds, the window's compositing and title,
+the overlay's thread driven by a stand-in overlay, and that every import
+inside the package resolves -- including the lazy ones in `run()`, which
+only execute with a headset attached. It deliberately does not mock the
+LibreLinkUp HTTP calls — the real risk there is the unofficial API
 changing shape, which only `--dry-run` can see — and it does not touch
-`cgm.vr`. It does not start Tk either: `cgm.desk` is tested down to the
-last thing before a window would open.
+the SteamVR bindings: `cgm.vr.session` is tested because it is handed an
+overlay rather than making one, and `cgm.vr.overlay` is not tested at
+all. It does not start Tk either: `cgm.desk` is tested down to the last
+thing before a window would open.
 
 To check the API client against the live service (needs `config.toml`):
 
