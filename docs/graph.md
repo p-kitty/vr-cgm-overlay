@@ -39,8 +39,10 @@ whole design goal, so it stays off there unless you ask for it.
 
 Turning it on grows the card from 512x256 to 512x440. The window resizes
 itself on the next frame; in VR the face keeps the width `width_m` gives
-it and gets taller — 12cm rather than 7 at the default `width_m` — so
-expect to revisit `offset` if you switch it on there.
+it and gets taller — 12cm rather than 7 at the default `width_m` — and
+grows around its centre, so about 2.5cm arrives above the number and the
+same below. Expect to revisit `offset` if you switch it on there: on a
+Quest 3 the whole correction was moving Y by 0.02m.
 
 ## What it draws
 
