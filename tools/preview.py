@@ -14,7 +14,8 @@ that needs a paragraph to explain, and nothing anyone has to scroll.
 **`preview-debug.png` is the working sheet.** One tile per thing a
 person has to judge and no assertion can: every marker edge side by
 side, the message card, a line breaking across a scanning gap, the
-labels in mmol/L. It is not committed and not linked from anywhere;
+labels in mmol/L, and the trend arrow bent through each shape the last
+half hour can take. It is not committed and not linked from anywhere;
 render it when changing the face and look at it.
 
 Neither sheet is a substitute for `tests/`. Anything with an edge in it
@@ -105,6 +106,45 @@ def reading(mgdl: float, trend: int, age_min: float, values=None) -> Reading:
     )
 
 
+# The last half hour, as three points fifteen minutes apart -- which is
+# the whole of what the arrow is bent through. Written as mg/dL at 30
+# minutes ago, 15, and now.
+#
+# These are the shapes no single angle can tell apart. Averaged, the
+# first two are the same gentle rise and the same gentle fall; read as
+# they happened, one is still going and the other has turned over.
+BENDS = {
+    "still climbing": (100, 112, 130),
+    "levelling off": (100, 122, 128),
+    # Ordinary enough after a meal, and already past the cap: the fold
+    # is drawn shallower than it was, so what is lost is how sharp the
+    # turn was rather than that it turned.
+    "rolled over": (100, 124, 116),
+    # A hard climb answered by an equally hard fall. Uncapped the two
+    # segments lie on top of each other and the arrow is a bar with a
+    # head somewhere in it; capped, the tail comes back past level, so
+    # the stretch before now is drawn wrong to keep now readable. Judge
+    # whether it still reads as an arrow going somewhere.
+    "hairpin": (100, 190, 100),
+}
+
+
+def bent(values: tuple[float, float, float]) -> Reading:
+    """A reading carrying only the three points the arrow bends through.
+
+    Nothing else: this is the face the overlay draws, where there is no
+    sparkline and the arrow is the only history shown.
+    """
+    return Reading(
+        value_mgdl=values[-1],
+        trend=3,
+        timestamp_utc=ANCHOR,
+        is_high=False,
+        is_low=False,
+        history=history(ANCHOR, list(values)),
+    )
+
+
 def gapped(mgdl: float, trend: int) -> Reading:
     """A reading whose history stops for an hour and a half in the middle.
 
@@ -166,6 +206,12 @@ def debug(
         # And in mmol/L, where the level labels convert and nothing
         # behind them does.
         face(mmol, reading(110, 3, 1, DAY)),
+        # The bend, which is the tile with the most to look at and no
+        # assertion behind it. Whether two segments at 84 pixels read as
+        # a shape -- and which way that shape is going -- is a question
+        # for eyes, and in VR for a headset, where this face is the only
+        # history there is.
+        *(face(plain, bent(values)) for values in BENDS.values()),
     ]
 
 
