@@ -186,85 +186,187 @@ STATUS_MARKERS = {
 # Arrows are drawn rather than typeset: Segoe UI and the other stock
 # Windows fonts have no U+2197/U+2198 glyphs and render tofu boxes.
 #
-# This is the fallback only. When there is enough history to fit a slope
-# the angle comes from TrendTuning instead, and is not restricted to
-# these five.
+# This is the last fallback. When there is enough history the angles
+# come from TrendTuning instead, and are not restricted to these five.
 TREND_ANGLES = {1: -90.0, 2: -45.0, 3: 0.0, 4: 45.0, 5: 90.0}
+
+# The most the two segments of a bent arrow may fold against each other.
+# Each is free to swing +/-90 on its own, so an uncapped bend can meet
+# at a hairpin -- and at 84 pixels a hairpin is a blob with a head
+# somewhere in it rather than a signal. The head segment is the recent
+# one and keeps the angle it earned; the tail is pulled in to within
+# this of it, so what is lost is how sharp the turn was rather than
+# where the arm is going now.
+MAX_BEND_DEG = 60.0
+
+
+@dataclass(frozen=True)
+class TrendShape:
+    """The arrow to draw, and where it came from.
+
+    `angles` is one per segment, tail first, so the head sits on the
+    last of them. Empty means there is no arrow at all -- a TrendArrow
+    outside the five documented values, on a reading with no history.
+
+    `rates` is what those segments were measured at, in mg/dL per
+    minute, and is empty for the API fallback because there is no rate
+    behind its five positions. It is carried for the log rather than for
+    the drawing: `fast_mgdl_min` is the magnification between the two,
+    and the only way to settle that number is to read them against each
+    other over a real day.
+    """
+
+    angles: tuple[float, ...]
+    source: str
+    rates: tuple[float, ...] = ()
+
+    def describe(self, arrow: str = "") -> str:
+        """One line saying what was drawn and which source drew it.
+
+        Both the fetch log and `--dry-run` print this. A bend that
+        quietly stopped appearing would otherwise read as calm glucose.
+        """
+        if not self.rates:
+            return f"{arrow} (API)"
+        rates = "/".join(f"{rate:+.2f}" for rate in self.rates)
+        angles = "/".join(f"{angle:+.0f}" for angle in self.angles)
+        return f"{rates} mg/dL/min ({self.source}, {angles} deg)"
 
 
 @dataclass
 class TrendTuning:
-    """How a fitted rate of change becomes an arrow angle.
+    """How a rate of change becomes an arrow angle.
 
     Abbott's TrendArrow is five buckets on thresholds it does not
-    publish and nothing here can adjust. The slope behind it can be
-    fitted from the history the same response already carries, and the
-    arrow is drawn as a vector anyway, so it can point anywhere rather
-    than snapping to five positions -- a reading climbing gently and one
-    climbing hard both come out as the same arrow otherwise.
+    publish and nothing here can adjust. The history the same response
+    already carries says more than that, and the arrow is drawn as a
+    vector anyway, so it can point anywhere rather than snapping to five
+    positions -- a reading climbing gently and one climbing hard both
+    come out as the same arrow otherwise.
 
     One number sets the whole scale: fast_mgdl_min is the rate at which
-    the arrow stands straight up, and everything below it is in
+    a segment stands straight up, and everything below it is in
     proportion -- half that rate is the familiar 45 degree diagonal.
     Nothing steeper than 90 exists to draw, so that is where it stops.
+    Bending the arrow through two segments makes that number a
+    magnification on a shape rather than a scale on a single angle,
+    which is the difference between a setting nobody notices and the one
+    that decides whether the face is readable or twitchy.
 
     This lives with the renderer rather than the API client because the
-    fit is cheap and `config.toml` is re-read while running: computing
-    the angle at draw time is what lets a tuning edit land within a
-    second, the same as placement does. `local` rides on the same
-    reload, so the two arrows can be compared by switching between them
-    with the headset on rather than by restarting twice.
+    arithmetic is cheap and `config.toml` is re-read while running:
+    working the angles out at draw time is what lets a tuning edit land
+    within a second, the same as placement does. `local` rides on the
+    same reload, so the two arrows can be compared by switching between
+    them with the headset on rather than by restarting twice.
     """
 
     local: bool = True
-    window_min: float = 60.0
     fast_mgdl_min: float = 2.0
 
-    def slope_for(self, reading) -> float | None:
-        """The slope to draw from, or None to defer to the API's arrow.
+    def shape_for(self, reading) -> TrendShape:
+        """The arrow to draw for a reading, and the name of its source.
 
         The one place that choice is made. The face and the fetch log
         both ask here, so the log cannot end up claiming a source the
         face is not using.
+
+        Three shapes, in the order of how much of the last half hour is
+        actually there. The bend is the answer; the other two are what
+        is left when the points for it are not:
+
+          - `bend`: three points inside the last 45 minutes, drawn as
+            two segments with the head on the newer one
+          - `fit`: three points anywhere in the fit's window, drawn as
+            the single straight arrow this used to draw always
+          - `api`: fewer than that, or `local` off, drawn as one of
+            TrendArrow's five positions
         """
-        if not self.local:
-            return None
-        return reading.slope_mgdl_per_min(self.window_min)
+        if self.local:
+            rates = reading.segment_rates()
+            if rates is not None:
+                return TrendShape(self._folded(rates), "bend", rates)
+            slope = reading.slope_mgdl_per_min()
+            if slope is not None:
+                return TrendShape((self.angle_for_slope(slope),), "fit", (slope,))
+
+        angle = TREND_ANGLES.get(reading.trend)
+        return TrendShape(() if angle is None else (angle,), "api")
 
     def angle_for_slope(self, slope: float) -> float:
         """Map mg/dL per minute onto an angle, 0 level and +/-90 vertical."""
         fraction = slope / self.fast_mgdl_min
         return 90.0 * max(-1.0, min(1.0, fraction))
 
+    def _folded(self, rates) -> tuple[float, ...]:
+        """Segment angles, with the fold between them capped.
+
+        Measured against the head, which is the segment describing now
+        and so the one that has to arrive unaltered.
+        """
+        angles = [self.angle_for_slope(rate) for rate in rates]
+        head = angles[-1]
+        return tuple(
+            max(head - MAX_BEND_DEG, min(head + MAX_BEND_DEG, angle))
+            for angle in angles
+        )
+
 
 def _draw_arrow(
     draw: ImageDraw.ImageDraw,
     center: tuple[float, float],
-    angle_deg: float,
+    angles: tuple[float, ...],
     length: float,
     color: tuple[int, int, int],
     width: int = 13,
 ) -> None:
-    """Draw an arrow at the given angle as vector shapes.
+    """Draw an arrow along one or more segments, as vector shapes.
+
+    `angles` gives each segment its own angle, tail first, so the head
+    sits on the last of them and the joints in between are where the
+    arrow bends. The segments share `length` equally, and the middle of
+    the path -- measured along it, not across its bounding box -- lands
+    on `center`. With a single angle that is the midpoint of the one
+    segment, which is exactly where a straight arrow has always been
+    drawn, so bending it moved nothing that was already there.
 
     Screen Y grows downwards, so the sine is negated to make a positive
     angle point up.
     """
-    rad = math.radians(angle_deg)
+    span = length / len(angles)
+    points = [(0.0, 0.0)]
+    for angle in angles:
+        rad = math.radians(angle)
+        x, y = points[-1]
+        points.append((x + math.cos(rad) * span, y - math.sin(rad) * span))
+
+    # Halfway along the path: a joint when there is an even number of
+    # segments, and inside one when there is an odd number.
+    half = len(angles) / 2
+    whole = int(half)
+    part = half - whole
+    ax, ay = points[whole]
+    if part:
+        bx, by = points[whole + 1]
+        ax, ay = ax + (bx - ax) * part, ay + (by - ay) * part
+    shift_x, shift_y = center[0] - ax, center[1] - ay
+    points = [(x + shift_x, y + shift_y) for x, y in points]
+
+    # The head belongs to the last segment, whatever the ones before it
+    # are doing.
+    rad = math.radians(angles[-1])
     dx, dy = math.cos(rad), -math.sin(rad)
     px, py = -dy, dx  # unit vector perpendicular to travel
 
-    cx, cy = center
-    half = length / 2
-    tail = (cx - dx * half, cy - dy * half)
-    tip = (cx + dx * half, cy + dy * half)
-
+    tip = points[-1]
     head_len = length * 0.42
     head_half_width = length * 0.30
 
-    # Stop the shaft short of the head so it does not poke out of the tip.
+    # Stop the shaft short of the head so it does not poke out of the
+    # tip. `joint="curve"` rounds the bend, which at this width is the
+    # difference between a turn and a notch cut out of the outside of it.
     shaft_end = (tip[0] - dx * head_len * 0.75, tip[1] - dy * head_len * 0.75)
-    draw.line([tail, shaft_end], fill=color, width=width)
+    draw.line(points[:-1] + [shaft_end], fill=color, width=width, joint="curve")
 
     base = (tip[0] - dx * head_len, tip[1] - dy * head_len)
     draw.polygon(
@@ -401,9 +503,9 @@ class WatchFaceRenderer:
         value_right = 44 + draw.textlength(value_text, font=self._font_value)
 
         # The arrow sits right next to the number to minimise eye travel.
-        angle = self._trend_angle(reading)
-        if angle is not None:
-            _draw_arrow(draw, (value_right + 66, 116), angle, 84, color)
+        shape = self.trend.shape_for(reading)
+        if shape.angles:
+            _draw_arrow(draw, (value_right + 66, 116), shape.angles, 84, color)
 
         draw.text(
             (46, 206), unit_text, font=self._font_small, fill=(160, 165, 178), anchor="lm"
@@ -468,20 +570,6 @@ class WatchFaceRenderer:
         return img
 
     # -- internals ----------------------------------------------------------
-
-    def _trend_angle(self, reading) -> float | None:
-        """Angle for the arrow, preferring the locally fitted slope.
-
-        The API's own TrendArrow is used instead when the fit is turned
-        off, and as the fallback when it is on but there is too little
-        history to fit -- a fresh sensor, or a gap in scanning. Either
-        way the arrow snaps back to the five official positions, which
-        is what the face drew before any of this.
-        """
-        slope = self.trend.slope_for(reading)
-        if slope is not None:
-            return self.trend.angle_for_slope(slope)
-        return TREND_ANGLES.get(reading.trend)
 
     def _graph_box(self) -> tuple[float, float, float, float]:
         """The plot rectangle, in canvas coordinates.

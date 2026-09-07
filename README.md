@@ -108,9 +108,9 @@ stale greying, and `config.toml` being re-read while it runs.
 Useful for a second monitor while you are doing something other than
 playing, and useful for anything that takes hours to show itself — a
 long session's fetch schedule, a token expiring and being renewed, or
-whether the trend window is the right length against a real day. None of
-those are VR questions, and none of them are worth wearing a headset for
-as long as they take to answer.
+whether `trend.fast_mgdl_min` draws a readable arrow against a real day
+rather than a twitchy one. None of those are VR questions, and none of
+them are worth wearing a headset for as long as they take to answer.
 
 **The window draws the history sparkline and the overlay does not**, and
 that is the one thing the two frontends deliberately disagree about. See

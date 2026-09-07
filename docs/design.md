@@ -32,16 +32,38 @@ Abbott's own
 `TrendArrow` is five buckets on thresholds it does not publish and
 nothing here can adjust, so a gentle drift and a hard climb arrive as
 the same arrow. The same response already carries about twelve hours of
-history, which used to be discarded; a line is fitted through the last
-hour of it instead, and because the arrow is a drawing rather than a
-glyph it can point anywhere. An hour rather than a few minutes because
-that history is downsampled to a point every fifteen minutes — coarser
-than the sensor's own record, and what decides how long a window the fit
-needs. Nothing extra is fetched and nothing
-is stored, so the trend is right again the moment the process restarts.
-`TrendArrow` stays as the fallback for a fresh sensor or a gap in
-scanning, and `trend.local = false` goes back to it entirely for anyone
-who would rather the face and the phone agree exactly.
+history, which used to be discarded; the arrow is read out of that
+instead, and because it is a drawing rather than a glyph it can point
+anywhere. Nothing extra is fetched and nothing is stored, so the trend
+is right again the moment the process restarts. `TrendArrow` stays as
+the fallback for a fresh sensor or a gap in scanning, and
+`trend.local = false` goes back to it entirely for anyone who would
+rather the face and the phone agree exactly.
+
+**The arrow is bent through three points, not fitted through many.**
+The arrow says what is happening now; it does not say what happens
+next, because nothing here knows about meals or injections and without
+those a forecast is not available at any price. So what it should carry
+is the shape of the last half hour, and a least-squares fit is the one
+thing that cannot carry it — smoothing is precisely what buries a
+reading that fell and has just turned around, which comes out of a fit
+identical to one that has been climbing all along. The shaft runs
+through the three most recent points instead, each segment at the rate
+its own two points give, so the arrow and the chart are drawing the same
+stretch. That costs jitter, and knowingly: two mg/dL of sensor noise
+over a fifteen minute gap is about six degrees of segment, on glucose
+doing nothing. The chart flattens that and the arrow magnifies it, and
+`trend.fast_mgdl_min` is the magnification.
+
+**The fit is what is left when those three points are not there.** The
+history is downsampled to a point every fifteen minutes — coarser than
+the sensor's own record — and it is published behind the current
+measurement, often by twenty to thirty minutes. Past forty-five the
+three most recent points are no longer the last half hour, so the arrow
+refuses the bend and falls back to a line fitted over the hour, which is
+what it always drew before. Every fetch logs which of the three it
+used, because a bend that quietly stopped appearing would read as calm
+glucose.
 
 **The same history is read twice.** The response the current value
 arrives in carries about twelve hours of it, so once the trend was being
@@ -70,4 +92,5 @@ have actually been reported against existing clients.
 | No token while terms or email verification are pending | `step.type` is detected and explained |
 | Tokens expire with no refresh endpoint and no warning | A 401 triggers one automatic re-login |
 | `TrendArrow` is five buckets on undocumented thresholds | The trend is fitted from `graphData`; `TrendArrow` is the fallback |
-| `graphData` is downsampled to a point every 15 min | The trend window has a 45 minute floor, so three points can land in it |
+| `graphData` is downsampled to a point every 15 min | Three points are half an hour, which is the stretch the arrow bends through |
+| `graphData` lags the current measurement, by 20-30 min | Past a 45 minute span the arrow gives up the bend and falls back to a fit |

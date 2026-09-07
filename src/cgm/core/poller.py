@@ -63,19 +63,17 @@ class Poller:
             self.error = None
             self._failures = 0
             got_new = True
-            # Say which source the arrow came from, not just where it
-            # points. Whether the local fit is actually being used can
-            # only be seen against live data, and this is where it shows.
-            slope = self._trend.slope_for(self.reading)
-            trend = (
-                f"{self.reading.arrow} (API)"
-                if slope is None
-                else f"{slope:+.2f} mg/dL/min"
-            )
+            # Say which of the three sources the arrow came from, not
+            # just where it points. Which one a poll reaches can only be
+            # seen against live data -- the bend needs history the API
+            # is publishing on time -- and this is where it shows. A
+            # bend that quietly stopped appearing would otherwise read
+            # as calm glucose.
+            shape = self._trend.shape_for(self.reading)
             log.info(
                 "fetched: %.0f mg/dL %s (%.1f min old)",
                 self.reading.value_mgdl,
-                trend,
+                shape.describe(self.reading.arrow),
                 self.reading.age_minutes(),
             )
         except AuthError as exc:

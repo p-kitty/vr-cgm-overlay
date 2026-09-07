@@ -206,8 +206,13 @@ class FetchLog(unittest.TestCase):
 
     Whether the local trend behaves on a real arm can only be judged
     from this line -- there is no other way to see it without a headset
-    and a day of readings -- so it has to say which of the two sources
+    and a day of readings -- so it has to say which of the three sources
     was used, and it has to not raise while saying it.
+
+    Which source a poll reaches is asserted in tests/test_renderer.py,
+    against the object both this and the face read. What is asserted
+    here is that the line carries it: a bend that quietly stopped
+    appearing would otherwise read as calm glucose.
     """
 
     def log_line(self, entry: Reading, trend: TrendTuning | None = None) -> str:
@@ -216,11 +221,15 @@ class FetchLog(unittest.TestCase):
             poller.poll(0.0)
         return caught.output[0]
 
-    def test_a_fitted_slope_is_logged_as_a_rate(self):
-        self.assertIn("+1.50 mg/dL/min", self.log_line(reading(slope=1.5)))
+    def test_a_bend_is_logged_as_a_rate_per_segment(self):
+        line = self.log_line(reading(slope=1.5))
+        self.assertIn("+1.50/+1.50 mg/dL/min", line)
+        self.assertIn("bend", line)
 
     def test_a_fall_keeps_its_sign(self):
-        self.assertIn("-2.00 mg/dL/min", self.log_line(reading(slope=-2.0)))
+        # Sign is the whole message, and a log that dropped it would be
+        # the one place a dropping arm looked like a climbing one.
+        self.assertIn("-2.00/-2.00 mg/dL/min", self.log_line(reading(slope=-2.0)))
 
     def test_the_fallback_says_it_came_from_the_api(self):
         # Otherwise a session where the fit never once succeeded would

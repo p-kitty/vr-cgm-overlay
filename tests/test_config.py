@@ -16,7 +16,7 @@ from pathlib import Path
 
 from cgm.core import config as config_mod
 from cgm.core.config import WINDOW_SCALE_MAX, WINDOW_SCALE_MIN
-from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
+from cgm.core.librelink import GRAPH_RESOLUTION_MIN
 from cgm.face.graph import AXIS_FLOOR_MGDL
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
@@ -91,15 +91,13 @@ class Loading(ConfigTestCase):
     def test_trend_defaults_to_an_hour_window(self):
         cfg = self.load()
         self.assertTrue(cfg.trend.local)
-        self.assertEqual(cfg.trend.window_min, 60.0)
         self.assertEqual(cfg.trend.fast_mgdl_min, 2.0)
 
     def test_trend_settings_are_read(self):
         cfg = self.load(
-            "\n[trend]\nlocal = false\nwindow_min = 90\nfast_mgdl_min = 1.5\n"
+            "\n[trend]\nlocal = false\nfast_mgdl_min = 1.5\n"
         )
         self.assertFalse(cfg.trend.local)
-        self.assertEqual(cfg.trend.window_min, 90.0)
         self.assertEqual(cfg.trend.fast_mgdl_min, 1.5)
 
     def test_gaze_fade_defaults_to_off(self):
@@ -360,28 +358,21 @@ class Validation(ConfigTestCase):
             "\n[graph]\nin_window = false\nin_vr = false\nwindow_min = 15\n"
         )
 
-    def test_the_trend_window_must_hold_enough_points_to_fit(self):
-        # The history arrives at one point every GRAPH_RESOLUTION_MIN, so
-        # a short window holds one or two of them and can never fit. The
-        # first default shipped here was 15, which did exactly that and
-        # left the arrow on TrendArrow for every reading without ever
-        # saying so. Rejecting it is the only way that fails loudly.
-        message = self.assertRejected("\n[trend]\nwindow_min = 15\n")
-        self.assertIn("window_min", message)
-        self.assertIn("15 minutes", message)
-        self.assertRejected("\n[trend]\nwindow_min = 30\n")
-        self.assertRejected("\n[trend]\nwindow_min = 0\n")
-
-    def test_the_window_floor_itself_is_allowed(self):
-        floor = MIN_FIT_POINTS * GRAPH_RESOLUTION_MIN
-        cfg = self.load(f"\n[trend]\nwindow_min = {floor}\n")
-        self.assertEqual(cfg.trend.window_min, floor)
+    def test_the_trend_window_is_no_longer_a_setting(self):
+        # It was, and the file it was in is not rewritten by anything
+        # here -- so an existing config.toml carrying it has to fail
+        # where the key is rather than by quietly doing nothing, which
+        # is what #8 made the rule for every unrecognised key.
+        message = self.assertRejected("\n[trend]\nwindow_min = 60\n")
+        self.assertIn("trend.window_min", message)
+        # And it says where the one surviving window_min lives, which is
+        # the graph rather than the arrow.
+        self.assertIn("[graph]", message)
 
     def test_trend_settings_are_checked_even_when_the_fit_is_off(self):
         # local is flipped from inside the headset like everything else
-        # here. A value only rejected once the fit is switched on is
+        # here. A value only rejected once the arrow is switched on is
         # rejected at the worst possible moment.
-        self.assertRejected("\n[trend]\nlocal = false\nwindow_min = 15\n")
         self.assertRejected("\n[trend]\nlocal = false\nfast_mgdl_min = 0\n")
 
     def test_the_fast_rate_must_be_positive(self):
@@ -488,19 +479,15 @@ class UnknownKeys(ConfigTestCase):
         self.assertIn("display.window_min", message)
         # And says where it should have gone, since the point of
         # failing is to save the reader working that out.
-        self.assertIn("[trend]", message)
-
-    def test_a_key_two_sections_share_names_both_of_them(self):
-        # `window_min` means "how far back" in [trend], where it is the
-        # span a slope is fitted over, and in [graph], where it is the
-        # span the sparkline shows. Naming only the first would send
-        # half the people who misfiled it to the wrong section, which is
-        # the silence this message exists to replace.
-        with self.assertRaises(ValueError) as caught:
-            self.load("\n[display]\nwindow_min = 30\n")
-        message = str(caught.exception)
         self.assertIn("[graph]", message)
-        self.assertIn("[trend]", message)
+
+    def test_a_key_two_sections_shared_would_name_both_of_them(self):
+        # Nothing is in two sections now -- `window_min` was, in [trend]
+        # and [graph], until the arrow stopped having a window -- but
+        # "how far back" is exactly the kind of key that gets added to a
+        # second section, and naming only the first would send half the
+        # people who misfiled it to the wrong place.
+        self.assertEqual(config_mod._sections(["graph", "trend"]), "[graph] or [trend]")
 
     def test_a_threshold_in_the_wrong_section_is_rejected(self):
         # The case this is really for: silently keeping 70.0 here means
@@ -514,18 +501,18 @@ class UnknownKeys(ConfigTestCase):
             self.load(account="window_min = 30\n" + ACCOUNT)
         message = str(caught.exception)
         self.assertIn("window_min", message)
-        self.assertIn("[trend]", message)
+        self.assertIn("[graph]", message)
 
     def test_a_misspelled_key_is_rejected_with_the_spelling_meant(self):
         with self.assertRaises(ValueError) as caught:
-            self.load("\n[trend]\nwindowmin = 30\n")
+            self.load("\n[graph]\nwindowmin = 30\n")
         message = str(caught.exception)
-        self.assertIn("trend.windowmin", message)
+        self.assertIn("graph.windowmin", message)
         self.assertIn("window_min", message)
 
     def test_a_misspelled_section_is_rejected(self):
         with self.assertRaises(ValueError) as caught:
-            self.load("\n[trends]\nwindow_min = 30\n")
+            self.load("\n[trends]\nlocal = false\n")
         message = str(caught.exception)
         self.assertIn("[trends]", message)
         self.assertIn("did you mean [trend]", message)

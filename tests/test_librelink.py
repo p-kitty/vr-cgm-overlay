@@ -22,6 +22,9 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from cgm.core.librelink import (
+    BEND_MAX_SPAN_MIN,
+    BEND_MIN_GAP_MIN,
+    BEND_POINTS,
     GRAPH_RESOLUTION_MIN,
     MIN_FIT_POINTS,
     MIN_FIT_SPAN_MIN,
@@ -31,6 +34,7 @@ from cgm.core.librelink import (
     _parse_factory_timestamp,
     _parse_graph_data,
     fit_slope,
+    read_segments,
 )
 
 # A fixed instant, so a series can be written down and its slope known.
@@ -77,6 +81,19 @@ def series(
             end_mgdl - slope * ago * step,
         )
         for ago in range(int(minutes / step), -1, -1)
+    )
+
+
+def points(*ago_mgdl: tuple[float, float]) -> tuple[GlucosePoint, ...]:
+    """A series written as (minutes before BASE, mg/dL), oldest first.
+
+    `series` above says "a straight run at a known slope", which is what
+    a fit is asserted against. The segments are asserted against
+    individual points instead -- the whole point of them is that no two
+    have to agree -- so they are spelled out one at a time.
+    """
+    return tuple(
+        GlucosePoint(BASE - timedelta(minutes=ago), mgdl) for ago, mgdl in ago_mgdl
     )
 
 
@@ -284,7 +301,129 @@ class RealisticSpacing(unittest.TestCase):
         )
 
 
+class ReadSegments(unittest.TestCase):
+    """The three points the arrow is bent through.
+
+    Not a fit, so the assertions are the opposite of FitSlope's: what
+    matters is that the two rates are allowed to disagree, that each
+    comes off the real gap it was measured over, and that the three ways
+    of not having the half hour all hand the arrow on rather than
+    guessing.
+    """
+
+    def test_two_rates_come_back_oldest_first(self):
+        # 30 minutes ago, 15 minutes ago, now -- the last half hour of
+        # the chart, in the order it is drawn in.
+        got = read_segments(points((30, 100.0), (15, 115.0), (0, 130.0)))
+        self.assertEqual(len(got), BEND_POINTS - 1)
+        self.assertAlmostEqual(got[0], 1.0, places=6)
+        self.assertAlmostEqual(got[1], 1.0, places=6)
+
+    def test_a_turn_comes_out_as_two_different_rates(self):
+        # The case the fit cannot say: a climb that has just rolled over.
+        # Averaged it is a gentle rise; read as it happened it is a rise
+        # and then a fall, which is what the arrow now draws.
+        got = read_segments(points((30, 100.0), (15, 130.0), (0, 115.0)))
+        self.assertAlmostEqual(got[0], 2.0, places=6)
+        self.assertAlmostEqual(got[1], -1.0, places=6)
+        # And the fit over the same points really would have called it
+        # a rise, which is the whole disagreement.
+        turned = points((30, 100.0), (15, 130.0), (0, 115.0))
+        self.assertGreater(fit_slope(turned, 60.0), 0)
+
+    def test_each_rate_uses_the_gap_it_was_actually_measured_over(self):
+        # Gaps run 15 to 21 minutes. Dividing both by a nominal 15 would
+        # report the longer segment as steeper than it was.
+        got = read_segments(points((36, 100.0), (21, 115.0), (0, 136.0)))
+        self.assertAlmostEqual(got[0], 1.0, places=6)
+        self.assertAlmostEqual(got[1], 1.0, places=6)
+
+    def test_a_flat_run_is_two_zeroes(self):
+        got = read_segments(points((30, 100.0), (15, 100.0), (0, 100.0)))
+        self.assertEqual(got, (0.0, 0.0))
+
+    def test_too_few_points_gives_nothing(self):
+        # A fresh sensor. The fit is the next thing asked, and it will
+        # refuse these too.
+        self.assertIsNone(read_segments(points((15, 100.0), (0, 115.0))))
+        self.assertIsNone(read_segments(points((0, 115.0))))
+        self.assertIsNone(read_segments(()))
+
+    def test_a_hole_in_the_history_gives_nothing(self):
+        # Three points, but reaching back an hour and a half: an arrow
+        # drawn through them would be claiming a half hour it does not
+        # have. The fit takes over, and says so in the log.
+        self.assertIsNone(read_segments(points((90, 100.0), (45, 115.0), (0, 130.0))))
+
+    def test_the_span_limit_itself_is_allowed(self):
+        # Two stretched gaps -- 21 minutes is the longest the API has
+        # been seen to send -- must still bend, or the arrow would drop
+        # to a fit on the day the gaps run long.
+        at_limit = points((BEND_MAX_SPAN_MIN, 100.0), (21, 115.0), (0, 130.0))
+        self.assertIsNotNone(read_segments(at_limit))
+        past_limit = points((BEND_MAX_SPAN_MIN + 1, 100.0), (21, 115.0), (0, 130.0))
+        self.assertIsNone(read_segments(past_limit))
+
+    def test_a_point_too_close_to_the_newest_is_stepped_over(self):
+        # graphData publishing a minute after the current measurement.
+        # Reading a rate off that gap would turn the sensor's own jitter
+        # into a near-vertical arrow, so the walk back takes the next
+        # real point instead and the answer is the same as if the late
+        # publication had not happened.
+        self.assertLess(0.5, BEND_MIN_GAP_MIN)
+        late = points((30, 100.0), (15, 115.0), (0.5, 130.0), (0, 130.0))
+        got = read_segments(late)
+        self.assertAlmostEqual(got[0], 1.0, places=6)
+        self.assertAlmostEqual(got[1], 1.0, places=6)
+        # Read off the half minute instead, a mg/dL of jitter would have
+        # come back as two mg/dL a minute -- vertical, on a steady climb.
+        self.assertEqual(got, read_segments(points((30, 100.0), (15, 115.0), (0, 130.0))))
+
+    def test_a_crowded_history_still_reaches_back_far_enough(self):
+        # Every point a minute apart, which is what the sensor records
+        # even though the API does not send it. The walk must not answer
+        # from three adjacent minutes.
+        crowded = points(*[(ago, 100.0 + ago) for ago in range(31)])
+        got = read_segments(crowded)
+        self.assertAlmostEqual(got[0], -1.0, places=6)
+        self.assertAlmostEqual(got[1], -1.0, places=6)
+
+    def test_points_after_the_anchor_are_not_used(self):
+        # `now` is the reading's own timestamp, and the series can hold
+        # samples past it in principle. The arrow ends at the value the
+        # digits are showing.
+        ahead = points((30, 100.0), (15, 115.0), (0, 130.0), (-15, 300.0))
+        got = read_segments(ahead, now=BASE)
+        self.assertAlmostEqual(got[1], 1.0, places=6)
+
+
 class ReadingTrend(unittest.TestCase):
+    def test_the_segments_come_from_the_history(self):
+        # One point a minute for twenty minutes, which is enough for the
+        # walk to find three far enough apart.
+        self.assertEqual(len(reading(slope=1.2).segment_rates()), BEND_POINTS - 1)
+
+    def test_no_history_means_no_segments(self):
+        # Which is what sends the arrow on to the fit, and then to the
+        # API's own TrendArrow.
+        self.assertIsNone(reading().segment_rates())
+
+    def test_the_segments_are_anchored_on_the_reading_not_now(self):
+        # The same rule the fit follows, and it matters more here: the
+        # span limit is 45 minutes, so a reading a few hours old would
+        # have no segments at all if they were measured from the clock.
+        taken_at = datetime.now(timezone.utc) - timedelta(hours=3)
+        entry = Reading(
+            value_mgdl=100.0,
+            trend=3,
+            timestamp_utc=taken_at,
+            is_high=False,
+            is_low=False,
+            history=series(1.7, ends_at=taken_at),
+        )
+        for rate in entry.segment_rates():
+            self.assertAlmostEqual(rate, 1.7, places=6)
+
     def test_the_slope_comes_from_the_history(self):
         entry = reading(slope=1.2)
         self.assertAlmostEqual(entry.slope_mgdl_per_min(15.0), 1.2, places=6)

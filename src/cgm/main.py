@@ -142,7 +142,6 @@ def build_theme(cfg: config_mod.Config) -> Theme:
 def build_trend(cfg: config_mod.Config) -> TrendTuning:
     return TrendTuning(
         local=cfg.trend.local,
-        window_min=cfg.trend.window_min,
         fast_mgdl_min=cfg.trend.fast_mgdl_min,
     )
 
@@ -513,13 +512,13 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
     # test can check, because only the live API says what shape it
     # arrives in. Print what came back so a dry run can confirm it.
     trend = build_trend(cfg)
-    slope = trend.slope_for(reading)
-    if slope is not None:
-        detail = f"trend {slope:+.2f} mg/dL/min over {trend.window_min:.0f} min"
+    shape = trend.shape_for(reading)
+    if shape.source != "api":
+        detail = f"trend {shape.describe()}"
     elif not trend.local:
         detail = f"local trend off, using the API arrow {reading.arrow}"
     else:
-        detail = f"too few to fit, falling back to the API arrow {reading.arrow}"
+        detail = f"too little history, falling back to the API arrow {reading.arrow}"
     print(f"history: {len(reading.history)} points; {detail}")
     renderer.render(reading, stale_after_min=cfg.display.stale_after_min).save(out)
     print(f"preview image: {out}")

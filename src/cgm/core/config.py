@@ -22,7 +22,7 @@ import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
+from cgm.core.librelink import GRAPH_RESOLUTION_MIN
 from cgm.face.graph import AXIS_FLOOR_MGDL
 
 log = logging.getLogger(__name__)
@@ -137,10 +137,15 @@ class Thresholds:
 
 @dataclass
 class Trend:
-    """[trend]. How the arrow's angle is arrived at."""
+    """[trend]. How the arrow's angle is arrived at.
+
+    `window_min` used to be here, and is gone: the arrow draws the last
+    half hour point by point now, so the span was no longer something a
+    reader could point at. What is left of it is the fallback's window,
+    which is a constant in `cgm.core.librelink`.
+    """
 
     local: bool = True
-    window_min: float = 60.0
     fast_mgdl_min: float = 2.0
 
 
@@ -217,11 +222,12 @@ def _homes(key: str) -> list[str]:
 def _sections(names: list[str]) -> str:
     """Name every section a key would have been read in.
 
-    More than one is not a mistake: `window_min` means "how far back"
-    in both [trend], where it is the span a slope is fitted over, and
-    [graph], where it is the span the sparkline shows. Naming only the
-    first would send half the people who misfiled it to the wrong
-    place, which is worse than the silence this message replaced.
+    No setting currently lives in two of them -- `window_min` did, in
+    [trend] and [graph], until the arrow stopped having a window -- but
+    the message is still written for the case. "How far back" is
+    exactly the kind of key that gets added to a second section, and
+    naming only the first would send half the people who misfiled it to
+    the wrong place, which is worse than the silence this replaced.
     """
     if len(names) == 1:
         return f"[{names[0]}]"
@@ -398,7 +404,6 @@ def load(path: Path) -> Config:
     th.very_high_mgdl = float(thresholds.get("very_high_mgdl", th.very_high_mgdl))
 
     cfg.trend.local = bool(trend.get("local", cfg.trend.local))
-    cfg.trend.window_min = float(trend.get("window_min", cfg.trend.window_min))
     cfg.trend.fast_mgdl_min = float(
         trend.get("fast_mgdl_min", cfg.trend.fast_mgdl_min)
     )
@@ -506,9 +511,8 @@ def _validate(cfg: Config) -> None:
     # 0 asks for all the history there is, so there is no length to
     # check. Any other value is one, and it has to hold two points to
     # draw a line between: they arrive one every GRAPH_RESOLUTION_MIN,
-    # so a shorter window can only ever manage a single dot -- the same
-    # failure trend.window_min has a floor for. A negative is not a
-    # third meaning; it lands here too.
+    # so a shorter window can only ever manage a single dot. A negative
+    # is not a third meaning; it lands here too.
     graph_floor = 2 * GRAPH_RESOLUTION_MIN
     if gr.window_min and gr.window_min < graph_floor:
         raise ValueError(
@@ -518,25 +522,12 @@ def _validate(cfg: Config) -> None:
             f"hold the two that make a line: {gr.window_min}"
         )
 
-    # These are checked whether or not the fit is switched on. `local`
-    # is flipped from inside the headset like everything else here, and
-    # a setting that is only rejected at the moment it starts being used
-    # is rejected at the worst possible moment.
+    # Checked whether or not the fit is switched on. `local` is flipped
+    # from inside the headset like everything else here, and a setting
+    # that is only rejected at the moment it starts being used is
+    # rejected at the worst possible moment.
     #
-    # The history arrives at one point every GRAPH_RESOLUTION_MIN, so a
-    # window has to be long enough for MIN_FIT_POINTS of them to land in
-    # it. Shorter and the arrow silently falls back to the API's five
-    # buckets forever, rather than failing where it was set -- which is
-    # exactly what a window of 15 did before this floor existed.
-    window_floor = MIN_FIT_POINTS * GRAPH_RESOLUTION_MIN
-    if cfg.trend.window_min < window_floor:
-        raise ValueError(
-            f"trend.window_min must be at least {window_floor:.0f}; the API "
-            f"sends one point every ~{GRAPH_RESOLUTION_MIN:.0f} minutes, so a "
-            f"shorter window will not reliably hold the {MIN_FIT_POINTS} "
-            f"needed to fit a slope: {cfg.trend.window_min}"
-        )
-    # It divides the slope, so zero is a crash on the first reading
+    # It divides the rate, so zero is a crash on the first reading
     # rather than a wrong angle.
     if cfg.trend.fast_mgdl_min <= 0:
         raise ValueError(
