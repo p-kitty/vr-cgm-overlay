@@ -30,8 +30,8 @@ it resembles nothing at all -- what the section does take.
 
 ```
 config.toml holds settings nothing reads, so they would do nothing without saying so:
-  display.window_min is not a setting; it belongs under [graph] or [trend]
-  trend.windowmin is not a setting; did you mean window_min?
+  display.window_min is not a setting; it belongs under [graph]
+  graph.windowmin is not a setting; did you mean window_min?
   polling.nonsense is not a setting; [polling] takes alert_haptic, alert_on_low, ...
 ```
 
@@ -168,20 +168,42 @@ gets muted, and a muted alert is worse than none because it is trusted.
 
 | Setting | What it does |
 |---|---|
-| `local` (true) | `true` fits the slope here; `false` uses Abbott's own `TrendArrow`, so the face and the phone show the same five arrows |
-| `window_min` (60) | How far back the slope is fitted over. Longer is steadier and slower to notice a turn. The floor is 45: the history arrives at one point every 15 minutes, so a shorter window cannot hold enough of them to fit |
-| `fast_mgdl_min` (2.0) | The rate at which the arrow stands straight up. Everything slower is in proportion, so half of it is the 45 degree diagonal |
+| `local` (true) | `true` reads the arrow out of the history here; `false` uses Abbott's own `TrendArrow`, so the face and the phone show the same five arrows |
+| `fast_mgdl_min` (2.0) | The rate at which a segment of the arrow stands straight up. Everything slower is in proportion, so half of it is the 45 degree diagonal |
 
-The rate is mg/dL per minute, and like the colour bands it stays in
-mg/dL in mmol/L mode. The angle slides rather than stepping, so a slow
-drift and a hard climb do not draw the same arrow. Lower it to make the
-arrow react harder.
+**The arrow is bent through the last half hour**, not pointed along an
+average of it. Its shaft runs through the three most recent points —
+about 30 minutes ago, 15 minutes ago, and now — with the head at the
+`now` end, so the bend between the two segments is the shape of that
+stretch: still climbing, levelling off, or rolling over. A reading that
+has been rising steadily and one that fell and has just turned around
+used to draw the same arrow; they no longer do.
 
-When there is too little history to fit — a fresh sensor, or a stretch
-where the phone was not scanning — the arrow falls back to the API's own
-value and snaps to the five official positions, whatever `local` says.
-`--dry-run` prints which of the two is in use, and so does the log line
-on every fetch.
+It says what is happening now, and deliberately not what happens next.
+Nothing here knows about meals or injections, so there is no forecast
+to be had at any price and the face must not imply one.
+
+`fast_mgdl_min` is mg/dL per minute, and like the colour bands it stays
+in mg/dL in mmol/L mode. It is the magnification on the whole shape
+rather than a scale on one angle: the sensor's own jitter is a couple of
+mg/dL, which over a 15 minute gap is about 6 degrees of segment at the
+default, so lowering this to catch a slow drift also makes a flat
+reading twitch. Raise it if it does.
+
+There are three arrows, and which one gets drawn depends on how much of
+the last half hour is really there. `--dry-run` prints which, and so
+does the log line on every fetch — a bend that quietly stopped appearing
+would otherwise read as calm glucose.
+
+| Source | When | What is drawn |
+|---|---|---|
+| `bend` | three points inside the last 45 minutes | two segments, the head on the newer one |
+| `fit` | three points anywhere in the last hour | one straight arrow at the fitted rate |
+| `(API)` | fewer than that, or `local = false` | one of `TrendArrow`'s five positions |
+
+The middle row is not theoretical: the history the API publishes lags
+the current measurement, often by 20 to 30 minutes, and past 45 the
+three most recent points stop being the last half hour.
 
 `[trend]` is re-read while running like `[display]` is, so `local` can be
 flipped with the headset on to see both arrows against the same reading.

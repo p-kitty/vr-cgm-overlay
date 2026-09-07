@@ -111,7 +111,7 @@ class BadEdit(WatcherTestCase):
         # A typo saved with the headset on is the likeliest way to reach
         # this: the edit is refused, the running config stays, and the
         # log says which key it was.
-        self.write(body() + "\n[trend]\nwindowmin = 30\n")
+        self.write(body() + "\n[graph]\nwindowmin = 30\n")
         self.assertIsNone(self.watcher.poll())
 
     def test_a_deleted_file_is_ignored(self):

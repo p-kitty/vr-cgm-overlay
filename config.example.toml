@@ -155,23 +155,20 @@ very_high_mgdl = 240
 # How the trend arrow is worked out. Re-read while running, like
 # [display], so the two can be compared with the headset on.
 [trend]
-# true:  fit the slope from the recent history this app already
-#        receives, so the arrow points at the actual rate of change.
+# true:  read the arrow out of the recent history this app already
+#        receives, so it shows the shape of the last half hour rather
+#        than one of five positions.
 # false: use Abbott's own TrendArrow, the same five positions the phone
 #        app shows. Pick this to have both screens agree exactly.
 # Even with this on, the API value is the fallback whenever there is too
-# little history to fit -- a fresh sensor, or a gap in scanning.
+# little history -- a fresh sensor, or a gap in scanning.
 local = true
 
-# How far back the slope is fitted over. The API sends history at one
-# point every 15 minutes, so this has to span several of them: 45 is the
-# floor and anything shorter is rejected. Longer is steadier and slower
-# to notice a turn.
-window_min = 60.0
-
-# The rate, in mg/dL per minute, at which the arrow stands straight up.
-# Everything slower is in proportion, so half of this is the 45 degree
-# diagonal. Lower it to make the arrow react harder to a slow drift.
+# The rate, in mg/dL per minute, at which a segment of the arrow stands
+# straight up. Everything slower is in proportion, so half of this is
+# the 45 degree diagonal. It is the magnification on the whole shape:
+# lower it to make the arrow react harder to a slow drift, raise it if
+# the bend twitches on glucose that is doing nothing.
 # Ignored while local = false.
 fast_mgdl_min = 2.0
 
