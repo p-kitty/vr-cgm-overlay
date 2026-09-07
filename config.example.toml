@@ -93,6 +93,56 @@ scale = 1.0
 always_on_top = true
 
 
+# The history sparkline: the last few hours of readings, drawn under the
+# number. It costs nothing to fetch -- the same response the current
+# value arrives in already carries about twelve hours of history, and
+# until now only the trend arrow read it. Re-read while running, like
+# everything below [account].
+[graph]
+# Which frontend draws it. These are separate on purpose: a window is
+# read at a desk, where a few hours of history is worth the space it
+# takes, and the overlay is glanced at mid-game, where the whole point
+# is the number in half a second. Turning it on grows the card from
+# 512x256 to 512x404 -- the window resizes, and in VR the face keeps its
+# width in metres and gets taller.
+in_window = true
+in_vr = false
+
+# How far back it shows, in minutes. Eight hours by default, which is
+# long enough to hold a night.
+#
+# 0 means all of it -- every point the response carried, about twelve
+# hours, with the time axis running from the oldest reading to the
+# newest rather than a fixed length. Any other value is a length, and
+# 30 is then the floor: the history arrives at one point every 15
+# minutes, so anything shorter has no two points to draw a line
+# between. A fixed window is the one that holds the axis still between
+# fetches.
+window_min = 480.0
+
+# The top of the Y axis, in mg/dL like every other threshold here, and
+# a minimum rather than a ceiling: it sits here on an ordinary day and
+# grows, to the next round 50, only far enough to keep a hyper on the
+# chart. So the scale holds still while nothing unusual happens -- fit
+# it to the data instead and a quiet flat stretch becomes a mountain
+# range, which makes a calm reading look alarming -- and it never clips
+# the one reading worth seeing clearly. It has to be above high_mgdl,
+# since the target range is drawn as a band across the axis.
+#
+# The BOTTOM is fixed at 50 and is not a setting. Every graph starts in
+# the same place, so the eye learns where the floor is once rather than
+# per config file; a reading under it is drawn on it, and the digits
+# above are what say how far under. low_mgdl therefore cannot be set
+# below 50.
+#
+# low_mgdl gets a dashed line in the low colour and very_high_mgdl one
+# in the very high colour -- each marks the level the face turns that
+# colour at. 50 and both thresholds are always labelled in the left
+# margin, in whatever display.unit is set to. The top is labelled only
+# when it has grown, which is how you can tell that it has.
+axis_high_mgdl = 300.0
+
+
 [thresholds]
 # All mg/dL. These are used even when displaying mmol/L.
 # The face is red below low, green up to high, yellow up to very_high,

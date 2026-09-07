@@ -1,5 +1,9 @@
 config.toml
 preview.png
+# The working sheet from `tools/preview.py --debug`. Rendered when the
+# face changes and looked at; the committed one is preview-states.png,
+# which README.md shows.
+preview-debug.png
 __pycache__/
 *.pyc
 .claude/

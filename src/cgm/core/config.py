@@ -23,6 +23,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
+from cgm.face.graph import AXIS_FLOOR_MGDL
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +97,36 @@ class Window:
 
 
 @dataclass
+class Graph:
+    """[graph]. The history sparkline under the number.
+
+    `in_window` and `in_vr` are separate on purpose. The two frontends
+    are looked at differently: a window is read at a desk, where a few
+    hours of history is worth the space it takes, and the overlay is
+    glanced at mid-game, where the whole design goal is the number in
+    half a second. So which of them draws a graph is a per-frontend
+    choice rather than one switch that has to be right for both, and
+    the defaults say what each is for.
+
+    Everything else here is shared: if both are on, both draw the same
+    graph, the same way.
+    """
+
+    in_window: bool = True
+    in_vr: bool = False
+    # How far back to draw. 0 is "all of it": every point the response
+    # carried, with the X axis spanning the oldest to the newest rather
+    # than a fixed length. Eight hours by default -- long enough to hold
+    # a night, short enough that the points are not touching.
+    window_min: float = 480.0
+    # A minimum, not a ceiling: the axis grows past this only far enough
+    # to keep a reading on the chart. The bottom of the axis is not here
+    # because it is not settable -- see AXIS_FLOOR_MGDL. See
+    # cgm.face.graph for why neither end fits itself to the data.
+    axis_high_mgdl: float = 300.0
+
+
+@dataclass
 class Thresholds:
     """[thresholds]. Always mg/dL, whatever the display unit is."""
 
@@ -142,6 +173,7 @@ class Config:
     display: Display = field(default_factory=Display)
     vr: Vr = field(default_factory=Vr)
     window: Window = field(default_factory=Window)
+    graph: Graph = field(default_factory=Graph)
     thresholds: Thresholds = field(default_factory=Thresholds)
     trend: Trend = field(default_factory=Trend)
     polling: Polling = field(default_factory=Polling)
@@ -161,6 +193,7 @@ SECTION_KEYS: dict[str, frozenset[str]] = {
     "account": _keys_of(Account),
     "display": _keys_of(Display, Vr),
     "window": _keys_of(Window),
+    "graph": _keys_of(Graph),
     "thresholds": _keys_of(Thresholds),
     "trend": _keys_of(Trend),
     "polling": _keys_of(Polling),
@@ -179,6 +212,20 @@ SECTION_KEYS: dict[str, frozenset[str]] = {
 def _homes(key: str) -> list[str]:
     """Which sections do recognise `key`. Empty when none do."""
     return sorted(name for name, keys in SECTION_KEYS.items() if key in keys)
+
+
+def _sections(names: list[str]) -> str:
+    """Name every section a key would have been read in.
+
+    More than one is not a mistake: `window_min` means "how far back"
+    in both [trend], where it is the span a slope is fitted over, and
+    [graph], where it is the span the sparkline shows. Naming only the
+    first would send half the people who misfiled it to the wrong
+    place, which is worse than the silence this message replaced.
+    """
+    if len(names) == 1:
+        return f"[{names[0]}]"
+    return ", ".join(f"[{n}]" for n in names[:-1]) + f" or [{names[-1]}]"
 
 
 def _nearest(word: str, candidates) -> str | None:
@@ -231,12 +278,13 @@ def _check_keys(raw: dict) -> None:
             near = _nearest(name, set().union(*SECTION_KEYS.values()))
             if homes:
                 problems.append(
-                    f"{name} sits outside any section; it belongs under [{homes[0]}]"
+                    f"{name} sits outside any section; it belongs under "
+                    f"{_sections(homes)}"
                 )
             elif near:
                 problems.append(
                     f"{name} sits outside any section; did you mean {near}, "
-                    f"under [{_homes(near)[0]}]?"
+                    f"under {_sections(_homes(near))}?"
                 )
             else:
                 problems.append(
@@ -262,7 +310,7 @@ def _check_keys(raw: dict) -> None:
             homes = _homes(key)
             near = _nearest(key, allowed)
             if homes:
-                hint = f"it belongs under [{homes[0]}]"
+                hint = f"it belongs under {_sections(homes)}"
             elif near:
                 hint = f"did you mean {near}?"
             else:
@@ -296,6 +344,7 @@ def load(path: Path) -> Config:
     account = raw.get("account", {})
     display = raw.get("display", {})
     window = raw.get("window", {})
+    graph = raw.get("graph", {})
     thresholds = raw.get("thresholds", {})
     trend = raw.get("trend", {})
     polling = raw.get("polling", {})
@@ -336,6 +385,12 @@ def load(path: Path) -> Config:
     win = cfg.window
     win.scale = float(window.get("scale", win.scale))
     win.always_on_top = bool(window.get("always_on_top", win.always_on_top))
+
+    gr = cfg.graph
+    gr.in_window = bool(graph.get("in_window", gr.in_window))
+    gr.in_vr = bool(graph.get("in_vr", gr.in_vr))
+    gr.window_min = float(graph.get("window_min", gr.window_min))
+    gr.axis_high_mgdl = float(graph.get("axis_high_mgdl", gr.axis_high_mgdl))
 
     th = cfg.thresholds
     th.low_mgdl = float(thresholds.get("low_mgdl", th.low_mgdl))
@@ -426,6 +481,41 @@ def _validate(cfg: Config) -> None:
         raise ValueError(
             "thresholds must satisfy low < high < very_high: "
             f"{th.low_mgdl} / {th.high_mgdl} / {th.very_high_mgdl}"
+        )
+
+    # Checked whether or not either frontend is drawing a graph, for the
+    # reason the trend settings below are: these reload with everything
+    # else, and a setting only rejected at the moment it starts being
+    # used is rejected at the worst possible moment.
+    gr = cfg.graph
+    # The band showing the target range is the whole reason the trace
+    # can be read without an axis drawn beside it. An axis that does not
+    # contain the range clips the band against an edge, where it stops
+    # looking like a band and starts looking like the graph having a
+    # floor or a ceiling. The top only ever grows from the configured
+    # value, so checking that is checking the smallest axis there can
+    # be; the bottom never moves at all.
+    if not (AXIS_FLOOR_MGDL <= th.low_mgdl and th.high_mgdl <= gr.axis_high_mgdl):
+        raise ValueError(
+            "the graph axis must contain the target range: "
+            f"axis {AXIS_FLOOR_MGDL:.0f}-{gr.axis_high_mgdl} does not hold "
+            f"thresholds {th.low_mgdl}-{th.high_mgdl}. The bottom of the "
+            "graph is fixed, so a low_mgdl under it means raising "
+            "thresholds.low_mgdl rather than lowering the axis"
+        )
+    # 0 asks for all the history there is, so there is no length to
+    # check. Any other value is one, and it has to hold two points to
+    # draw a line between: they arrive one every GRAPH_RESOLUTION_MIN,
+    # so a shorter window can only ever manage a single dot -- the same
+    # failure trend.window_min has a floor for. A negative is not a
+    # third meaning; it lands here too.
+    graph_floor = 2 * GRAPH_RESOLUTION_MIN
+    if gr.window_min and gr.window_min < graph_floor:
+        raise ValueError(
+            f"graph.window_min must be 0, for all the history there is, or "
+            f"at least {graph_floor:.0f}; the API sends one point every "
+            f"~{GRAPH_RESOLUTION_MIN:.0f} minutes, so a shorter window cannot "
+            f"hold the two that make a line: {gr.window_min}"
         )
 
     # These are checked whether or not the fit is switched on. `local`

@@ -50,6 +50,48 @@ Nothing has exercised these yet. Each says how to check it.
   minute a minute, a 45 minute window -- the floor -- fell back at a
   lag of 30, and 60 held on to 45. Check the lag before suspecting
   `GRAPH_RESOLUTION_MIN`.
+
+  The sparkline shows the same lag from the other side. Past 30 minutes
+  it exceeded `MAX_GAP_MIN` and the trace broke in front of the newest
+  point, which looked like a fault and was not one; `LAST_GAP_MIN` now
+  joins that one gap up to an hour. So a break there again means a lag
+  over an hour, which nothing has yet seen, and is worth measuring
+  rather than assuming.
+- **The sparkline on a controller.** `graph.in_vr` has never been run on
+  a headset; everything below was decided at a desk with `--window`. It
+  grows the card from 512x256 to 512x404, and the overlay is sized by
+  width, so at `width_m = 0.14` the face becomes about 11cm tall instead
+  of 7 and grows around its centre — which means `offset` was tuned for
+  a shorter card and will want revisiting. The question a device answers
+  and a desk cannot is whether three hours of trace is legible at arm's
+  length at all, or whether it is just texture under the number.
+- **`LAST_GAP_MIN` is a guess, and the number it is guarding against
+  has never been bounded.** The sparkline joins its newest point across
+  a gap of up to an hour, because that gap is `graphData` being
+  published late rather than the sensor not reading. An hour was picked
+  as comfortably past the largest lag anyone has seen -- 18 minutes
+  measured on 2026-09-07, 30 in the entry below -- and nothing has ever
+  watched the lag long enough to say how far it really goes.
+
+  It can be wrong in both directions, and each shows differently:
+
+  - **Too low**: the trace breaks in front of the newest point again,
+    the way it did at 30. That means a lag over an hour, which would be
+    news. Measure it before raising the constant -- compare the last
+    `FactoryTimestamp` in `graphData` against the one on
+    `glucoseMeasurement`, both in the same response.
+  - **Too high**: a stretch where the phone genuinely was not scanning
+    gets joined up, and the graph draws a straight line across hours
+    nobody measured. That is the failure worth catching, because unlike
+    a visible break it does not look wrong. A long `--window` session
+    with the log open is where it would show: the reading's own age
+    climbs during a real scanning gap, and the trace should break.
+
+  The two cases are indistinguishable from inside `cgm.face.graph`,
+  which sees only timestamps. If the bound turns out to need tuning
+  rather than a one-off correction, the thing to reach for is the
+  reading's age -- during a real scanning gap the current measurement
+  is stale too, and during a publication lag it is not.
 - **The palette against real colour vision deficiency.** It is validated
   by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
   and asserts the separations. That model is dichromacy — full absence of
@@ -96,6 +138,43 @@ fires the buzz. It has to stay under `high_mgdl`, because `_validate`
 rejects anything breaking `low < high < very_high`; raise
 `high_mgdl` and `very_high_mgdl` too when the reading is already above
 them. Put them all back afterwards.
+
+## Showing the graph in VR is a config switch, not yet a gesture
+
+`graph.in_vr` is a boolean in `config.toml`. It reloads within a second
+like everything else there, so it can be flipped with the headset on --
+but it is flipped by alt-tabbing to a text editor, which is not the same
+as being able to call the graph up when you want it and have it gone
+again the rest of the time. That is what was actually asked for, and it
+is not built.
+
+Three ways to reach it, cheapest first:
+
+- **The gaze angle is already computed.** `cgm.vr.overlay` measures how
+  far the face is from the centre of view every frame, for the fade.
+  Showing the graph only while you are actually looking at your wrist
+  needs no new input API, works on every stack, and is the only one of
+  these that cannot be broken by a driver. What it costs is that the
+  card changes size as you glance at it, which moves the number: the
+  overlay grows around its centre, so the digits would shift by half the
+  strip's height every time. Compensating means moving `offset` in step
+  with the size, which is a small piece of arithmetic and the reason
+  this is not free.
+- **A controller button, through `getControllerState`.** The obvious
+  answer, and the one with a known risk: that is the legacy input API,
+  and the legacy haptic call on the same API does nothing on this stack
+  (see the buzz entry above). Whether button state fares better than
+  haptics through Virtual Desktop's driver is unknown and worth ten
+  minutes to find out before designing anything around it.
+- **`IVRInput` with an action manifest.** Settles it for every stack and
+  every controller, and is the same work the buzz entry declines: a JSON
+  manifest shipped with the process and bindings per controller type. If
+  both a button and the buzz end up needing it, the cost is paid once
+  rather than twice, which changes the arithmetic.
+
+Until one of them lands, `in_vr = false` is the honest default: the
+overlay is glanced at mid-game, and a graph that cannot be dismissed is
+a graph that is always in the way.
 
 ## The modelled arm drifts from the real one towards the elbow
 

@@ -60,6 +60,7 @@ from cgm.core.librelink import (  # noqa: E402
 from cgm.core.fetcher import Fetcher  # noqa: E402
 from cgm.core.poller import Poller  # noqa: E402
 from cgm.core.watcher import ConfigWatcher  # noqa: E402
+from cgm.face.graph import GraphTuning  # noqa: E402
 from cgm.face.renderer import (  # noqa: E402
     Theme,
     TrendTuning,
@@ -169,9 +170,29 @@ def fire_alert(cfg: config_mod.Config, overlay=None) -> None:
         overlay.pulse()
 
 
-def build_renderer(cfg: config_mod.Config) -> WatchFaceRenderer:
+def build_graph(cfg: config_mod.Config) -> GraphTuning:
+    return GraphTuning(
+        window_min=cfg.graph.window_min,
+        axis_high_mgdl=cfg.graph.axis_high_mgdl,
+    )
+
+
+def build_renderer(
+    cfg: config_mod.Config, *, with_graph: bool = False
+) -> WatchFaceRenderer:
+    """The renderer for one frontend, with or without the sparkline.
+
+    Whether there is a graph is the caller's to say, because it is the
+    one thing about the face the two frontends do not agree on: a
+    window is read at a desk and the overlay is glanced at mid-game.
+    `graph.in_window` and `graph.in_vr` are what they pass in. The face
+    itself has no opinion; it draws whichever card it was built for.
+    """
     return WatchFaceRenderer(
-        theme=build_theme(cfg), unit=cfg.display.unit, trend=build_trend(cfg)
+        theme=build_theme(cfg),
+        unit=cfg.display.unit,
+        trend=build_trend(cfg),
+        graph=build_graph(cfg) if with_graph else None,
     )
 
 
@@ -240,7 +261,7 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
         region=cfg.account.region,
         version=cfg.account.api_version,
     )
-    renderer = build_renderer(cfg)
+    renderer = build_renderer(cfg, with_graph=cfg.graph.in_vr)
     poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
     alert = build_alert(cfg)
@@ -299,7 +320,11 @@ def run(cfg: config_mod.Config, config_path: Path) -> int:
                 edited = watcher.poll()
                 if edited is not None:
                     apply_config(edited, cfg, overlay, poller, alert)
-                    renderer = build_renderer(edited)
+                    # A graph turned on or off changes the texture's
+                    # height, which set_image handles by rebuilding its
+                    # buffer. The overlay is sized by width, so the card
+                    # keeps its width in metres and grows downwards.
+                    renderer = build_renderer(edited, with_graph=edited.graph.in_vr)
                     cfg = edited
                     log.info("reloaded %s", config_path)
 
@@ -389,7 +414,7 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
         region=cfg.account.region,
         version=cfg.account.api_version,
     )
-    renderer = build_renderer(cfg)
+    renderer = build_renderer(cfg, with_graph=cfg.graph.in_window)
     poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
     alert = build_alert(cfg)
@@ -417,7 +442,10 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
                 )
                 win.set_scale(edited.window.scale)
                 win.set_always_on_top(edited.window.always_on_top)
-                renderer = build_renderer(edited)
+                # The window takes its size from the image, so turning
+                # the graph on here resizes it on the next frame the
+                # same way a scale change does.
+                renderer = build_renderer(edited, with_graph=edited.graph.in_window)
                 cfg = edited
                 log.info("reloaded %s", config_path)
 
@@ -460,7 +488,10 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
         region=cfg.account.region,
         version=cfg.account.api_version,
     )
-    renderer = build_renderer(cfg)
+    # `in_window`, because this is the desktop face written to a file
+    # rather than anything on a controller -- and because the line it
+    # prints below is about the history, which the graph is a picture of.
+    renderer = build_renderer(cfg, with_graph=cfg.graph.in_window)
 
     reading = client.get_latest()
     print(

@@ -17,6 +17,7 @@ from pathlib import Path
 from cgm.core import config as config_mod
 from cgm.core.config import WINDOW_SCALE_MAX, WINDOW_SCALE_MIN
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, MIN_FIT_POINTS
+from cgm.face.graph import AXIS_FLOOR_MGDL
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
 
@@ -135,6 +136,37 @@ class Loading(ConfigTestCase):
         )
         self.assertEqual(cfg.window.scale, 0.75)
         self.assertFalse(cfg.window.always_on_top)
+
+    def test_the_graph_defaults_to_the_window_and_not_to_vr(self):
+        # The one setting the two frontends deliberately disagree on. A
+        # window is read at a desk, where three hours of history is worth
+        # the space; the overlay is glanced at mid-game, where the number
+        # in half a second is the whole design goal.
+        cfg = self.load()
+        self.assertTrue(cfg.graph.in_window)
+        self.assertFalse(cfg.graph.in_vr)
+        # Eight hours: long enough to hold a night, which is the span
+        # the official app shows and the one worth waking up to.
+        self.assertEqual(cfg.graph.window_min, 480.0)
+        self.assertEqual(cfg.graph.axis_high_mgdl, 300.0)
+
+    def test_graph_settings_are_read(self):
+        cfg = self.load(
+            "\n[graph]\nin_window = false\nin_vr = true\nwindow_min = 240\n"
+            "axis_high_mgdl = 280\n"
+        )
+        self.assertFalse(cfg.graph.in_window)
+        self.assertTrue(cfg.graph.in_vr)
+        self.assertEqual(cfg.graph.window_min, 240.0)
+        self.assertEqual(cfg.graph.axis_high_mgdl, 280.0)
+
+    def test_the_bottom_of_the_axis_is_not_a_setting(self):
+        # It used to be. Removing it has to fail loudly rather than
+        # quietly ignore the line somebody already had in their file --
+        # which is exactly what _check_keys is for.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[graph]\naxis_low_mgdl = 40\n")
+        self.assertIn("axis_low_mgdl", str(caught.exception))
 
     def test_a_blank_patient_id_means_unset(self):
         # An empty string would be sent as a patient id and 404; absent
@@ -269,6 +301,65 @@ class Validation(ConfigTestCase):
         # would simply never show it.
         self.assertRejected("\n[thresholds]\nlow_mgdl = 180\nhigh_mgdl = 180\n")
 
+    def test_the_graph_axis_must_contain_the_target_range(self):
+        # The band showing the range is what lets the trace be read
+        # without an axis drawn next to it. An axis that clips the band
+        # against an edge turns it into a floor or a ceiling, which says
+        # something quite different.
+        message = self.assertRejected("\n[graph]\naxis_high_mgdl = 150\n")
+        self.assertIn("target range", message)
+        # An axis top under the floor is the same failure, further gone.
+        self.assertRejected("\n[graph]\naxis_high_mgdl = 40\n")
+
+    def test_a_low_threshold_under_the_graph_floor_is_rejected(self):
+        # The floor does not move, so a low_mgdl below it would put the
+        # band's own edge off the bottom of the chart. The message has
+        # to send the reader to the threshold, since the axis is not
+        # theirs to lower.
+        message = self.assertRejected("\n[thresholds]\nlow_mgdl = 45\n")
+        self.assertIn(f"{AXIS_FLOOR_MGDL:.0f}", message)
+        self.assertIn("low_mgdl", message)
+
+    def test_the_thresholds_themselves_are_a_legal_axis(self):
+        # An axis stopping exactly at high_mgdl is allowed: the band
+        # then fills the plot, which is unusual but not contradictory.
+        cfg = self.load("\n[graph]\naxis_high_mgdl = 180\n")
+        self.assertEqual(cfg.graph.axis_high_mgdl, 180.0)
+
+    def test_the_floor_itself_is_a_legal_low_threshold(self):
+        cfg = self.load(f"\n[thresholds]\nlow_mgdl = {AXIS_FLOOR_MGDL:.0f}\n")
+        self.assertEqual(cfg.thresholds.low_mgdl, AXIS_FLOOR_MGDL)
+
+    def test_the_graph_window_must_hold_two_points(self):
+        # Same rule the trend window has, for the same reason and with a
+        # smaller floor: a line needs two points and they arrive one
+        # every GRAPH_RESOLUTION_MIN, so a shorter window draws a dot and
+        # never says why.
+        message = self.assertRejected("\n[graph]\nwindow_min = 15\n")
+        self.assertIn("graph.window_min", message)
+        self.assertIn("15 minutes", message)
+
+    def test_a_graph_window_of_zero_means_all_of_it(self):
+        # Not a length under the floor: a different request entirely.
+        cfg = self.load("\n[graph]\nwindow_min = 0\n")
+        self.assertEqual(cfg.graph.window_min, 0.0)
+
+    def test_a_negative_graph_window_is_not_a_third_meaning(self):
+        self.assertRejected("\n[graph]\nwindow_min = -60\n")
+
+    def test_the_graph_window_floor_itself_is_allowed(self):
+        floor = 2 * GRAPH_RESOLUTION_MIN
+        cfg = self.load(f"\n[graph]\nwindow_min = {floor}\n")
+        self.assertEqual(cfg.graph.window_min, floor)
+
+    def test_graph_settings_are_checked_with_the_graph_switched_off(self):
+        # They reload with everything else and either frontend can be
+        # turned on from inside the headset, so a value only rejected
+        # once something draws it is rejected at the worst moment.
+        self.assertRejected(
+            "\n[graph]\nin_window = false\nin_vr = false\nwindow_min = 15\n"
+        )
+
     def test_the_trend_window_must_hold_enough_points_to_fit(self):
         # The history arrives at one point every GRAPH_RESOLUTION_MIN, so
         # a short window holds one or two of them and can never fit. The
@@ -397,6 +488,18 @@ class UnknownKeys(ConfigTestCase):
         self.assertIn("display.window_min", message)
         # And says where it should have gone, since the point of
         # failing is to save the reader working that out.
+        self.assertIn("[trend]", message)
+
+    def test_a_key_two_sections_share_names_both_of_them(self):
+        # `window_min` means "how far back" in [trend], where it is the
+        # span a slope is fitted over, and in [graph], where it is the
+        # span the sparkline shows. Naming only the first would send
+        # half the people who misfiled it to the wrong section, which is
+        # the silence this message exists to replace.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[display]\nwindow_min = 30\n")
+        message = str(caught.exception)
+        self.assertIn("[graph]", message)
         self.assertIn("[trend]", message)
 
     def test_a_threshold_in_the_wrong_section_is_rejected(self):
