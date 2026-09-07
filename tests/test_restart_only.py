@@ -1,17 +1,19 @@
 """Which settings a live reload cannot apply, and how that is noticed.
 
-`config.toml` is re-read while the process runs, but a handful of keys
-were consumed once at startup: the overlay picked its controller role
-from `hand`, and the API client was built with `[account]`. Editing one
-of those changes nothing until a restart, and silently doing nothing is
-the worst of the three possible behaviours -- so the running frontend
-compares them and says which one moved.
+`config.toml` is re-read while the process runs, but `[account]` is
+consumed once: the API client is built from it at startup and nothing
+rebuilds it. Editing one of those keys changes nothing until a restart,
+and silently doing nothing is the worst of the three possible
+behaviours -- so the running process compares them and says which one
+moved.
 
-Which keys those are depends on the frontend. `[account]` is everyone's,
-because every frontend builds the same client from it. `hand` is the
-overlay's alone: a window has no controller to pick, so telling someone
-to restart for it would send them off to restart and find nothing
-different.
+`hand` used to be here as well, because the overlay picked its
+controller role when the process started. It picks it when the *VR
+session* starts now, and a session can be reopened without the process
+going anywhere, so editing `hand` reopens one instead of asking for a
+restart. What is asserted below is that it is no longer reported: a
+warning telling somebody to restart for a setting that already applied
+itself is worse than no warning at all.
 
 The comparison walks a dotted path per setting, which is a string, which
 means a typo in it is invisible until someone saves the file with the
@@ -24,13 +26,7 @@ from __future__ import annotations
 import unittest
 
 from cgm.core.config import Config
-from cgm.main import (
-    RESTART_ONLY,
-    RESTART_ONLY_ACCOUNT,
-    RESTART_ONLY_VR,
-    _setting,
-    warn_restart_only,
-)
+from cgm.main import RESTART_ONLY, _setting, warn_restart_only
 
 
 def changed(before: Config, after: Config, settings=RESTART_ONLY) -> list[str]:
@@ -46,16 +42,11 @@ class Paths(unittest.TestCase):
             with self.subTest(name):
                 _setting(cfg, path)
 
-    def test_the_overlay_checks_the_account_and_the_hand(self):
-        self.assertEqual(RESTART_ONLY, RESTART_ONLY_ACCOUNT | RESTART_ONLY_VR)
-
-    def test_the_two_halves_do_not_overlap(self):
-        # Reported twice would read as two settings needing a restart.
-        self.assertEqual(RESTART_ONLY_ACCOUNT.keys() & RESTART_ONLY_VR.keys(), set())
-
-    def test_the_account_belongs_to_every_frontend(self):
-        # The client is built once from it, whichever loop is running.
-        for name in RESTART_ONLY_ACCOUNT:
+    def test_the_account_is_the_whole_of_it(self):
+        # The client is built once from it, whichever frontends are up.
+        # Everything else in the file is either re-readable or reopens
+        # the session that read it.
+        for name in RESTART_ONLY:
             with self.subTest(name):
                 self.assertTrue(name.startswith("account."))
 
@@ -66,7 +57,7 @@ class Paths(unittest.TestCase):
         for name in RESTART_ONLY:
             with self.subTest(name):
                 section, _, key = name.partition(".")
-                self.assertIn(section, ("account", "display"))
+                self.assertEqual(section, "account")
                 self.assertTrue(key)
 
 
@@ -74,29 +65,18 @@ class Detection(unittest.TestCase):
     def test_an_untouched_config_reports_nothing(self):
         self.assertEqual(changed(Config(), Config()), [])
 
-    def test_the_controller_role_is_restart_only(self):
-        after = Config()
-        after.vr.hand = "right"
-        self.assertEqual(changed(Config(), after), ["display.hand"])
-
     def test_the_account_is_restart_only(self):
         after = Config()
         after.account.region = "jp"
         self.assertEqual(changed(Config(), after), ["account.region"])
 
-    def test_a_window_is_not_told_to_restart_for_the_hand(self):
-        # It has no controller, so `hand` is not a change waiting on a
-        # restart there -- it is a key that frontend never reads.
+    def test_the_controller_role_is_not_reported_any_more(self):
+        # It reopens the VR session, which happens by itself and within
+        # a second. Being told to restart for it would send someone off
+        # to restart and find it had already taken.
         after = Config()
         after.vr.hand = "right"
-        self.assertEqual(changed(Config(), after, RESTART_ONLY_ACCOUNT), [])
-
-    def test_a_window_is_still_told_about_the_account(self):
-        after = Config()
-        after.account.email = "someone.else@example.com"
-        self.assertEqual(
-            changed(Config(), after, RESTART_ONLY_ACCOUNT), ["account.email"]
-        )
+        self.assertEqual(changed(Config(), after), [])
 
     def test_the_window_settings_are_not_restart_only(self):
         # They are the reason the window watches the file at all.

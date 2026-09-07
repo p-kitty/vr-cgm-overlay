@@ -36,8 +36,8 @@ class FakeReading:
 
 class Compose(unittest.TestCase):
     def setUp(self):
-        # `rounded=False` is what `cgm.main.window` builds, so this is
-        # the image the window really composites.
+        # `rounded=False` is what `cgm.main.run` builds for the window, so
+        # this is the image the window really composites.
         self.face = WatchFaceRenderer(rounded=False).render_message("CONNECTING")
 
     def test_the_result_is_opaque(self):
