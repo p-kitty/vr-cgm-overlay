@@ -25,21 +25,41 @@ from cgm.face.graph import (
     AXIS_FLOOR_MGDL,
     AXIS_STEP_MGDL,
     GRID_COLOR,
+    GRID_STEP,
     HEAD_RADIUS,
+    LABEL_AIR,
+    LABEL_COLOR,
     LAST_GAP_MIN,
     MAX_GAP_MIN,
-    MAX_TIME_TICKS,
+    MGDL_PER_MMOL,
+    TICK_MAJOR_MIN,
+    TICK_MAJOR_PX,
+    TICK_MINOR_MIN,
+    TICK_MINOR_PX,
     TRACE_COLOR,
     GraphTuning,
     axis_top,
     draw_sparkline,
     edge_point,
     format_value,
+    grid_levels,
+    grid_step_mgdl,
+    label_stride,
     recent,
     segments,
     time_ticks,
 )
-from cgm.face.renderer import GRAPH_HEIGHT, HEIGHT, WIDTH, Theme, WatchFaceRenderer
+from cgm.face.renderer import (
+    GRAPH_BOTTOM_MARGIN,
+    GRAPH_HEIGHT,
+    GRAPH_LABEL_GUTTER,
+    GRAPH_MARGIN_X,
+    GRAPH_TOP,
+    HEIGHT,
+    WIDTH,
+    Theme,
+    WatchFaceRenderer,
+)
 
 NOW = datetime(2026, 9, 7, 12, 0, tzinfo=timezone.utc)
 THEME = Theme()
@@ -164,15 +184,168 @@ class Formatting(unittest.TestCase):
                     )
 
 
+class GridLevels(unittest.TestCase):
+    """Where the plot is ruled, and why it is not the same in both units.
+
+    The point of the ruling is that it does not depend on the config, so
+    two of these graphs are read against one scale. The tests are about
+    that invariance as much as about the numbers.
+    """
+
+    def test_the_floor_is_always_the_first_line(self):
+        for unit in ("mgdl", "mmol"):
+            with self.subTest(unit=unit):
+                self.assertEqual(grid_levels(300.0, unit)[0], AXIS_FLOOR_MGDL)
+
+    def test_mgdl_is_ruled_every_fifty_from_the_floor_up(self):
+        self.assertEqual(
+            grid_levels(300.0, "mgdl"), [50.0, 100.0, 150.0, 200.0, 250.0, 300.0]
+        )
+
+    def test_mmol_is_ruled_in_threes_and_not_in_converted_fifties(self):
+        # 2.8 / 5.6 / 8.3 is a scale nobody reads off a graph. The phone
+        # app rules its own at 3 mmol/L and so does this.
+        labels = [format_value(level, "mmol") for level in grid_levels(300.0, "mmol")]
+        self.assertEqual(labels, ["2.8", "6.0", "9.0", "12.0", "15.0"])
+
+    def test_a_line_too_close_to_the_floor_is_dropped(self):
+        # 3 mmol/L is 0.2 above the 2.8 floor -- under two pixels apart
+        # on the plot, which is a smudge rather than two lines.
+        self.assertNotIn(3.0 * MGDL_PER_MMOL, grid_levels(300.0, "mmol"))
+
+    def test_nothing_is_ruled_above_the_top(self):
+        for unit in ("mgdl", "mmol"):
+            with self.subTest(unit=unit):
+                for level in grid_levels(300.0, unit):
+                    self.assertLessEqual(level, 300.0)
+
+    def test_a_grown_axis_lands_back_on_the_grid_in_mgdl(self):
+        # The line arriving at the new top is the only thing left saying
+        # the scale has moved, so the growth step and the ruling step
+        # have to be the same number.
+        self.assertEqual(GRID_STEP["mgdl"], AXIS_STEP_MGDL)
+        grown = axis_top(series((0, 337)), TUNING)
+        self.assertIn(grown, grid_levels(grown, "mgdl"))
+
+    def test_the_ruling_does_not_move_with_the_thresholds(self):
+        # It is the same paper whatever the reader's own levels are.
+        self.assertEqual(grid_levels(300.0, "mgdl"), grid_levels(300.0, "mgdl"))
+        loose = grid_levels(axis_top((), GraphTuning(axis_high_mgdl=300.0)), "mgdl")
+        self.assertEqual(loose, [50.0, 100.0, 150.0, 200.0, 250.0, 300.0])
+
+
+class LabelNaming(unittest.TestCase):
+    """How many of the gridlines get a number written beside them.
+
+    The ruling is fixed, so a grown axis fits more lines into the same
+    plot until the labels would touch. What gives way then is the
+    naming, not the ruling.
+    """
+
+    def test_every_line_is_named_while_they_are_far_enough_apart(self):
+        self.assertEqual(label_stride(25.0, 18.0), 1)
+
+    def test_labels_thin_out_once_they_would_touch(self):
+        self.assertEqual(label_stride(18.0, 18.0), 2)
+        self.assertEqual(label_stride(9.0, 18.0), 3)
+
+    def test_the_air_is_what_decides_it(self):
+        # Exactly the font plus its air still fits; a pixel under does
+        # not. The constant is the whole rule, so it is read from it.
+        self.assertEqual(label_stride(18.0 + LABEL_AIR, 18.0), 1)
+        self.assertEqual(label_stride(18.0 + LABEL_AIR - 1, 18.0), 2)
+
+    def test_a_plot_with_no_height_does_not_divide_by_it(self):
+        self.assertEqual(label_stride(0.0, 18.0), 1)
+
+    def test_the_step_in_mgdl_is_the_one_the_levels_are_built_from(self):
+        # label_stride is handed a pixel pitch worked out from this, so
+        # the two have to come from one number or the labels would thin
+        # against a spacing the lines were not drawn at.
+        for unit in ("mgdl", "mmol"):
+            with self.subTest(unit=unit):
+                levels = grid_levels(300.0, unit)
+                self.assertAlmostEqual(levels[-1] - levels[-2], grid_step_mgdl(unit))
+
+
+class GrownAxisLabels(unittest.TestCase):
+    """The same thing through the whole face, where the font is real.
+
+    label_stride is arithmetic; this is whether it lands. The card is
+    rendered at its shipped size with its own axis font, and the labels
+    counted down the gutter.
+    """
+
+    def bands(self, peak: float) -> int:
+        """How many separate labels are written down the level gutter."""
+        renderer = WatchFaceRenderer(graph=GraphTuning())
+        history = tuple(
+            GlucosePoint(
+                NOW - timedelta(minutes=ago), 100 + (peak - 100) * (1 - ago / 480)
+            )
+            for ago in range(480, -1, -15)
+        )
+        image = renderer.render(_reading(history=history), now=NOW)
+        # The gutter only: the times run along the bottom in the same
+        # colour, and they start where the plot does.
+        rows = sorted(
+            {
+                y
+                for y in range(GRAPH_TOP, renderer.height - GRAPH_BOTTOM_MARGIN + 20)
+                for x in range(GRAPH_MARGIN_X + GRAPH_LABEL_GUTTER - 8)
+                if image.getpixel((x, y))[:3] == LABEL_COLOR
+            }
+        )
+        groups: list[list[int]] = []
+        for y in rows:
+            if groups and y - groups[-1][-1] <= 1:
+                groups[-1].append(y)
+            else:
+                groups.append([y])
+        return len(groups)
+
+    def test_the_configured_axis_names_every_line(self):
+        self.assertEqual(self.bands(200), len(grid_levels(300.0, "mgdl")))
+
+    def test_a_grown_axis_rules_more_lines_and_names_fewer(self):
+        # 400 is eight lines in the plot that held six. Naming them all
+        # is a column of digits against the trace, which is the thing
+        # the ruling was supposed to replace.
+        self.assertEqual(len(grid_levels(400.0, "mgdl")), 8)
+        self.assertLess(self.bands(390), self.bands(200))
+
+
 class TimeAxis(unittest.TestCase):
     def spans(self, hours: float):
         return NOW - timedelta(hours=hours), NOW
 
-    def test_the_labels_stay_few_enough_to_read(self):
-        for hours in (0.5, 1, 3, 6, 12, 24):
+    def test_the_step_does_not_change_with_the_span(self):
+        # This is the whole reason the step is fixed: two pictures of
+        # this face at two window lengths have to be comparable, and a
+        # step chosen to keep the label count down was not.
+        for hours in (3, 6, 12, 24):
             with self.subTest(hours=hours):
                 ticks = time_ticks(*self.spans(hours))
-                self.assertLessEqual(len(ticks), MAX_TIME_TICKS + 1)
+                gaps = {b - a for a, b in zip(ticks, ticks[1:])}
+                self.assertEqual(gaps, {timedelta(minutes=TICK_MINOR_MIN)})
+
+    def test_only_every_third_hour_is_labelled(self):
+        start, end = self.spans(12)
+        majors = time_ticks(start, end, TICK_MAJOR_MIN)
+        self.assertTrue(majors)
+        for tick in majors:
+            with self.subTest(tick=tick):
+                self.assertEqual(tick.hour % 3, 0)
+
+    def test_the_labelled_ticks_are_a_subset_of_the_others(self):
+        # The long stub is drawn over the short one rather than instead
+        # of it, so every labelled time has to be one of the hourly
+        # positions or a stub would be left sticking out beside it.
+        start, end = self.spans(12)
+        self.assertTrue(
+            set(time_ticks(start, end, TICK_MAJOR_MIN))
+            <= set(time_ticks(start, end))
+        )
 
     def test_every_tick_is_inside_the_span(self):
         start, end = self.spans(12)
@@ -181,13 +354,6 @@ class TimeAxis(unittest.TestCase):
                 moment = tick.astimezone(timezone.utc)
                 self.assertGreaterEqual(moment, start)
                 self.assertLessEqual(moment, end)
-
-    def test_a_longer_span_steps_more_coarsely(self):
-        def step(hours):
-            ticks = time_ticks(*self.spans(hours))
-            return (ticks[1] - ticks[0]) if len(ticks) > 1 else None
-
-        self.assertLess(step(3), step(12))
 
     def test_the_ticks_land_on_round_times(self):
         # They are there to be compared against a clock, so they have to
@@ -457,31 +623,50 @@ class Drawing(unittest.TestCase):
             min(y for _, y in low), max(y for _, y in very_high)
         )
 
-    def test_the_floor_gets_a_line_of_its_own(self):
-        # It says where the scale starts. Quiet, because that is worth
-        # being able to see and not worth noticing.
+    def test_the_plot_is_ruled_once_per_grid_level(self):
+        # One row of pixels per level, floor included. Drawn with no
+        # history at all, because the ruling is the scale rather than a
+        # reading of it.
         self.sparkline(())
-        floor = self.coloured(GRID_COLOR)
-        self.assertTrue(floor, "the floor has no line")
-        # Below both thresholds, because it is the bottom of the axis.
+        rows = sorted({y for _, y in self.coloured(GRID_COLOR)})
+        self.assertEqual(len(rows), len(grid_levels(TUNING.axis_high_mgdl, "mgdl")))
+        # Evenly spaced, since the levels are and the axis is linear.
+        gaps = {b - a for a, b in zip(rows, rows[1:])}
+        self.assertLessEqual(max(gaps) - min(gaps), 1, f"uneven ruling: {rows}")
+        # The lowest of them is the floor, below both thresholds.
         self.assertGreater(
-            min(y for _, y in floor),
-            max(y for _, y in self.coloured(THEME.color_low)),
+            max(rows), max(y for _, y in self.coloured(THEME.color_low))
         )
 
-    def test_the_floor_is_solid_and_a_hairline(self):
+    def test_every_gridline_is_solid_and_a_hairline(self):
         # The weight is the difference between a ruled line and a level
-        # that means something: one row of pixels, unbroken, where the
-        # thresholds are two and dashed.
+        # that means something: one row of pixels each, unbroken, where
+        # the thresholds are dashed and coloured.
         self.sparkline(())
-        floor = self.coloured(GRID_COLOR)
-        rows = {y for _, y in floor}
-        self.assertEqual(len(rows), 1, f"the gridline is {len(rows)} rows deep")
-        xs = sorted(x for x, _ in floor)
-        self.assertTrue(
-            all(b - a == 1 for a, b in zip(xs, xs[1:])),
-            "the gridline came out dashed",
-        )
+        grid = self.coloured(GRID_COLOR)
+        for row in sorted({y for _, y in grid}):
+            with self.subTest(row=row):
+                xs = sorted(x for x, y in grid if y == row)
+                self.assertTrue(
+                    all(b - a == 1 for a, b in zip(xs, xs[1:])),
+                    "a gridline came out dashed",
+                )
+
+    def test_the_time_axis_gets_a_stub_per_tick(self):
+        # Hourly stubs under the plot, and a longer one every three
+        # hours where the label goes.
+        self.sparkline(series((30, 100), (15, 105), (0, 110)))
+        axis_y = self.box[3] - HEAD_RADIUS
+        stubs: dict[int, int] = {}
+        for x, y in self.coloured(GRID_COLOR):
+            if y > axis_y:
+                stubs[x] = max(stubs.get(x, 0), y - axis_y)
+
+        start = NOW - timedelta(minutes=TUNING.window_min)
+        self.assertEqual(len(stubs), len(time_ticks(start, NOW)))
+        longer = [x for x, length in stubs.items() if length > TICK_MINOR_PX]
+        self.assertEqual(len(longer), len(time_ticks(start, NOW, TICK_MAJOR_MIN)))
+        self.assertEqual(max(stubs.values()), TICK_MAJOR_PX)
 
     def test_the_threshold_lines_are_dashed_and_not_solid(self):
         self.sparkline(())
@@ -504,14 +689,14 @@ class Drawing(unittest.TestCase):
         return [self.image.getpixel((x, y))[:3] for y in range(self.image.height)]
 
 
-def _reading(mgdl: float = 110.0) -> Reading:
+def _reading(mgdl: float = 110.0, history=None) -> Reading:
     return Reading(
         value_mgdl=mgdl,
         trend=3,
         timestamp_utc=NOW,
         is_high=False,
         is_low=False,
-        history=series((30, 100), (15, 105), (0, mgdl)),
+        history=history or series((30, 100), (15, 105), (0, mgdl)),
     )
 
 

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from cgm.core import config as config_mod
 from cgm.core.config import WINDOW_SCALE_MAX, WINDOW_SCALE_MIN
-from cgm.core.librelink import GRAPH_RESOLUTION_MIN
+from cgm.face.graph import TICK_MAJOR_MIN
 from cgm.face.graph import AXIS_FLOOR_MGDL
 
 ACCOUNT = '[account]\nemail = "someone@example.com"\npassword = "secret"\n'
@@ -328,14 +328,14 @@ class Validation(ConfigTestCase):
         cfg = self.load(f"\n[thresholds]\nlow_mgdl = {AXIS_FLOOR_MGDL:.0f}\n")
         self.assertEqual(cfg.thresholds.low_mgdl, AXIS_FLOOR_MGDL)
 
-    def test_the_graph_window_must_hold_two_points(self):
-        # Same rule the trend window has, for the same reason and with a
-        # smaller floor: a line needs two points and they arrive one
-        # every GRAPH_RESOLUTION_MIN, so a shorter window draws a dot and
-        # never says why.
-        message = self.assertRejected("\n[graph]\nwindow_min = 15\n")
+    def test_the_graph_window_must_be_long_enough_to_be_labelled(self):
+        # The time axis is ruled at fixed points on the local clock, not
+        # at whatever divides the window, so a window shorter than that
+        # step can fall between two of them and be drawn with no label
+        # at all.
+        message = self.assertRejected("\n[graph]\nwindow_min = 60\n")
         self.assertIn("graph.window_min", message)
-        self.assertIn("15 minutes", message)
+        self.assertIn(f"{TICK_MAJOR_MIN:.0f}", message)
 
     def test_a_graph_window_of_zero_means_all_of_it(self):
         # Not a length under the floor: a different request entirely.
@@ -346,7 +346,7 @@ class Validation(ConfigTestCase):
         self.assertRejected("\n[graph]\nwindow_min = -60\n")
 
     def test_the_graph_window_floor_itself_is_allowed(self):
-        floor = 2 * GRAPH_RESOLUTION_MIN
+        floor = TICK_MAJOR_MIN
         cfg = self.load(f"\n[graph]\nwindow_min = {floor}\n")
         self.assertEqual(cfg.graph.window_min, floor)
 
@@ -357,6 +357,13 @@ class Validation(ConfigTestCase):
         self.assertRejected(
             "\n[graph]\nin_window = false\nin_vr = false\nwindow_min = 15\n"
         )
+
+    def test_the_graph_window_floor_is_the_label_step_itself(self):
+        # Written down once. The floor exists because of how the axis is
+        # ruled, so reading it off anything but the ruling would let the
+        # two drift apart.
+        message = self.assertRejected("\n[graph]\nwindow_min = 179\n")
+        self.assertIn(f"at least {TICK_MAJOR_MIN:.0f}", message)
 
     def test_the_trend_window_is_no_longer_a_setting(self):
         # It was, and the file it was in is not rewritten by anything
