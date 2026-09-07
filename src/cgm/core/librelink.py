@@ -13,11 +13,12 @@ existing clients:
   4. Age is computed from FactoryTimestamp (UTC). Timestamp is local time
      with no zone attached, so using it would skew by the UTC offset.
   5. TrendArrow is five buckets on thresholds Abbott does not document,
-     so the trend is fitted from graphData instead and TrendArrow is
+     so the trend is read out of graphData instead and TrendArrow is
      kept only as the fallback.
   6. graphData is downsampled to a point every fifteen minutes, not the
-     once a minute the sensor records, which is what decides how long a
-     window the fit needs. See GRAPH_RESOLUTION_MIN.
+     once a minute the sensor records, which is what decides both how
+     long a window the fit needs and how much of the last half hour
+     three points amount to. See GRAPH_RESOLUTION_MIN.
   7. The Value field is in whatever unit the account displays in, which
      follows its country. Only ValueInMgPerDl is guaranteed mg/dL, so
      that is the one field read and mmol/L is derived from it.
@@ -77,6 +78,41 @@ GRAPH_RESOLUTION_MIN = 15.0
 MIN_FIT_POINTS = 3
 MIN_FIT_SPAN_MIN = 5.0
 
+# How far back the fit reaches. This was a setting until the arrow
+# started drawing the last half hour point by point (see read_segments):
+# the shape is that half hour by construction, so all this number does
+# now is decide how wide the fallback is, and there is nothing for a
+# reader to gain by moving it. Sixty rather than the 45 minute floor
+# because `graphData` lags the current measurement -- NOTES.md has the
+# measurements -- and at a lag of 30 a 45 minute window came up short of
+# MIN_FIT_POINTS while 60 held on.
+FIT_WINDOW_MIN = 60.0
+
+# Reading the last three points as two segments -- what read_segments
+# does -- needs different limits from a fit, because nothing is being
+# averaged out.
+#
+# BEND_POINTS is the shape: two segments, so three points. At the
+# resolution above they span the half hour the arrow claims to show.
+#
+# BEND_MIN_GAP_MIN is how far apart two points have to be before the
+# rate between them means anything. The current measurement is folded
+# into the series at its own timestamp (see _parse_graph_data), so when
+# `graphData` has just been published it can land a minute or two after
+# the newest graph point -- and two mg/dL of sensor jitter read off a
+# two minute gap is a rate of one mg/dL per minute, which is half of
+# vertical. So the walk back steps over a point that close and takes the
+# next one instead; what it lands on is a real measurement either way,
+# and it is the one the chart draws.
+#
+# BEND_MAX_SPAN_MIN is where three points stop being the last half hour.
+# The median gap is 15 and the longest measured is 21, so two stretched
+# gaps still fit under 45 -- while a hole in the history, which is the
+# case worth refusing, does not.
+BEND_POINTS = 3
+BEND_MIN_GAP_MIN = 5.0
+BEND_MAX_SPAN_MIN = 45.0
+
 
 class LibreLinkError(Exception):
     """Any error originating from the LibreLinkUp API."""
@@ -132,7 +168,17 @@ class Reading:
     def arrow(self) -> str:
         return TREND_ARROWS.get(self.trend, "")
 
-    def slope_mgdl_per_min(self, window_min: float) -> float | None:
+    def segment_rates(self) -> tuple[float, ...] | None:
+        """Rate over each of the last two segments, oldest first.
+
+        The shape of the last half hour rather than a summary of it, in
+        mg/dL per minute. None when those points are not there, which is
+        what `slope_mgdl_per_min` is the next fallback for. Anchored on
+        this reading like the fit below, for the same reason.
+        """
+        return read_segments(self.history, now=self.timestamp_utc)
+
+    def slope_mgdl_per_min(self, window_min: float = FIT_WINDOW_MIN) -> float | None:
         """Rate of change fitted over the last `window_min` of history.
 
         None when the history is too thin to fit -- a fresh sensor, or a
@@ -207,6 +253,65 @@ def fit_slope(
         return None
     sxy = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
     return sxy / sxx
+
+
+def read_segments(
+    points: tuple[GlucosePoint, ...],
+    *,
+    count: int = BEND_POINTS,
+    min_gap_min: float = BEND_MIN_GAP_MIN,
+    max_span_min: float = BEND_MAX_SPAN_MIN,
+    now: datetime | None = None,
+) -> tuple[float, ...] | None:
+    """Rates between the last `count` points, oldest segment first.
+
+    The counterpart to `fit_slope`, and deliberately the opposite of it:
+    no fit, no smoothing, no test for whether a difference is
+    significant. Each rate is what two real points say, divided by the
+    real gap between them, so the median 15 minutes and the occasional
+    21 both come out right. A fit would report a tidied version of the
+    half hour; these are the half hour.
+
+    The cost of that is jitter, and it is not small. The sensor's own is
+    a couple of mg/dL, and read off two points 15 minutes apart it lands
+    straight on the rate -- about 0.13 mg/dL per minute, which is 6
+    degrees of arrow at the default `fast_mgdl_min`, on glucose that is
+    doing nothing at all. That is measured noise rather than invented
+    noise, and it is in the chart too; what is different here is that
+    the arrow magnifies what the chart flattens.
+
+    None when the points to do it with are not there -- see BEND_POINTS
+    and the two limits beside it for the three ways that happens.
+    """
+    if not points:
+        return None
+
+    now = now or max(p.at for p in points)
+    series = sorted((p for p in points if p.at <= now), key=lambda p: p.at)
+
+    # Newest first, skipping anything too close to what was already
+    # taken. A gap that short is a rate the sensor cannot support.
+    picked: list[GlucosePoint] = []
+    for point in reversed(series):
+        gap = (picked[-1].at - point.at).total_seconds() / 60.0 if picked else None
+        if gap is None or gap >= min_gap_min:
+            picked.append(point)
+            if len(picked) == count:
+                break
+
+    if len(picked) < count:
+        return None
+    # Past this the three are no longer the last half hour, and an arrow
+    # drawn from them would be claiming a stretch it does not have.
+    if (now - picked[-1].at).total_seconds() / 60.0 > max_span_min:
+        return None
+
+    picked.reverse()
+    return tuple(
+        (later.mgdl - earlier.mgdl)
+        / ((later.at - earlier.at).total_seconds() / 60.0)
+        for earlier, later in zip(picked, picked[1:])
+    )
 
 
 def _parse_graph_data(
