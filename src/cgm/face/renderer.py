@@ -349,14 +349,23 @@ class WatchFaceRenderer:
 
     # -- public API ---------------------------------------------------------
 
-    def render(self, reading, *, stale_after_min: float = 10.0) -> Image.Image:
+    def render(
+        self, reading, *, stale_after_min: float = 10.0, now=None
+    ) -> Image.Image:
         """Draw the watch face for a reading.
 
         Readings older than stale_after_min go grey with the age
         emphasised. The last value stays on screen when the network drops,
         so it has to be obvious when it is no longer current.
+
+        `now` is the instant the face is being drawn at, and defaults to
+        the wall clock, which is what both frontends want. Passing one
+        makes the whole card reproducible -- the age readout, whether it
+        has gone stale, and the times under the graph -- which is what
+        lets tools/preview.py commit a PNG that does not change every
+        time it is rendered.
         """
-        age = reading.age_minutes()
+        age = reading.age_minutes(now)
         is_stale = age >= stale_after_min
 
         mgdl = reading.value_mgdl

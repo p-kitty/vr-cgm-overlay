@@ -355,6 +355,22 @@ class CanvasSize(unittest.TestCase):
             renderer.render(_reading()).size, (renderer.width, renderer.height)
         )
 
+    def test_a_face_drawn_at_a_given_instant_is_reproducible(self):
+        # tools/preview.py commits a PNG, so the card has to be able to
+        # come out the same twice. Everything on it that moves -- the
+        # age, whether it has gone stale, the times under the graph --
+        # comes off the `now` handed in.
+        renderer = WatchFaceRenderer(graph=TUNING)
+        first = renderer.render(_reading(), now=NOW).tobytes()
+        second = renderer.render(_reading(), now=NOW).tobytes()
+        self.assertEqual(first, second)
+
+    def test_the_instant_is_what_decides_the_age(self):
+        renderer = WatchFaceRenderer()
+        fresh = renderer.render(_reading(), now=NOW)
+        later = renderer.render(_reading(), now=NOW + timedelta(hours=3))
+        self.assertNotEqual(fresh.tobytes(), later.tobytes())
+
     def test_a_message_card_is_the_same_size_as_a_reading(self):
         # Both frontends size themselves from the image. A message card
         # of a different height would resize the window, or reallocate

@@ -39,6 +39,19 @@ from cgm.face.renderer import WatchFaceRenderer
 GAP = 24
 BACKDROP = (48, 50, 58, 255)
 
+# The instant the sheets are drawn at, fixed rather than taken from the
+# clock. `preview-states.png` is committed and shown in README.md, and
+# the times under the graph come from this: rendered at the wall clock
+# it would come out different every hour, so running the tool at all
+# would dirty the working tree. 13:40 in a UTC+9 timezone, which puts
+# the eight hour window's labels on 06:00 to 12:00.
+#
+# The labels are local, so the sheet is only reproducible per timezone.
+# That is enough for the job -- it stops moving under the person
+# rendering it -- and a UTC axis would be worse, since these are meant
+# to be read against a clock on a wall.
+ANCHOR = datetime(2026, 9, 7, 4, 40, tzinfo=timezone.utc)
+
 # Exactly the default window: 480 minutes at one point every fifteen is
 # 33 of them, and the count matters. One short and the trace starts a
 # few pixels in from the left of the plot while the band and the rules
@@ -60,6 +73,11 @@ HYPER = DAY[:21] + [178, 192, 221, 258, 288, 321, 356, 372, 361, 340, 318, 297]
 # And ending under the floor, which does not move.
 UNDER = DAY[:23] + [131, 122, 110, 96, 84, 73, 64, 55, 48, 44]
 
+# The bug this guards against has already happened once: at 32 the trace
+# stopped short of the left of the plot and it looked like a drawing
+# fault rather than fifteen minutes of missing sample.
+assert len(DAY) == len(HYPER) == len(UNDER) == POINTS
+
 
 def history(taken_at: datetime, values, step_min: float = GRAPH_RESOLUTION_MIN):
     """A series ending on `taken_at`, one point every `step_min`.
@@ -76,7 +94,7 @@ def history(taken_at: datetime, values, step_min: float = GRAPH_RESOLUTION_MIN):
 
 
 def reading(mgdl: float, trend: int, age_min: float, values=None) -> Reading:
-    taken_at = datetime.now(timezone.utc) - timedelta(minutes=age_min)
+    taken_at = ANCHOR - timedelta(minutes=age_min)
     return Reading(
         value_mgdl=mgdl,
         trend=trend,
@@ -95,7 +113,7 @@ def gapped(mgdl: float, trend: int) -> Reading:
     was measured in. Both halves together still fill the window, so the
     only thing missing from the picture is the thing being shown.
     """
-    taken_at = datetime.now(timezone.utc)
+    taken_at = ANCHOR
     before = history(taken_at - timedelta(minutes=195), DAY[:20])
     after = history(taken_at, [126, 118, 110, 104, 99, 103, 108, mgdl])
     return Reading(
@@ -108,18 +126,23 @@ def gapped(mgdl: float, trend: int) -> Reading:
     )
 
 
+def face(renderer: WatchFaceRenderer, of: Reading) -> Image.Image:
+    """Draw one tile at the anchor rather than at the wall clock."""
+    return renderer.render(of, now=ANCHOR)
+
+
 def showcase(plain: WatchFaceRenderer, graphed: WatchFaceRenderer) -> list:
     """What README.md shows. Four states, no explanation needed."""
     return [
         # Everything is fine, and the graph says how it got there.
-        graphed.render(reading(110, 3, 1, DAY)),
+        face(graphed, reading(110, 3, 1, DAY)),
         # Low: red, and the trace on the floor.
-        graphed.render(reading(44, 1, 1, UNDER)),
+        face(graphed, reading(44, 1, 1, UNDER)),
         # High: orange, and the axis grown to keep the peak on the chart.
-        graphed.render(reading(297, 2, 1, HYPER)),
+        face(graphed, reading(297, 2, 1, HYPER)),
         # And the same face without the graph, which is what rides the
         # controller in VR.
-        plain.render(reading(112, 3, 1)),
+        face(plain, reading(112, 3, 1)),
     ]
 
 
@@ -130,19 +153,19 @@ def debug(
     return [
         # Every marker edge, to be told apart at a glance: top for high,
         # a heavier top for very high, bottom for low.
-        plain.render(reading(214, 5, 3)),
-        plain.render(reading(268, 4, 2)),
-        plain.render(reading(64, 1, 1)),
+        face(plain, reading(214, 5, 3)),
+        face(plain, reading(268, 4, 2)),
+        face(plain, reading(64, 1, 1)),
         # Stale, on a low reading, because that is where two rules meet:
         # an hour-old 58 must go grey and outlined rather than red and
         # bottom-lit, or it would still be claiming the arm is dropping.
-        plain.render(reading(58, 2, 41)),
+        face(plain, reading(58, 2, 41)),
         plain.render_message("NO CONNECTION", detail="no reading yet"),
         # A gap in scanning. The line breaks rather than spanning it.
-        graphed.render(gapped(107, 2)),
+        face(graphed, gapped(107, 2)),
         # And in mmol/L, where the level labels convert and nothing
         # behind them does.
-        mmol.render(reading(110, 3, 1, DAY)),
+        face(mmol, reading(110, 3, 1, DAY)),
     ]
 
 
