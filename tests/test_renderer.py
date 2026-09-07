@@ -9,11 +9,16 @@ The face is the alert here -- haptics do not work on Quest 3 -- so a
 threshold comparison being out by one boundary is the difference between
 a low announcing itself and a low looking ordinary.
 
-The arrow angle is here for the same reason: it is a mapping with
-boundaries in it. `tests/test_librelink.py` asserts that the slope
-behind it is right; what is asserted here is that the slope reaches the
-drawing as the angle it should, and that a reading with no history to
-fit still gets the API's arrow rather than none.
+The arrow is here for the same reason: it is a mapping with boundaries
+in it. `tests/test_librelink.py` asserts that the rates behind it are
+right; what is asserted here is that they reach the drawing as the
+angles they should, that the bend between two of them is capped before
+it folds into a blob, and that a reading with too little history behind
+it still gets an arrow rather than none.
+
+Whether a bent arrow reads at 84 pixels is not a question with an edge
+in it, so it is not asked here. That one is for `tools/preview.py
+--debug` and a pair of eyes, and in VR for a headset.
 """
 
 from __future__ import annotations
@@ -25,12 +30,15 @@ from cgm.core.librelink import GlucosePoint, Reading
 
 from cgm.face.renderer import (
     HEIGHT,
+    MAX_BEND_DEG,
     STATUS_MARKERS,
     TREND_ANGLES,
     WIDTH,
     Theme,
+    TrendShape,
     TrendTuning,
     WatchFaceRenderer,
+    _draw_arrow,
     face_image,
     unit_label,
 )
@@ -41,14 +49,25 @@ TREND = TrendTuning()
 format_age = WatchFaceRenderer._format_age
 
 
-def reading(trend: int = 3, slope: float | None = None) -> Reading:
-    """A reading whose history, if any, fits to `slope` mg/dL per minute."""
+def reading(trend: int = 3, slope: float | None = None, history=None) -> Reading:
+    """A reading whose history, if any, runs at `slope` mg/dL per minute.
+
+    `history` takes the points directly, for the cases where the shape
+    of the last half hour is the thing being asserted rather than one
+    rate through all of it.
+    """
     taken_at = datetime.now(timezone.utc)
-    history = ()
-    if slope is not None:
+    if history is None:
+        history = ()
+        if slope is not None:
+            history = tuple(
+                GlucosePoint(taken_at - timedelta(minutes=ago), 100.0 - slope * ago)
+                for ago in range(20, -1, -1)
+            )
+    else:
         history = tuple(
-            GlucosePoint(taken_at - timedelta(minutes=ago), 100.0 - slope * ago)
-            for ago in range(20, -1, -1)
+            GlucosePoint(taken_at - timedelta(minutes=ago), mgdl)
+            for ago, mgdl in history
         )
     return Reading(
         value_mgdl=100.0,
@@ -257,48 +276,202 @@ class TrendAngle(unittest.TestCase):
         self.assertAlmostEqual(TREND.angle_for_slope(1.0), 45.0)
 
 
-class TrendSource(unittest.TestCase):
-    """Which of the two trends the drawing actually uses."""
+class TrendShapeSource(unittest.TestCase):
+    """Which of the three arrows the drawing actually uses.
 
-    def setUp(self):
-        self.renderer = WatchFaceRenderer()
+    They are ordered by how much of the last half hour is really there,
+    so what has to hold is both that the best available one is picked
+    and that the drop to the next is not silent -- the log reads the
+    same object the face draws, and `source` is what it names.
+    """
 
-    def test_a_fitted_slope_is_preferred(self):
-        angle = self.renderer._trend_angle(reading(trend=3, slope=1.5))
-        # trend=3 is the API calling it flat; the history says otherwise
-        # and the history is what gets drawn.
-        self.assertAlmostEqual(angle, 67.5)
+    # Three points a quarter of an hour apart: the last half hour of the
+    # chart, which is what the arrow is a picture of.
+    CLIMB = ((30, 100.0), (15, 115.0), (0, 130.0))
+    # The same climb, rolled over. A fit calls this a rise.
+    TURNED = ((30, 100.0), (15, 130.0), (0, 115.0))
+    # graphData lagging 40 minutes behind the current measurement, which
+    # NOTES.md records as ordinary. The last three points now reach 55
+    # minutes back, too far to be the last half hour, but the fit's own
+    # window still holds them.
+    LAGGED = ((70, 90.0), (55, 100.0), (40, 115.0), (0, 145.0))
+
+    def test_the_bend_is_preferred(self):
+        shape = TREND.shape_for(reading(trend=3, history=self.CLIMB))
+        self.assertEqual(shape.source, "bend")
+        self.assertEqual(len(shape.angles), 2)
+
+    def test_a_turn_draws_two_different_angles(self):
+        # The whole reason for the bend. Fitted, this reading is a rise;
+        # drawn as it happened, it rose and is now falling, and the head
+        # -- the last segment -- is the half that says so.
+        shape = TREND.shape_for(reading(trend=3, history=self.TURNED))
+        self.assertGreater(shape.angles[0], 0)
+        self.assertLess(shape.angles[-1], 0)
+
+    def test_the_angles_are_the_rates_through_the_scale(self):
+        # Nothing between the rate and the angle but fast_mgdl_min.
+        shape = TREND.shape_for(reading(trend=3, history=self.CLIMB))
+        for rate, angle in zip(shape.rates, shape.angles):
+            self.assertAlmostEqual(angle, TREND.angle_for_slope(rate))
+
+    def test_too_little_for_a_bend_falls_back_to_the_fit(self):
+        # The path NOTES.md says will be taken in practice, so it is
+        # not a theoretical fallback: it is what a lagging graphData
+        # leaves, and the arrow goes back to the single straight vector
+        # it used to always be.
+        shape = TREND.shape_for(reading(trend=3, history=self.LAGGED))
+        self.assertEqual(shape.source, "fit")
+        self.assertEqual(len(shape.angles), 1)
 
     def test_no_history_falls_back_to_the_api_arrow(self):
         # A fresh sensor, or a gap in scanning. The arrow snaps back to
         # the five official positions rather than disappearing.
         for trend, expected in TREND_ANGLES.items():
             with self.subTest(trend=trend):
-                self.assertEqual(self.renderer._trend_angle(reading(trend)), expected)
+                shape = TREND.shape_for(reading(trend))
+                self.assertEqual(shape.source, "api")
+                self.assertEqual(shape.angles, (expected,))
 
     def test_an_unknown_api_trend_leaves_no_arrow(self):
         # Unchanged behaviour: an unexpected TrendArrow value must not
         # take the process down, and no arrow beats a wrong one.
-        self.assertIsNone(self.renderer._trend_angle(reading(trend=9)))
+        self.assertEqual(TREND.shape_for(reading(trend=9)).angles, ())
 
-    def test_an_unknown_api_trend_is_irrelevant_once_it_can_fit(self):
-        angle = self.renderer._trend_angle(reading(trend=9, slope=-2.0))
-        self.assertEqual(angle, -90.0)
+    def test_an_unknown_api_trend_is_irrelevant_once_there_is_history(self):
+        shape = TREND.shape_for(reading(trend=9, history=self.CLIMB))
+        self.assertEqual(shape.source, "bend")
 
     def test_switching_the_fit_off_returns_to_the_api_arrow(self):
         # For anyone who would rather the face and the phone show the
         # same five arrows. The history is still there and still
-        # fittable; it is simply not asked.
-        renderer = WatchFaceRenderer(trend=TrendTuning(local=False))
-        entry = reading(trend=4, slope=-2.0)
-        self.assertEqual(renderer._trend_angle(entry), TREND_ANGLES[4])
+        # readable; it is simply not asked.
+        off = TrendTuning(local=False)
+        shape = off.shape_for(reading(trend=4, history=self.CLIMB))
+        self.assertEqual(shape.source, "api")
+        self.assertEqual(shape.angles, (TREND_ANGLES[4],))
 
-    def test_the_fit_being_off_is_decided_in_one_place(self):
-        # The face and the fetch log both read this, so a disagreement
-        # between them would show as a log line describing an arrow that
-        # was never drawn.
-        self.assertIsNone(TrendTuning(local=False).slope_for(reading(slope=1.5)))
-        self.assertAlmostEqual(TREND.slope_for(reading(slope=1.5)), 1.5, places=6)
+    def test_the_source_is_decided_in_one_place(self):
+        # The face and the fetch log both read this object, so a
+        # disagreement between them would show as a log line describing
+        # an arrow that was never drawn.
+        entry = reading(trend=4, history=self.CLIMB)
+        self.assertEqual(
+            WatchFaceRenderer().trend.shape_for(entry), TREND.shape_for(entry)
+        )
+
+
+class BendCap(unittest.TestCase):
+    """How far the two segments may fold against each other.
+
+    Uncapped, two segments each free to swing +/-90 can meet at a
+    hairpin, which at 84 pixels is a blob rather than a signal. What has
+    to hold is that the cap flattens the turn without ever moving the
+    head, which is the segment describing now.
+    """
+
+    def hairpin(self, tuning: TrendTuning = TREND) -> TrendShape:
+        # A hard climb followed by an equally hard fall: both segments
+        # are past the vertical rate on their own.
+        return tuning.shape_for(
+            reading(history=((30, 100.0), (15, 190.0), (0, 100.0)))
+        )
+
+    def test_a_hairpin_is_folded_back(self):
+        angles = self.hairpin().angles
+        self.assertLessEqual(abs(angles[0] - angles[-1]), MAX_BEND_DEG + 1e-9)
+
+    def test_the_head_keeps_the_angle_it_earned(self):
+        # The tail is what gets pulled in. The recent segment is the one
+        # the arrow is for, so it must arrive unaltered.
+        shape = self.hairpin()
+        self.assertAlmostEqual(shape.angles[-1], TREND.angle_for_slope(shape.rates[-1]))
+
+    def test_an_ordinary_bend_is_left_alone(self):
+        # Well inside the cap, so nothing is touched: capping a turn
+        # that reads perfectly well would be throwing away the shape.
+        shape = TREND.shape_for(reading(history=((30, 100.0), (15, 115.0), (0, 118.0))))
+        for rate, angle in zip(shape.rates, shape.angles):
+            self.assertAlmostEqual(angle, TREND.angle_for_slope(rate))
+
+
+class TrendDescription(unittest.TestCase):
+    """The line the fetch log and --dry-run print.
+
+    It is the only way to see which arrow a session actually drew, and
+    the only instrument for settling fast_mgdl_min against a real day --
+    so it carries the rates the sensor gave and the angles that number
+    made of them, side by side.
+    """
+
+    def test_a_bend_names_both_segments_and_its_source(self):
+        line = TREND.shape_for(
+            reading(history=((30, 100.0), (15, 115.0), (0, 130.0)))
+        ).describe()
+        self.assertIn("+1.00/+1.00 mg/dL/min", line)
+        self.assertIn("bend", line)
+        self.assertIn("deg", line)
+
+    def test_a_fit_says_it_is_a_fit(self):
+        # Otherwise a session that never once managed a bend would look
+        # exactly like one that always did.
+        line = TREND.shape_for(
+            reading(history=((70, 90.0), (55, 100.0), (40, 115.0), (0, 145.0)))
+        ).describe()
+        self.assertIn("fit", line)
+        self.assertNotIn("bend", line)
+
+    def test_the_api_fallback_is_the_arrow_and_nothing_else(self):
+        line = TREND.shape_for(reading(trend=4)).describe("^")
+        self.assertEqual(line, "^ (API)")
+
+    def test_a_fall_keeps_its_sign(self):
+        line = TREND.shape_for(
+            reading(history=((30, 130.0), (15, 115.0), (0, 100.0)))
+        ).describe()
+        self.assertIn("-1.00/-1.00", line)
+
+
+class ArrowDrawing(unittest.TestCase):
+    """Where the arrow lands on the card.
+
+    Not whether it is legible -- that is `tools/preview.py --debug` and
+    a pair of eyes. What is asserted here is the one thing the bend was
+    not allowed to change: a straight arrow is drawn exactly where it
+    always was.
+    """
+
+    @staticmethod
+    def drawn(angles: tuple[float, ...]):
+        from PIL import Image, ImageDraw
+
+        image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
+        _draw_arrow(ImageDraw.Draw(image), (256.0, 128.0), angles, 84, (255, 0, 0))
+        return image
+
+    def test_a_bend_of_nothing_is_the_straight_arrow(self):
+        # The path is anchored by its middle measured along itself, so
+        # two collinear segments have to occupy exactly what the one
+        # segment they add up to occupied. This is what says the bend
+        # moved nothing that was already on the face.
+        #
+        # The box rather than the pixels: a joint is rounded, and on a
+        # diagonal that rounding rasterises a few pixels differently
+        # from the straight run it sits inside. It never reaches outside
+        # it, which is the part that would move the arrow.
+        for angle in (0.0, 45.0, -90.0):
+            with self.subTest(angle=angle):
+                self.assertEqual(
+                    self.drawn((angle,)).getbbox(),
+                    self.drawn((angle, angle)).getbbox(),
+                )
+
+    def test_a_bent_arrow_stays_inside_the_length_it_was_given(self):
+        # It shares the card with the digits, so a fold must not reach
+        # further than the straight arrow it replaces.
+        straight = self.drawn((0.0,)).getbbox()
+        bent = self.drawn((60.0, -60.0)).getbbox()
+        self.assertLessEqual(bent[2] - bent[0], straight[2] - straight[0])
 
 
 class UnitLabel(unittest.TestCase):
