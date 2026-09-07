@@ -128,7 +128,7 @@ Each of these is a rule rather than a preference:
 ## Seeing it without a headset or a sensor
 
 `tools/preview.py` draws the face with no network and no headset. On its
-own it writes `preview-states.png`, the four states at the top of
+own it writes `preview-states.png`, the states at the top of
 `README.md`; `--debug` writes `preview-debug.png` instead, which is the
 working sheet — every marker edge side by side, the message card, a line
 breaking across a scanning gap, and the labels in mmol/L.
