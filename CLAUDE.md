@@ -8,8 +8,11 @@ A SteamVR overlay that shows the current blood glucose value on a
 controller-tracked watch face, so it stays readable during VR gameplay.
 Glucose data comes from the unofficial LibreLinkUp API.
 
-Single Python process. See `README.md` for the architecture and for the
-list of LibreLinkUp API quirks the client works around.
+Single Python process. `README.md` has the architecture diagram and how
+to run it; `docs/` holds the reference it links out to — `design.md` for
+the reasoning and the LibreLinkUp API quirks the client works around,
+`configuration.md` for the settings, `placement.md` for the VR
+placement, `graph.md` for the sparkline.
 
 The code is one installed package, `src/cgm/`: two shared layers and
 two frontends.

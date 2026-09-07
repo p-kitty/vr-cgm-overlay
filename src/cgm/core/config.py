@@ -267,7 +267,7 @@ def _check_keys(raw: dict) -> None:
     Raising here also covers the live reload for free, since
     `ConfigWatcher.poll` already keeps the running config when a re-read
     raises. The cost is that a config.toml written against a newer commit
-    stops an older checkout from starting -- see README.md.
+    stops an older checkout from starting -- see docs/configuration.md.
     """
     problems: list[str] = []
     for name, body in raw.items():
