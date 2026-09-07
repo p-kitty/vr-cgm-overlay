@@ -59,12 +59,16 @@ Nothing has exercised these yet. Each says how to check it.
   rather than assuming.
 - **The sparkline on a controller.** `graph.in_vr` has never been run on
   a headset; everything below was decided at a desk with `--window`. It
-  grows the card from 512x256 to 512x404, and the overlay is sized by
-  width, so at `width_m = 0.14` the face becomes about 11cm tall instead
-  of 7 and grows around its centre — which means `offset` was tuned for
-  a shorter card and will want revisiting. The question a device answers
-  and a desk cannot is whether three hours of trace is legible at arm's
-  length at all, or whether it is just texture under the number.
+  grows the card from 512x256 to 512x440, and the overlay is sized by
+  width, so at `width_m = 0.14` the face becomes 12cm tall instead of 7
+  and grows around its centre — about 2.5cm added above and below —
+  which means `offset` was tuned for a shorter card and will want
+  revisiting. The question a device answers and a desk cannot is whether
+  the trace is legible at arm's length at all, or whether it is just
+  texture under the number. At the default `window_min` that is eight
+  hours across 378px, so the last half hour is a few percent of the
+  width; if it comes out as texture, a shorter window is the thing to
+  try before giving up on `in_vr`.
 - **`LAST_GAP_MIN` is a guess, and the number it is guarding against
   has never been bounded.** The sparkline joins its newest point across
   a gap of up to an hour, because that gap is `graphData` being
@@ -83,9 +87,13 @@ Nothing has exercised these yet. Each says how to check it.
   - **Too high**: a stretch where the phone genuinely was not scanning
     gets joined up, and the graph draws a straight line across hours
     nobody measured. That is the failure worth catching, because unlike
-    a visible break it does not look wrong. A long `--window` session
-    with the log open is where it would show: the reading's own age
-    climbs during a real scanning gap, and the trace should break.
+    a visible break it does not look wrong.
+
+  **Neither case is being hunted.** No session is scheduled to bound the
+  lag; the constant stays where it is and gets corrected if ordinary use
+  turns one of the two up. Both are visible from the face itself -- a
+  break in front of the newest point, or a flat run under an age that
+  kept climbing -- so waiting for one costs nothing.
 
   The two cases are indistinguishable from inside `cgm.face.graph`,
   which sees only timestamps. If the bound turns out to need tuning
