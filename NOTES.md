@@ -27,29 +27,41 @@ Nothing has exercised these yet. Each says how to check it.
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
   days is the cheap way to be there when it does.
-- **The fitted trend against a real day.** `graphData` itself is now
+- **`trend.fast_mgdl_min` against a real day.** It is now the most
+  consequential number on the face and it has never been looked at on a
+  real arm. It was a scale on one angle; with the arrow bent through
+  the last half hour it is the magnification on a whole shape, and the
+  sensor's own jitter goes through it too -- a couple of mg/dL over a
+  fifteen minute gap is about six degrees of segment and twelve of bend,
+  on glucose doing nothing at all. Too low and the arrow twitches; too
+  high and a meal rise is a shrug. The default of 2.0 is a guess that
+  has never been tested as a magnification.
+
+  A session with the log open answers it, and `--window` makes that a
+  desk job rather than an hour in a headset, since none of this is VR.
+  Every fetch logs the rate of each segment and the angle it became --
+  `+0.80/+1.20 mg/dL/min (bend, +36/+54 deg)` -- so the pair can be read
+  against each other; `vr-cgm-overlay --dry-run` prints one of the same.
+  **The number can only be settled this way, and taking the setting out
+  is meant to follow once it is.** Until then it stays configurable.
+
+- **How often the bend is actually available.** `graphData` itself is
   confirmed: a dry run against the live API returned 48 points over 11.9
   hours at a median gap of 15.05 minutes, which is what
-  `GRAPH_RESOLUTION_MIN` records and where the 45 minute window floor
-  comes from. What is still open is whether an hour is the right window
-  on a real arm — long enough not to twitch, short enough to notice a
-  meal rise while it is still rising. That takes a session with the log
-  open — which `--window` makes a desk job rather than an hour in a
-  headset, since the fit is `cgm.core` and `cgm.face` with no VR in it. Every fetch logs either a slope in mg/dL/min or the API arrow
-  marked `(API)`, so the log says which source was used and how the
-  number moved; `vr-cgm-overlay --dry-run` prints the same thing
-  once. `(API)` while the sensor is scanning
-  normally does not mean the resolution has changed. It means the
-  window came up short of `MIN_FIT_POINTS`, and the usual cause is
-  `graphData` falling behind the current measurement rather than the
-  gaps between its points changing. The current reading is folded into
-  the series (see `_parse_graph_data`), so it always holds the right
-  edge of the window and every other point has to come from
-  `graphData`; the further that lags, the fewer of them are still
-  inside. Measured today with the lag at 26 minutes and growing a
-  minute a minute, a 45 minute window -- the floor -- fell back at a
-  lag of 30, and 60 held on to 45. Check the lag before suspecting
-  `GRAPH_RESOLUTION_MIN`.
+  `GRAPH_RESOLUTION_MIN` records. What decides whether the arrow bends
+  is not that spacing but the lag: the current reading is folded into
+  the series (see `_parse_graph_data`) so it always holds the right edge,
+  and every other point has to come from `graphData`, so the further
+  that lags the further back the third point sits. Past
+  `BEND_MAX_SPAN_MIN` the arrow gives up the bend and fits a line
+  instead, which the log calls `(fit)` rather than `(bend)`.
+
+  Measured at a lag of 26 minutes and growing a minute a minute, which
+  puts the third point at 41 and the bend just inside its 45. So a day
+  with a lag much past 30 draws the old straight arrow for most of it,
+  and the log is the only place that shows it. Neither `(fit)` nor
+  `(API)` while the sensor is scanning normally means the resolution has
+  changed -- check the lag first.
 
   The sparkline shows the same lag from the other side. Past 30 minutes
   it exceeded `MAX_GAP_MIN` and the trace broke in front of the newest
