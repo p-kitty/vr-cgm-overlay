@@ -7,9 +7,10 @@ runs the suite, and there is nothing in the widget wiring worth that --
 What is worth asserting is the part with arithmetic and decisions in it:
 flattening the face's translucency onto something opaque, resampling it
 to the asked-for size, and what the title bar claims. The flattening is
-the one place this frontend differs from the overlay in what it shows,
-because the compositor has a game behind the card and a window has
-nothing at all.
+where this frontend differs from the overlay in what it shows, because
+the compositor has a game behind the card and a window has nothing at
+all -- and the square corners it asks the face for are the same
+difference seen from the other side.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from __future__ import annotations
 import unittest
 
 from cgm.desk.window import BACKDROP, compose
-from cgm.face.renderer import HEIGHT, WIDTH, WatchFaceRenderer
+from cgm.face.renderer import HEIGHT, WIDTH, Theme, WatchFaceRenderer
 from cgm.main import _window_title
 
 
@@ -35,7 +36,9 @@ class FakeReading:
 
 class Compose(unittest.TestCase):
     def setUp(self):
-        self.face = WatchFaceRenderer().render_message("CONNECTING")
+        # `rounded=False` is what `cgm.main.window` builds, so this is
+        # the image the window really composites.
+        self.face = WatchFaceRenderer(rounded=False).render_message("CONNECTING")
 
     def test_the_result_is_opaque(self):
         # A window has nothing behind it. Handing Tk an image with an
@@ -43,19 +46,33 @@ class Compose(unittest.TestCase):
         # it guesses is not the backdrop chosen here.
         self.assertEqual(compose(self.face, 1.0).mode, "RGB")
 
-    def test_the_transparent_corner_becomes_the_backdrop(self):
-        # The card is a rounded rectangle, so the very corner of the
-        # image is outside it and fully transparent. That pixel is the
-        # one that proves the alpha was composited rather than dropped.
-        self.assertEqual(self.face.getpixel((0, 0))[3], 0)
-        self.assertEqual(compose(self.face, 1.0).getpixel((0, 0)), BACKDROP)
+    def test_the_card_is_composited_rather_than_flattened(self):
+        # The card itself is translucent -- color_bg is (14, 16, 22,
+        # 225) -- so the pixel that proves the alpha was used is a card
+        # pixel: it must be color_bg *over* the backdrop, and neither of
+        # the two things it would be if the alpha were dropped or the
+        # card lost.
+        # Bare card: inside the frame the message card outlines itself
+        # with, and clear of the centred text.
+        spot = (16, 16)
+        card = self.face.getpixel(spot)
+        self.assertEqual(card, Theme().color_bg)
+        flat = compose(self.face, 1.0).getpixel(spot)
+        self.assertNotEqual(flat, BACKDROP)
+        self.assertNotEqual(flat, card[:3])
+        for shown, over, under in zip(flat, card[:3], BACKDROP):
+            self.assertTrue(min(over, under) <= shown <= max(over, under))
 
-    def test_the_card_is_not_the_backdrop(self):
-        # If it were, the flattening would be invisible and the check
-        # above would pass on an image that had lost its card entirely.
-        self.assertNotEqual(
-            compose(self.face, 1.0).getpixel((WIDTH // 2, HEIGHT // 2)), BACKDROP
-        )
+    def test_the_window_card_has_no_transparent_corner(self):
+        # With nothing behind the window, an arc is not a shape: it is a
+        # wedge of backdrop bitten out of the corner of the picture.
+        self.assertEqual(self.face.getpixel((0, 0)), Theme().color_bg)
+
+    def test_the_vr_card_still_has_one(self):
+        # The corners are the window's to square off, not the face's to
+        # stop drawing. The compositor shows the game through these.
+        rounded = WatchFaceRenderer().render_message("CONNECTING")
+        self.assertEqual(rounded.getpixel((0, 0))[3], 0)
 
     def test_native_scale_keeps_the_size(self):
         self.assertEqual(compose(self.face, 1.0).size, (WIDTH, HEIGHT))

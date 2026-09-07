@@ -178,7 +178,7 @@ def build_graph(cfg: config_mod.Config) -> GraphTuning:
 
 
 def build_renderer(
-    cfg: config_mod.Config, *, with_graph: bool = False
+    cfg: config_mod.Config, *, with_graph: bool = False, rounded: bool = True
 ) -> WatchFaceRenderer:
     """The renderer for one frontend, with or without the sparkline.
 
@@ -187,12 +187,18 @@ def build_renderer(
     window is read at a desk and the overlay is glanced at mid-game.
     `graph.in_window` and `graph.in_vr` are what they pass in. The face
     itself has no opinion; it draws whichever card it was built for.
+
+    The corners are the other such thing, and are not configurable at
+    all: the arc pays for a compositor, so it belongs to whatever keeps
+    an alpha channel -- the overlay and the PNG -- while the Tk window,
+    which flattens the card onto an opaque backdrop, asks for square.
     """
     return WatchFaceRenderer(
         theme=build_theme(cfg),
         unit=cfg.display.unit,
         trend=build_trend(cfg),
         graph=build_graph(cfg) if with_graph else None,
+        rounded=rounded,
     )
 
 
@@ -414,7 +420,7 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
         region=cfg.account.region,
         version=cfg.account.api_version,
     )
-    renderer = build_renderer(cfg, with_graph=cfg.graph.in_window)
+    renderer = build_renderer(cfg, with_graph=cfg.graph.in_window, rounded=False)
     poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
     alert = build_alert(cfg)
@@ -445,7 +451,9 @@ def window(cfg: config_mod.Config, config_path: Path) -> int:
                 # The window takes its size from the image, so turning
                 # the graph on here resizes it on the next frame the
                 # same way a scale change does.
-                renderer = build_renderer(edited, with_graph=edited.graph.in_window)
+                renderer = build_renderer(
+                    edited, with_graph=edited.graph.in_window, rounded=False
+                )
                 cfg = edited
                 log.info("reloaded %s", config_path)
 
@@ -491,6 +499,8 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
     # `in_window`, because this is the desktop face written to a file
     # rather than anything on a controller -- and because the line it
     # prints below is about the history, which the graph is a picture of.
+    # Rounded all the same: the PNG keeps its alpha channel and nothing
+    # flattens it, so the corners cost nothing here.
     renderer = build_renderer(cfg, with_graph=cfg.graph.in_window)
 
     reading = client.get_latest()
