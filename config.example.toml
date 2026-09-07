@@ -21,7 +21,7 @@ api_version = "4.16.0"
 
 # Everything in this section is re-read while the app runs, except
 # `hand`. Edit and save with the headset on and the face moves within a
-# second; see "Tuning" in README.md.
+# second; see docs/configuration.md.
 [display]
 unit = "mgdl"        # "mgdl" or "mmol"
 hand = "left"        # which controller to follow; the off hand works best
@@ -29,15 +29,15 @@ width_m = 0.14       # overlay width in metres
 
 # Ride around the forearm instead of being bolted to the controller, so
 # that turning your hand cannot push the face into your arm. Recommended;
-# see "Orbit mode" in README.md, which also explains what offset and
-# rotation_deg mean once this is on.
+# see "Orbit mode" in docs/placement.md, which also explains what offset
+# and rotation_deg mean once this is on.
 orbit = false
 orbit_radius_m = 0.06    # how far off the arm's centreline the face floats
 orbit_limit_deg = 120.0  # how far round the arm it may travel from the top
 
 # Draw the arm orbit mode is aiming at: a cyan line down the modelled
 # centreline and magenta dots on the circle the face travels. Turn it on
-# while setting offset, off once it is right. See "Orbit mode" in README.md.
+# while setting offset, off once it is right. See docs/placement.md.
 arm_guide = false
 
 # Position relative to the controller, in metres: 0.01 is one centimetre.
@@ -58,8 +58,8 @@ rotation_deg = [-40.0, 0.0, 0.0]
 
 # Dim the face while you are not looking at it, so a number you want
 # glanceable is not also permanently in the corner of your eye. Off by
-# default; see "Gaze mode" in README.md. It never fades to nothing, and
-# never at all while a reading is low.
+# default; see "Gaze mode" in docs/placement.md. It never fades to
+# nothing, and never at all while a reading is low.
 gaze_fade = false
 gaze_full_deg = 20.0    # within this of the centre of view: full opacity
 gaze_fade_deg = 45.0    # past this: gaze_min_alpha, with a fade between
