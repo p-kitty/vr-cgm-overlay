@@ -51,14 +51,21 @@ WIDTH, HEIGHT = 512, 256
 #
 # The size is set by the labels, not by taste.
 #
-# The two closest are the axis floor and low_mgdl, twenty mg/dL apart on
-# a scale of 250 -- eight percent of the plot, whatever the plot is --
-# and both have to be legible at once. At 136px that is ten pixels, and
-# with the floor's label hanging below its line rather than centred on
-# it, the two clear each other with room to spare. Everything shorter
-# was tried first: at 104 they touch, and at the 64 the issue originally
-# proposed an ordinary 30 mg/dL move came out 7px tall and the whole
-# strip read as a bar rather than a graph.
+# The tightest pair is now two adjacent gridlines, 50 mg/dL apart on a
+# scale of 250 -- a fifth of the plot, whatever the plot is. At the
+# 136px this leaves that is 27 pixels against an 18px axis font, so six
+# labels stack up the side with about seven pixels of air between them.
+#
+# That is the loosest this constraint has ever been. It used to be the
+# floor and low_mgdl, twenty mg/dL apart, at ten pixels; they cleared
+# each other only because the floor's label hangs below its line
+# instead of straddling it, and everything shorter was tried and
+# failed -- at 104 they touched, and at 64 the strip read as a bar
+# rather than a graph. low_mgdl lost its label when the plot was ruled,
+# so the height is no longer pinned by that pair. It has not been cut
+# because 136px of plot is what makes eight hours of trace read as a
+# shape at arm's length, which a headset confirmed and which is the
+# thing the strip is actually for.
 #
 # The rest of the strip is the two rows of labels underneath.
 GRAPH_HEIGHT = 184
@@ -461,8 +468,10 @@ class WatchFaceRenderer:
         # Smaller than anything else on the card on purpose: the axis
         # labels are there to be read when you go looking for them, not
         # to compete with the number for the half-second glance. Small
-        # enough, too, that the floor and low_mgdl fit one above the
-        # other -- see GRAPH_HEIGHT.
+        # enough, too, that the six gridline labels stack up the side of
+        # the plot without touching -- see GRAPH_HEIGHT. If they ever
+        # stop clearing each other this is the thing to move, not the
+        # card: the strip is sized by the trace now, not by the labels.
         self._font_axis = _load_font(18)
 
     # -- public API ---------------------------------------------------------

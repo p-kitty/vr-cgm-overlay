@@ -6,17 +6,19 @@ Two sheets, because they have two audiences.
     python tools/preview.py --debug    -> preview-debug.png
 
 **`preview-states.png` is the picture at the top of `README.md`**, and
-it is the first thing anyone curious about this project sees. Four
-tiles: what the face looks like when everything is fine, when it is
-low, when it is high, and what it shrinks to on a controller. Nothing
-that needs a paragraph to explain, and nothing anyone has to scroll.
+it is the first thing anyone curious about this project sees. The four
+colours the face can be -- in range, high, low, very high -- each with
+the graph that says how it got there, and then the same face without
+one, which is what it shrinks to on a controller. Nothing that needs a
+paragraph to explain, and nothing anyone has to scroll.
 
 **`preview-debug.png` is the working sheet.** One tile per thing a
 person has to judge and no assertion can: every marker edge side by
-side, the message card, a line breaking across a scanning gap, the
-labels in mmol/L, and the trend arrow bent through each shape the last
-half hour can take. It is not committed and not linked from anywhere;
-render it when changing the face and look at it.
+side, the message card, a line breaking across a scanning gap, both
+ends of the axis under a graph, the labels in mmol/L, and the trend
+arrow bent through each shape the last half hour can take. It is not
+committed and not linked from anywhere; render it when changing the
+face and look at it.
 
 Neither sheet is a substitute for `tests/`. Anything with an edge in it
 -- which status a value falls in, where a line may break, how far the
@@ -67,6 +69,12 @@ DAY = [
     136, 132, 128, 125, 122, 119, 117, 115, 110,
 ]
 
+# The same day with a second meal on top of it, ending inside the high
+# band rather than past it. Yellow is the colour with the least to look
+# at and the one easiest to leave untested: it is not an emergency, so
+# nothing else on the sheet reaches it.
+HIGH = DAY[:23] + [152, 161, 172, 184, 195, 204, 210, 214, 216, 214]
+
 # The same day ending in a hyper that runs off the configured top of the
 # axis, which is the one thing that moves it.
 HYPER = DAY[:21] + [178, 192, 221, 258, 288, 321, 356, 372, 361, 340, 318, 297]
@@ -77,7 +85,7 @@ UNDER = DAY[:23] + [131, 122, 110, 96, 84, 73, 64, 55, 48, 44]
 # The bug this guards against has already happened once: at 32 the trace
 # stopped short of the left of the plot and it looked like a drawing
 # fault rather than fifteen minutes of missing sample.
-assert len(DAY) == len(HYPER) == len(UNDER) == POINTS
+assert len(DAY) == len(HIGH) == len(HYPER) == len(UNDER) == POINTS
 
 
 def history(taken_at: datetime, values, step_min: float = GRAPH_RESOLUTION_MIN):
@@ -172,13 +180,22 @@ def face(renderer: WatchFaceRenderer, of: Reading) -> Image.Image:
 
 
 def showcase(plain: WatchFaceRenderer, graphed: WatchFaceRenderer) -> list:
-    """What README.md shows. Four states, no explanation needed."""
+    """What README.md shows. Every colour once, no explanation needed.
+
+    Two columns, so the four coloured states fall into a square and the
+    plain face sits under it on its own -- which is the arrangement, not
+    a coincidence of the count: the square is what the face does, and
+    the one below it is what it looks like on a wrist.
+    """
     return [
         # Everything is fine, and the graph says how it got there.
         face(graphed, reading(110, 3, 1, DAY)),
+        # High: yellow, and a second meal to be high at the end of.
+        face(graphed, reading(214, 5, 1, HIGH)),
         # Low: red, and the trace on the floor.
         face(graphed, reading(44, 1, 1, UNDER)),
-        # High: orange, and the axis grown to keep the peak on the chart.
+        # Very high: orange, and the axis grown to keep the peak on the
+        # chart -- the one state that moves the scale.
         face(graphed, reading(297, 2, 1, HYPER)),
         # And the same face without the graph, which is what rides the
         # controller in VR.
@@ -203,6 +220,22 @@ def debug(
         plain.render_message("NO CONNECTION", detail="no reading yet"),
         # A gap in scanning. The line breaks rather than spanning it.
         face(graphed, gapped(107, 2)),
+        # The two ends of the axis, which behave differently on purpose
+        # and are the two states the ruling is hardest on.
+        #
+        # A hyper takes the top up to 400, which is eight gridlines in a
+        # strip laid out for six. Naming them all is a column of digits
+        # against the trace, so every second one goes unnamed from the
+        # top down -- whether that still reads as a scale, and whether
+        # the new line at 400 still says the axis has moved, is the
+        # question this tile is here to answer.
+        face(graphed, reading(297, 2, 1, HYPER)),
+        # The bottom does not move at all. A 44 is drawn on the 50 line
+        # rather than off the card, so the trace runs into the floor and
+        # sits on it: check that it still reads as a reading pinned to
+        # the bottom of the scale and not as the line being clipped, now
+        # that the floor is one rule among six rather than the only one.
+        face(graphed, reading(44, 1, 1, UNDER)),
         # And in mmol/L, where the level labels convert and nothing
         # behind them does.
         face(mmol, reading(110, 3, 1, DAY)),

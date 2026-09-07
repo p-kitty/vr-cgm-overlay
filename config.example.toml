@@ -114,10 +114,10 @@ in_vr = false
 # 0 means all of it -- every point the response carried, about twelve
 # hours, with the time axis running from the oldest reading to the
 # newest rather than a fixed length. Any other value is a length, and
-# 30 is then the floor: the history arrives at one point every 15
-# minutes, so anything shorter has no two points to draw a line
-# between. A fixed window is the one that holds the axis still between
-# fetches.
+# 180 is then the floor: the time axis is labelled every three hours on
+# the wall clock, whatever the window, so a shorter one can fall between
+# two labels and be drawn with none. A fixed window is the one that
+# holds the axis still between fetches.
 window_min = 480.0
 
 # The top of the Y axis, in mg/dL like every other threshold here, and

@@ -17,7 +17,7 @@ axis_high_mgdl = 300.0
 |---|---|
 | `in_window` (true) | Draw it in the desktop window |
 | `in_vr` (false) | Draw it on the controller face |
-| `window_min` (480) | How far back it shows — eight hours by default, long enough to hold a night. **`0` means all of it**: everything the response carried, about twelve hours, with the time axis running from the oldest reading to the newest. Any other value is a length, and the floor is then 30, since the history arrives at one point every 15 minutes |
+| `window_min` (480) | How far back it shows — eight hours by default, long enough to hold a night. **`0` means all of it**: everything the response carried, about twelve hours, with the time axis running from the oldest reading to the newest. Any other value is a length, and the floor is then 180, since the time axis is labelled every three hours whatever the window |
 | `axis_high_mgdl` (300) | The **minimum** top. It grows to the next round 50 above anything higher, so a hyper is never clipped |
 
 The bottom of the axis is **50 mg/dL and is not a setting**. Every graph
@@ -57,7 +57,7 @@ Each of these is a rule rather than a preference:
   the top takes the axis to the next round 50 above it rather than
   being flattened against the edge. That is the one case worth
   redrawing the scale for, and you can tell it has happened because a
-  number appears at the top of the axis, which is not there otherwise.
+  new gridline and its number appear above the old top of the scale.
   Under the floor is the other way round: a 42 is drawn on the 50 line,
   because the floor is the one part of the scale that can be relied on
   to stay put — and the digits above are saying 42 in red at the size
@@ -87,34 +87,48 @@ Each of these is a rule rather than a preference:
   up to an hour. Past an hour it is left stranded, because a phone that
   really stopped scanning looks identical from here and joining across
   an afternoon would draw one that never happened.
-- **The floor gets a quiet gridline** — a solid hairline, thinner and
-  fainter than the dashed threshold lines above it, saying where the
-  scale starts. Eventually there will be one every 50 mg/dL in that
-  colour; this is the first of them.
+- **The plot is ruled every 50 mg/dL**, from the 50 floor upward, in
+  solid grey hairlines. Not a setting, on purpose: the point is that
+  every one of these graphs is ruled identically, so a trace can be
+  measured against the paper and two of these are comparable even when
+  the two configs behind them agree about nothing else. In mmol/L the
+  step is **3 mmol/L** rather than a converted 50 mg/dL, because 2.8 /
+  5.6 / 8.3 is not a scale anyone reads; the first line above the floor
+  is dropped there, since 3 sits two pixels above 2.8.
 - **`low_mgdl` and `very_high_mgdl` each get a dashed line**, in the
   colour the face turns at that level — red below, deep orange above.
   They are the two the band does not mark: its lower edge is `low_mgdl`,
   but a change of shade is not a line, and `very_high_mgdl` is outside
-  it altogether.
+  it altogether. They are drawn over the ruling and are no part of it:
+  dashed against solid, coloured against grey, and unlabelled.
+- **The time axis is ruled too** — a short stub every hour and a longer
+  one every three, on the local clock. Only the long ones are labelled.
+  The step does not change with `window_min`, which is the whole reason
+  it is fixed: an axis whose interval moved with the window meant no two
+  pictures of this face were quite comparable.
 - **The newest point is marked in the status colour**, the same colour
   as the digits. It is the one place the graph and the number are the
   same fact, and it says which end is now.
 - **The labels follow `display.unit` and your own clock.** The levels
-  read 50 and 240 in mg/dL mode and 2.8 and 13.3 in mmol/L; the times
-  along the bottom are local, and step to whatever keeps them to four
-  or so. The comparisons behind all of it stay in mg/dL.
-- **50, `low_mgdl` and `very_high_mgdl` are always labelled.** They are
-  the scale: where it starts and the two levels it is read against. The
-  floor and `low_mgdl` are only twenty apart, which is what the height
-  of the plot is set by — the labels have to fit rather than the plot
-  having to be filled. The top of the axis is labelled only once it has
-  grown, so a number appearing there means the scale is no longer the
-  one in the config.
+  read 50 / 100 / 150 … in mg/dL mode and 2.8 / 6 / 9 … in mmol/L; the
+  times along the bottom are local. The comparisons behind all of it
+  stay in mg/dL.
+- **Gridlines are what carries a number, and nothing else does.** That
+  is the whole rule, the top of the axis included: with `axis_high_mgdl`
+  on the step it is simply the last label, and set to something off the
+  step — 280, say — it goes unnamed rather than earning an exception. A
+  hyper that grows the axis rounds to the next 50 and so lands back on
+  the grid, which is how a new line arriving at the top still tells you
+  the scale is no longer the one you set.
+- **They thin out rather than crowd.** A grown axis fits more lines into
+  the same strip, and once the numbers would touch every second line
+  goes unnamed — counted from the top down, so the highest keeps its
+  label. The ruling itself never thins; you are still counting fifties.
 
 ## Seeing it without a headset or a sensor
 
 `tools/preview.py` draws the face with no network and no headset. On its
-own it writes `preview-states.png`, the four states at the top of
+own it writes `preview-states.png`, the states at the top of
 `README.md`; `--debug` writes `preview-debug.png` instead, which is the
 working sheet — every marker edge side by side, the message card, a line
 breaking across a scanning gap, and the labels in mmol/L.

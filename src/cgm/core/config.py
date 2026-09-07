@@ -22,8 +22,7 @@ import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
-from cgm.core.librelink import GRAPH_RESOLUTION_MIN
-from cgm.face.graph import AXIS_FLOOR_MGDL
+from cgm.face.graph import AXIS_FLOOR_MGDL, TICK_MAJOR_MIN
 
 log = logging.getLogger(__name__)
 
@@ -509,17 +508,24 @@ def _validate(cfg: Config) -> None:
             "thresholds.low_mgdl rather than lowering the axis"
         )
     # 0 asks for all the history there is, so there is no length to
-    # check. Any other value is one, and it has to hold two points to
-    # draw a line between: they arrive one every GRAPH_RESOLUTION_MIN,
-    # so a shorter window can only ever manage a single dot. A negative
-    # is not a third meaning; it lands here too.
-    graph_floor = 2 * GRAPH_RESOLUTION_MIN
+    # check. Any other value is one, and the time axis is labelled at
+    # fixed points on the local clock rather than at whatever divides
+    # the window, so a window shorter than that step can land between
+    # two of them and come out with no label at all. A negative is not a
+    # third meaning; it lands here too.
+    #
+    # This also covers the older reason, which still holds and is no
+    # longer the binding one: history arrives one point every fifteen
+    # minutes, so a window has to be at least thirty to hold the two
+    # that make a line.
+    graph_floor = TICK_MAJOR_MIN
     if gr.window_min and gr.window_min < graph_floor:
         raise ValueError(
             f"graph.window_min must be 0, for all the history there is, or "
-            f"at least {graph_floor:.0f}; the API sends one point every "
-            f"~{GRAPH_RESOLUTION_MIN:.0f} minutes, so a shorter window cannot "
-            f"hold the two that make a line: {gr.window_min}"
+            f"at least {graph_floor:.0f}; the time axis is labelled every "
+            f"{TICK_MAJOR_MIN / 60:.0f} hours on the wall clock, so a shorter "
+            f"window can fall between two labels and be drawn with none: "
+            f"{gr.window_min}"
         )
 
     # Checked whether or not the fit is switched on. `local` is flipped

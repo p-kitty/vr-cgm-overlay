@@ -6,7 +6,7 @@ hours of measurements -- and hands it over on `Reading.history`, where
 until now only the trend fit read it. So this costs no request, no
 cache and no storage; it is a second reading of data already in hand.
 
-Four rules decide what gets drawn, and each one is there because the
+Five rules decide what gets drawn, and each one is there because the
 obvious alternative lies:
 
   - **The Y axis does not shrink to the data.** Its bottom never moves
@@ -16,11 +16,19 @@ obvious alternative lies:
     and make a calm reading look alarming. What it will do is grow
     upwards, and only far enough to hold a reading that would otherwise
     have been clipped: a real hyper is the one thing worth redrawing the
-    scale for, and the top label says when that has happened.
+    scale for, and the gridline that appears at the new top is what says
+    it has happened.
   - **The target range is a band behind the line**, so where the trace
     sits reads without anyone measuring it against an axis. The two
     thresholds a reading must not cross get a dashed line each on top
     of that, because those are the two the band alone does not mark.
+  - **The paper is ruled, and identically on every one of these.** A
+    line every 50 mg/dL across the plot and a tick every hour beneath
+    it, at steps no setting can move, so two of these graphs are read
+    against the same scale even when the two configs behind them agree
+    about nothing else. The thresholds are the part the reader's own
+    numbers put on the chart, which is why they are lines and not
+    labels: a level worth a colour is not a level the scale counts in.
   - **The line breaks across gaps** rather than spanning them. A joined
     line over a stretch the sensor was not scanning draws data that was
     never measured. The newest point is the exception, because the gap
@@ -43,6 +51,8 @@ The axis labels are the one part of the face that is not fixed text.
 They follow `display.unit`, because a "240" shown to someone reading
 mmol/L is not a smaller number, it is the wrong one; and the times are
 local, because that is the clock the reader is comparing them against.
+The step follows the unit as well: 3 mmol/L rather than a converted 50
+mg/dL, because 2.8 / 5.6 / 8.3 is not a scale anyone reads off a graph.
 """
 
 from __future__ import annotations
@@ -99,6 +109,17 @@ BAND_TINT = 0.18
 LABEL_COLOR = (150, 155, 168)
 LABEL_PAD = 8
 
+# The least air a level label needs above and below it, on top of the
+# font's own height. Under that the labels stop reading as a scale and
+# start reading as a column of digits stacked against the plot.
+#
+# It is not the plot that gives way when they no longer fit -- the
+# ruling is the same on every one of these graphs and does not thin out
+# because one reader had a hyper. The labels do: every second line goes
+# unnamed, counted down from the top so the highest one keeps its
+# number, and the reader still counts the lines in fifties.
+LABEL_AIR = 6
+
 # The floor label hangs below its line, and a few pixels further down
 # than the line itself: the anchor puts the top of the text box there,
 # and the box has air above the digits that eats into the gap up to
@@ -119,27 +140,58 @@ AXIS_STEP_MGDL = 50.0
 
 # The dashed reference lines. A dash long enough to read as a line and a
 # gap wide enough that it does not read as a solid one.
+#
+# One pixel, the same weight as the ruling. They were two when they were
+# two of the only three lines on the plot; against a ruled plot that
+# made them read as the scale rather than as two levels sitting on it.
+# Dashed against solid, and coloured against grey, is difference enough.
 DASH_ON = 9
 DASH_OFF = 7
-DASH_WIDTH = 2
+DASH_WIDTH = 1
 
-# Gridlines: the floor for now, and eventually one every AXIS_STEP_MGDL.
-# Quiet enough to be scenery -- a scale you can measure against when you
-# look for it, and not something competing with the trace or with the
-# two lines that actually mean something.
+# The ruling. Quiet enough to be scenery -- a scale you can measure
+# against when you look for it, and not something competing with the
+# trace or with the two coloured lines that mean something.
 #
-# Solid and a single pixel, where the threshold lines are dashed and
-# two. That is the whole difference in weight between "this is where the
-# paper is ruled" and "this is a level you care about", and it has to
-# survive there being a row of these one day.
+# Solid and a single pixel, which is what "this is where the paper is
+# ruled" looks like beside a dashed coloured line saying "this is a
+# level you care about".
 GRID_COLOR = (58, 62, 74)
 GRID_WIDTH = 1
 
-# What the time axis is allowed to step by, in minutes, smallest first.
-# The first one that fits the span in MAX_TIME_TICKS intervals wins, so
-# the labels always land on round wall-clock times.
-TIME_STEPS_MIN = (30, 60, 120, 180, 360, 720)
-MAX_TIME_TICKS = 4
+# How many mg/dL one mmol/L is. Comparisons in this project are always
+# mg/dL; this is only ever used on the way out to a label.
+MGDL_PER_MMOL = 18.0
+
+# What the Y axis is ruled at, given in the unit the labels are written
+# in rather than converted from one number. A converted 50 mg/dL is 2.8
+# mmol/L, and 2.8 / 5.6 / 8.3 / 11.1 is a scale nobody reads; 3 / 6 / 9
+# / 12 is the one the phone app draws and the one a reader in mmol/L
+# already thinks in. Placement converts back to mg/dL, like every other
+# comparison here.
+#
+# The mg/dL step is AXIS_STEP_MGDL rather than a second 50, and that is
+# load-bearing: the axis grows to the next round AXIS_STEP_MGDL above a
+# hyper, so it lands on a gridline when it does, and that new line at
+# the top is the only thing left saying the scale has moved. In mmol/L
+# the two steps do not divide each other and a grown top can fall
+# between lines, which is the price of counting in threes.
+GRID_STEP = {"mgdl": AXIS_STEP_MGDL, "mmol": 3.0}
+
+# The time axis, in minutes: a stub every hour, a longer one every three
+# hours, and only the long ones are labelled.
+#
+# Fixed, where this used to choose a step that kept the labels under a
+# count. That step moved with window_min, so the same face at two window
+# lengths was ruled two different ways and no two pictures of it were
+# comparable. Three hours of local clock means the same thing at every
+# window length, which is worth more than the labels coming out evenly
+# spread. It is also the floor under graph.window_min: a shorter window
+# can fall between two of these and come out with no label at all.
+TICK_MINOR_MIN = 60.0
+TICK_MAJOR_MIN = 180.0
+TICK_MINOR_PX = 4
+TICK_MAJOR_PX = 9
 TIME_FORMAT = "%H:%M"
 
 
@@ -180,7 +232,7 @@ def format_value(mgdl: float, unit: str) -> str:
     tests/test_graph.py asserts the two agree.
     """
     if unit == "mmol":
-        return f"{mgdl / 18.0:.1f}"
+        return f"{mgdl / MGDL_PER_MMOL:.1f}"
     return f"{mgdl:.0f}"
 
 
@@ -199,6 +251,52 @@ def axis_top(points, tuning: GraphTuning) -> float:
     if peak <= top:
         return top
     return math.ceil(peak / AXIS_STEP_MGDL) * AXIS_STEP_MGDL
+
+
+def grid_step_mgdl(unit: str) -> float:
+    """The ruling step in mg/dL, whatever unit it is written in."""
+    step = GRID_STEP.get(unit, AXIS_STEP_MGDL)
+    return step * MGDL_PER_MMOL if unit == "mmol" else step
+
+
+def label_stride(pitch_px: float, font_size: float) -> int:
+    """How many gridlines to step between one label and the next.
+
+    One while the lines are far enough apart to write a number between,
+    two when a grown axis has squeezed them closer than that, and so on.
+    The ruling never thins -- only the naming of it does -- so the
+    reader is still counting the same lines in the same steps.
+    """
+    if pitch_px <= 0:
+        return 1
+    return max(1, math.ceil((font_size + LABEL_AIR) / pitch_px))
+
+
+def grid_levels(ceiling: float, unit: str) -> list[float]:
+    """The mg/dL levels to rule the plot at, floor first and ascending.
+
+    The floor is always one of them -- it is where the scale starts, and
+    the one level on this graph guaranteed to sit in the same place on
+    everyone else's. Above it the step is GRID_STEP for the display
+    unit, counted from zero so the lines land on round numbers in that
+    unit rather than on round distances above the floor.
+
+    Counting from zero is what makes the first line a special case in
+    mmol/L: the floor is 2.8 and 3 sits 0.2 above it, under two pixels
+    away on the plot. A level closer than half a step to the floor is
+    dropped, which leaves 2.8 / 6 / 9 / 12 with nothing between the
+    first two -- and nothing needed there, since the band and the dashed
+    low_mgdl line already mark that stretch.
+    """
+    step = grid_step_mgdl(unit)
+    levels = [AXIS_FLOOR_MGDL]
+    n = 1
+    while n * step <= ceiling + 1e-9:
+        level = n * step
+        if level >= AXIS_FLOOR_MGDL + step / 2:
+            levels.append(level)
+        n += 1
+    return levels
 
 
 class Point(NamedTuple):
@@ -303,30 +401,33 @@ def segments(
     return runs
 
 
-def time_ticks(start: datetime, end: datetime) -> list[datetime]:
-    """Round local times to label the X axis with, inside [start, end].
+def time_ticks(
+    start: datetime, end: datetime, step_min: float = TICK_MINOR_MIN
+) -> list[datetime]:
+    """Round local times to rule the X axis at, inside [start, end].
 
     Both ends arrive in UTC and come back local: the reader is comparing
     these against the clock on the wall, not against the timestamps the
     API sends.
+
+    The step is a fixed length of wall clock, so how many come back is
+    whatever the window happens to hold. Called twice -- at
+    TICK_MINOR_MIN for the hourly stubs and at TICK_MAJOR_MIN for the
+    labelled ones -- and the second result is a subset of the first,
+    which is why a long stub simply covers the short one under it.
     """
     span_min = (end - start).total_seconds() / 60.0
     if span_min <= 0:
         return []
 
-    step = TIME_STEPS_MIN[-1]
-    for candidate in TIME_STEPS_MIN:
-        if span_min / candidate <= MAX_TIME_TICKS:
-            step = candidate
-            break
-
+    step = step_min
     first = start.astimezone()
     last = end.astimezone()
     midnight = first.replace(hour=0, minute=0, second=0, microsecond=0)
     # The first multiple of the step, counted from local midnight, that
     # is not before the start of the window.
     elapsed = (first - midnight).total_seconds() / 60.0
-    at = midnight + timedelta(minutes=step * -(-int(elapsed) // step))
+    at = midnight + timedelta(minutes=step * math.ceil(elapsed / step))
 
     ticks = []
     while at <= last:
@@ -399,18 +500,26 @@ def draw_sparkline(
         fill=(*_mix(card[:3], theme.color_in_range, BAND_TINT), card[3]),
     )
 
-    # The floor. A gridline rather than a threshold: it means "the scale
-    # starts here", which is worth being able to see and not worth
-    # noticing. One day there will be one of these every
-    # AXIS_STEP_MGDL; this is the first.
-    _grid_line(draw, y_for(floor), left, right)
+    # The ruling: the floor, then a line every step of the display unit
+    # up to the top. A fixed step nothing in the config can move, so the
+    # trace is measured against the paper rather than against whichever
+    # levels this particular reader happens to care about.
+    levels = grid_levels(ceiling, unit)
+    for level in levels:
+        _grid_line(draw, y_for(level), left, right)
 
     # The two levels a reading is not supposed to be on the wrong side
-    # of. The band already marks low_mgdl as its own lower edge, but a
-    # band edge is a change of shade and these two deserve a line: they
-    # are the levels the face turns a colour for. Each takes the colour
-    # it turns, so the line and the card agree about which end of the
-    # scale is which.
+    # of, drawn over the ruling rather than as part of it. The band
+    # already marks low_mgdl as its own lower edge, but a band edge is a
+    # change of shade and these two deserve a line: they are the levels
+    # the face turns a colour for. Each takes the colour it turns, so
+    # the line and the card agree about which end of the scale is which.
+    #
+    # Neither is labelled. They had a number each when they were two of
+    # the only three lines here, and it was the part of the scale that
+    # moved from config to config -- the same graph ruled differently
+    # for two readers. The line and the colour say which level it is;
+    # the number beside it was saying so a third time.
     for level, color in (
         (theme.low_mgdl, theme.color_low),
         (theme.very_high_mgdl, theme.color_very_high),
@@ -418,16 +527,26 @@ def draw_sparkline(
         _dashed_line(draw, y_for(level), left, right, color)
 
     if font is not None:
-        # Three labels, always: the floor and the two thresholds. They
-        # are the whole scale -- where it starts and the two levels it
-        # is being read against -- so none of them is worth dropping to
-        # save room, and the plot is tall enough to hold them because
-        # they have to fit rather than the other way round.
+        # Gridlines carry the numbers and nothing else does. That is the
+        # whole rule, the top of the axis included: with axis_high_mgdl
+        # on the step the top is simply the last label, and when it is
+        # not, the top goes unnamed rather than earning an exception. A
+        # hyper that grows the axis rounds to AXIS_STEP_MGDL and lands
+        # back on the grid, so the new line arriving at the top is still
+        # what says the scale is no longer the one in the config.
         #
-        # The floor's is the one that is not centred on its own line. It
-        # sits at the very bottom, where centring would push half of it
-        # under the plot, and hanging it below leaves the twenty mg/dL
-        # up to low_mgdl entirely to that label.
+        # How many lines get a number is the one thing that moves. The
+        # ruling is the same on every one of these graphs, so a grown
+        # axis fits more lines into the same strip until the numbers
+        # would touch -- and then every second line goes unnamed. That
+        # is counted from the top down, which is why the labels are
+        # walked in reverse: the highest line keeps its number, so a
+        # scale that has moved still says where it now ends.
+        #
+        # The floor is drawn on its own because it is the one label not
+        # centred on its line. It sits at the very bottom, where
+        # centring would push half of it under the plot, so it hangs
+        # below instead.
         draw.text(
             (left - LABEL_PAD, y_for(floor)),
             format_value(floor, unit),
@@ -435,22 +554,12 @@ def draw_sparkline(
             fill=LABEL_COLOR,
             anchor="rt",
         )
-        for level in (theme.low_mgdl, theme.very_high_mgdl):
+        pitch = grid_step_mgdl(unit) / span_mgdl * span_px
+        stride = label_stride(pitch, font.size)
+        for level in levels[:0:-1][::stride]:
             draw.text(
                 (left - LABEL_PAD, y_for(level)),
                 format_value(level, unit),
-                font=font,
-                fill=LABEL_COLOR,
-                anchor="rm",
-            )
-        # And the top only once it has moved. At the configured value it
-        # would be a number saying what the config already says; the
-        # moment a hyper pushes it up, it appearing is how the reader is
-        # told the scale is no longer the one they set.
-        if ceiling != tuning.axis_high_mgdl:
-            draw.text(
-                (left - LABEL_PAD, y_for(ceiling)),
-                format_value(ceiling, unit),
                 font=font,
                 fill=LABEL_COLOR,
                 anchor="rm",
@@ -481,12 +590,22 @@ def draw_sparkline(
         fraction = (at - start).total_seconds() / span_sec
         return left + max(0.0, min(1.0, fraction)) * width_px
 
+    # The X axis ruled to match the Y: a stub under the plot every hour
+    # and a longer one every three, in the grid's own colour. They need
+    # no font, so they are drawn whether or not there is one.
+    axis_y = y_for(floor)
+    for tick in time_ticks(start, now):
+        _tick(draw, x_for(tick), axis_y, TICK_MINOR_PX)
+    majors = time_ticks(start, now, TICK_MAJOR_MIN)
+    for tick in majors:
+        _tick(draw, x_for(tick), axis_y, TICK_MAJOR_PX)
+
     if font is not None:
         # Below the floor's label rather than below the plot: that one
         # hangs into this margin too, and the leftmost time sits far
         # enough left to run into it.
-        times_y = y_for(floor) + FLOOR_LABEL_DROP + font.size + LABEL_PAD
-        for tick in time_ticks(start, now):
+        times_y = axis_y + FLOOR_LABEL_DROP + font.size + LABEL_PAD
+        for tick in majors:
             draw.text(
                 (x_for(tick), times_y),
                 tick.strftime(TIME_FORMAT),
@@ -512,6 +631,11 @@ def draw_sparkline(
 def _grid_line(draw, y: float, left: float, right: float) -> None:
     """A hairline rule. Solid, unlike the threshold lines above it."""
     draw.line([(left, y), (right, y)], fill=GRID_COLOR, width=GRID_WIDTH)
+
+
+def _tick(draw, x: float, y: float, length: float) -> None:
+    """A stub hanging below the plot, marking a time on the X axis."""
+    draw.line([(x, y), (x, y + length)], fill=GRID_COLOR, width=GRID_WIDTH)
 
 
 def _dashed_line(draw, y: float, left: float, right: float, color) -> None:
