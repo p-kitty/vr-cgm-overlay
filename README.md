@@ -557,6 +557,14 @@ What it draws, and why each of these is a rule rather than a preference:
   sits reads without an axis drawn next to it. That is what the axis has
   to contain the range for: clipped against an edge, a band stops
   looking like a band and starts looking like a floor.
+- **The line is clipped to the left edge, not started late.** A fixed
+  window begins a round number of minutes ago and the samples arrive on
+  a fifteen-minute grid that has no reason to line up with it, so the
+  oldest sample inside sits somewhere in the first quarter hour of the
+  plot. The segment crossing the boundary was measured, so the point
+  where it crosses is worked out and the line begins there. A history
+  that genuinely does not reach that far back is left alone — that edge
+  is real.
 - **The line breaks across gaps rather than spanning them.** A stretch
   where the phone was not scanning gets no line drawn through it,
   because a line there would be measurements that were never taken.

@@ -29,7 +29,9 @@ obvious alternative lies:
   - **The X axis is only as long as the data**, when asked for all of
     it. A window drawn wider than the history behind it is empty space
     that looks like a sensor that stopped rather than one that has not
-    been running that long.
+    been running that long. Asked for a fixed window instead, the line
+    is clipped to its left edge rather than started at whichever sample
+    first landed inside -- see `edge_point`.
 
 A reading below the bottom is clamped onto it rather than pushed off,
 so a 42 draws where AXIS_FLOOR_MGDL is. That is deliberate -- the floor is the
@@ -48,6 +50,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import NamedTuple
 
 # How far apart two samples have to be before the line breaks between
 # them. The API sends history at one point every fifteen minutes -- see
@@ -196,6 +199,54 @@ def axis_top(points, tuning: GraphTuning) -> float:
     if peak <= top:
         return top
     return math.ceil(peak / AXIS_STEP_MGDL) * AXIS_STEP_MGDL
+
+
+class Point(NamedTuple):
+    """A point to draw. `GlucosePoint` is one; so is one we worked out.
+
+    Defined here rather than imported because `cgm.face` takes nothing
+    from `cgm.core`. Everything this module reads off a measurement is
+    these two fields.
+    """
+
+    at: datetime
+    mgdl: float
+
+
+def edge_point(points, start: datetime, max_gap_min: float = MAX_GAP_MIN):
+    """The value at exactly `start`, or None if nothing crosses it.
+
+    A fixed window begins at a round number of minutes ago and the
+    samples do not: they arrive every fifteen, on a grid with no reason
+    to line up with it. So the oldest sample inside the window sits
+    somewhere in the first fifteen minutes of it, and the trace starts
+    up to eleven pixels in from the left of the plot while the band and
+    the rules run the full width. It reads as the graph having been
+    clipped.
+
+    Nothing is missing there, so nothing is invented to fill it: the
+    segment between the last sample before the window and the first one
+    inside it was measured, and this is the point where that segment
+    crosses the edge. The line is being clipped to the plot rather than
+    started late.
+
+    None when there is nothing to cross with -- a history that does not
+    reach back that far, which is a real edge and left alone -- or when
+    the two samples are too far apart to join, since a gap does not
+    stop being a gap for sitting on the boundary.
+    """
+    inside = [p for p in points if p.at >= start]
+    before = [p for p in points if p.at < start]
+    if not inside or not before:
+        return None
+
+    first, previous = inside[0], before[-1]
+    span = (first.at - previous.at).total_seconds()
+    if span / 60 > max_gap_min:
+        return None
+
+    fraction = (start - previous.at).total_seconds() / span
+    return Point(start, previous.mgdl + (first.mgdl - previous.mgdl) * fraction)
 
 
 def recent(points, window_min: float, now: datetime) -> list:
@@ -414,6 +465,15 @@ def draw_sparkline(
     start = shown[0].at if tuning.all_of_it else now - timedelta(minutes=tuning.window_min)
     span_sec = (now - start).total_seconds()
     width_px = right - left
+
+    # Asked for a window, the line is clipped to its left edge rather
+    # than started at whichever sample first fell inside it. Asked for
+    # all of it, the edge is the oldest sample and there is nothing
+    # before it to clip against.
+    if not tuning.all_of_it:
+        crossing = edge_point(points, start)
+        if crossing is not None:
+            shown = [crossing, *shown]
 
     def x_for(at: datetime) -> float:
         if span_sec <= 0:

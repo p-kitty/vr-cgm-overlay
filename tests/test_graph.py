@@ -33,6 +33,7 @@ from cgm.face.graph import (
     GraphTuning,
     axis_top,
     draw_sparkline,
+    edge_point,
     format_value,
     recent,
     segments,
@@ -197,6 +198,72 @@ class TimeAxis(unittest.TestCase):
 
     def test_no_span_has_no_ticks(self):
         self.assertEqual(time_ticks(NOW, NOW), [])
+
+
+class WindowEdge(unittest.TestCase):
+    """The trace is clipped to the left of the plot, not started late.
+
+    A fixed window begins a round number of minutes ago; the samples
+    arrive on a fifteen minute grid with no reason to line up with it.
+    The segment crossing that boundary was measured, so the point where
+    it crosses is worked out rather than the line simply beginning at
+    the first sample inside.
+    """
+
+    def start(self, minutes: float):
+        return NOW - timedelta(minutes=minutes)
+
+    def test_the_crossing_is_interpolated(self):
+        # 60 at four hours back, 100 at two: at three, halfway, 80.
+        points = series((240, 60.0), (120, 100.0))
+        crossing = edge_point(points, self.start(180), max_gap_min=1e9)
+        self.assertEqual(crossing.at, self.start(180))
+        self.assertAlmostEqual(crossing.mgdl, 80.0)
+
+    def test_it_lands_exactly_on_the_edge(self):
+        points = series((20, 90.0), (5, 120.0))
+        crossing = edge_point(points, self.start(10))
+        self.assertEqual(crossing.at, self.start(10))
+
+    def test_history_that_does_not_reach_back_is_left_alone(self):
+        # A fresh sensor really has nothing there. Inventing a point
+        # would draw a reading that was never taken.
+        points = series((30, 100.0), (0, 110.0))
+        self.assertIsNone(edge_point(points, self.start(480)))
+
+    def test_a_gap_on_the_boundary_is_still_a_gap(self):
+        # Two samples an hour apart, with the window edge between them.
+        # Crossing them would join what the break rule exists to split.
+        points = series((90, 100.0), (20, 110.0))
+        self.assertIsNone(edge_point(points, self.start(60)))
+
+    def test_nothing_inside_the_window_crosses_nothing(self):
+        points = series((600, 100.0), (500, 110.0))
+        self.assertIsNone(edge_point(points, self.start(480)))
+
+    def test_the_drawn_trace_reaches_the_left_edge(self):
+        # The whole point, at the level it is visible: with history
+        # older than the window, the first plotted x is the plot's left.
+        image = Image.new("RGBA", (220, 120), (0, 0, 0, 255))
+        box = (10.0, 10.0, 210.0, 110.0)
+        points = series(*[(m, 100.0 + m % 7) for m in range(0, 700, 15)])
+        draw_sparkline(
+            ImageDraw.Draw(image),
+            box,
+            points,
+            tuning=TUNING,
+            theme=THEME,
+            now=NOW,
+            accent=(255, 0, 255),
+        )
+        drawn = [
+            x
+            for x in range(image.width)
+            for y in range(image.height)
+            if image.getpixel((x, y))[:3] == TRACE_COLOR
+        ]
+        self.assertTrue(drawn, "nothing was drawn")
+        self.assertLessEqual(min(drawn), box[0] + 1)
 
 
 class Segments(unittest.TestCase):
