@@ -155,8 +155,8 @@ nothing else — the running app picks the edit up the same way it picks
 up one made in a text editor, and it refuses to write anything the app
 would not start from.
 
-Placement is in there too, `offset` and `rotation_deg` as three boxes
-each. It is still judged with the headset on — change a number, press
+Placement is in there too, across the `vr`, `vr orbit` and `vr gaze`
+tabs, with `offset` and `rotation_deg` as three boxes each. It is still judged with the headset on — change a number, press
 Save, watch the face move — which is the same loop as editing the file,
 because both go back through the same watcher. See
 [Placing the face in VR](docs/placement.md) for what the numbers mean.
