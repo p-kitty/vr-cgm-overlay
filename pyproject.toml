@@ -18,7 +18,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vr-cgm-overlay"
 version = "0.1.0"
-description = "SteamVR overlay showing FreeStyle Libre glucose, read through LibreLinkUp, on your wrist in VR"
+description = "FreeStyle Libre glucose on your desktop and on your wrist in SteamVR, read through LibreLinkUp"
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"

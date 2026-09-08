@@ -5,11 +5,7 @@ while you play.
 
 **FreeStyle Libre only.** Every reading comes from a LibreLinkUp
 follower account, and that is the only source there is: no Dexcom, no
-Medtronic, no Nightscout, no meter, no CSV. The name says CGM because
-the face and the placement would suit any of them; the code underneath
-says Libre, and swapping that is a rewrite rather than a setting. If
-your sensor's readings do not reach LibreLinkUp, nothing here will show
-you a number.
+Medtronic, no Nightscout, no meter, no CSV.
 
 It runs as an OpenVR overlay, so **no game needs modding or patching** —
 the face composites over any SteamVR title.
