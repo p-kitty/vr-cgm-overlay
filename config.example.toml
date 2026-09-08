@@ -1,3 +1,7 @@
+# The LibreLinkUp follower account this reads. LibreLinkUp is the watching
+# app; LibreLink is the one the sensor is scanned with, and an account made
+# in the wrong one logs in fine and follows nobody. FreeStyle Libre through
+# this API is the only source the app has -- see README.md.
 [account]
 # Email of the LibreLinkUp follower account (the one doing the watching).
 email = "you@example.com"

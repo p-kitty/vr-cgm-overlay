@@ -6,6 +6,16 @@ is the reasoning behind them.
 
 ## Decisions worth knowing
 
+**LibreLinkUp is the only source, and there is no seam for a second
+one.** The client is a single module, `cgm.core.librelink`, and
+everything above it takes a `Reading` from it; a Dexcom or Nightscout
+backend would be a rewrite of that module rather than a setting. An
+abstraction for a source nobody has asked for buys a layer of
+indirection and no readings. It would not be free either: what the face
+draws is shaped by what this API happens to return, the twelve hours of
+downsampled history behind the trend and the sparkline included, so the
+seam would have to carry more than a number.
+
 **Fetching and drawing run at separate rates.** The sensor updates about
 once a minute, so polling faster returns nothing new and only risks being
 cut off by Abbott. The age readout and controller tracking, though, need
