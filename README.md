@@ -1,7 +1,11 @@
 # vr-cgm-overlay
 
 A SteamVR overlay that keeps your current blood glucose on your wrist
-while you play. Readings come from LibreLinkUp.
+while you play.
+
+**FreeStyle Libre only.** Every reading comes from a LibreLinkUp
+follower account, and that is the only source there is: no Dexcom, no
+Medtronic, no Nightscout, no meter, no CSV.
 
 It runs as an OpenVR overlay, so **no game needs modding or patching** —
 the face composites over any SteamVR title.
@@ -49,6 +53,30 @@ quirks of the unofficial API the client works around.
 
 ## Setup
 
+### First, a LibreLinkUp account that already shows a reading
+
+This logs in as a **follower in LibreLinkUp** — the watching app. It is
+not LibreLink, which is the app the sensor itself is scanned with. The
+two share a name and nothing else, and an account created in the wrong
+one logs in perfectly well and follows nobody.
+
+So before installing anything, check that all three are true:
+
+1. The sensor is scanned with the **LibreLink** phone app, so the
+   readings reach the cloud at all. A standalone reader uploads nothing
+   for this to find.
+2. That phone has **shared with a follower**, and the invitation is
+   accepted in **LibreLinkUp** — your own second account is the usual
+   arrangement.
+3. Opening **LibreLinkUp** shows a current number.
+
+If the third is not true, this cannot be either: it reads that account
+and does nothing else. `--dry-run` below says so in as many words —
+`no connections found; check that follower sharing is set up in the
+LibreLinkUp app`.
+
+### Then the install
+
 Needs **Python 3.14 or newer** — any 3.14.x, nothing here cares which
 patch release. An older interpreter is turned away at startup rather
 than failing halfway through an import.
@@ -75,7 +103,9 @@ them.
 
 Every later command in this file assumes that environment is active.
 
-Put your LibreLinkUp `email` and `password` in `config.toml`.
+Put the `email` and `password` of that LibreLinkUp follower account in
+`config.toml` — the login from step 3, not the phone's LibreLink one if
+they differ.
 
 That file holds your password, so it is excluded by `.gitignore`. Do not
 share or commit it.
@@ -195,8 +225,11 @@ alert.**
 
 ## Cautions
 
-- This uses an unofficial LibreLinkUp API. Abbott does not support it, and
-  the app breaks if the API changes without notice.
+- **FreeStyle Libre through LibreLinkUp is the only supported source.**
+  Nothing else is planned, and no setting will point this at another CGM.
+- This uses an **unofficial** LibreLinkUp API. Abbott does not support it,
+  does not document it, and the app breaks if the API changes without
+  notice.
 - **Do not use this for medical decisions.** Treat from the official app
   and a glucose meter.
 - The polling interval cannot be set below 30 seconds, to avoid getting
