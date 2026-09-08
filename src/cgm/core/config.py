@@ -4,14 +4,21 @@ config.toml holds the LibreLinkUp password, which grants access to health
 data, so it must stay out of the repository (.gitignore already excludes
 it).
 
-The Python side is split into sections so a frontend can be handed the
-part that concerns it: everything under `Vr` needs a headset, everything
-under `Window` needs a screen, everything else needs neither. **The file
-format is only partly split to match.** `hand`, `offset` and the rest of
-the VR keys stay in `[display]` where they have always been, because
-moving them would break every existing config.toml to gain nothing a
-user can see. `[window]` is a section of its own because it is new, so
-there is no existing file for it to break.
+**A section here is a section in the file.** One dataclass per
+`[table]`, one field per key, and nothing that fills two of anything.
+That buys two things. A frontend can be handed the part that concerns
+it -- everything under `Vr` needs a headset, everything under `Window`
+needs a screen, everything else needs neither -- and the file can be
+written back out by walking the same shape it was read from, rather than
+against a second list of keys that only has to be forgotten once.
+
+`[vr]` was part of `[display]` until this, on the grounds that moving
+those keys would break every existing config.toml to gain nothing a user
+could see. Both halves of that expired: there is one such file and this
+change edits it, and the sections do become visible as soon as something
+other than a text editor offers them. A `hand` left behind in
+`[display]` is not silently ignored either -- `_check_keys` names the
+section it should be in.
 """
 
 from __future__ import annotations
@@ -26,7 +33,7 @@ from cgm.face.graph import AXIS_FLOOR_MGDL, TICK_MAJOR_MIN
 
 log = logging.getLogger(__name__)
 
-# The lowest display.gaze_min_alpha that may be asked for. A face that
+# The lowest vr.gaze_min_alpha that may be asked for. A face that
 # faded to nothing would look exactly like the process having died, which
 # is the failure this whole thing exists to avoid, so the floor is a rule
 # rather than a default: it has to survive someone turning the dial down.
@@ -45,14 +52,25 @@ class Account:
 
     email: str = ""
     password: str = ""
-    patient_id: str | None = None
-    region: str | None = None
+    # Empty rather than None. "" is what the file holds when these are
+    # left blank, both readers already ask them for truthiness --
+    # `REGION_URLS.get(region or "")` and `if self._patient_id:` -- and
+    # nothing has ever read either one as None. Holding one type means
+    # the annotation is the whole story about how the field is read and
+    # written, which is what lets both directions be walked.
+    patient_id: str = ""
+    region: str = ""
     api_version: str = "4.16.0"
 
 
 @dataclass
 class Display:
-    """The part of [display] that any frontend has to answer."""
+    """[display]. What is true of the face wherever it is being shown.
+
+    Two keys, and both of them are about the reading rather than about
+    the screen: which unit it is spelled in, and when it is old enough to
+    go grey. Everything that was here about a controller is in `Vr` now.
+    """
 
     unit: str = "mgdl"
     stale_after_min: float = 10.0
@@ -60,11 +78,11 @@ class Display:
 
 @dataclass
 class Vr:
-    """The rest of [display]: where the face sits on a tracked controller.
+    """[vr]. Where the face sits on a tracked controller, and when it is lit.
 
-    Read from `[display]` like the two above, because that is where these
-    keys have always lived. Only the Python side is separated, so a
-    frontend with no headset never has to carry them.
+    None of it means anything without a headset, which is why it is a
+    section of its own: a frontend with no controller never has to carry
+    it, and `--window` can leave every key here alone.
     """
 
     hand: str = "left"
@@ -191,11 +209,12 @@ def _keys_of(*classes: type) -> frozenset[str]:
 # dataclasses rather than written out a second time: every field above is
 # loaded under its own name, so a key is recognised exactly when some
 # dataclass has a field called that, and adding a setting cannot forget
-# to register it here. `[display]` is the one section that fills two
-# dataclasses -- see the module docstring for why it stays one section.
+# to register it here. One dataclass each, now that `[display]` has
+# stopped filling two.
 SECTION_KEYS: dict[str, frozenset[str]] = {
     "account": _keys_of(Account),
-    "display": _keys_of(Display, Vr),
+    "display": _keys_of(Display),
+    "vr": _keys_of(Vr),
     "window": _keys_of(Window),
     "graph": _keys_of(Graph),
     "thresholds": _keys_of(Thresholds),
@@ -348,6 +367,10 @@ def load(path: Path) -> Config:
 
     account = raw.get("account", {})
     display = raw.get("display", {})
+    # `raw_vr` rather than `vr`, and only here: this is the one section
+    # whose name in the file is also its name on the Config, so the raw
+    # table and the dataclass would otherwise want the same word.
+    raw_vr = raw.get("vr", {})
     window = raw.get("window", {})
     graph = raw.get("graph", {})
     thresholds = raw.get("thresholds", {})
@@ -358,8 +381,8 @@ def load(path: Path) -> Config:
     acc = cfg.account
     acc.email = account.get("email", "")
     acc.password = account.get("password", "")
-    acc.patient_id = account.get("patient_id") or None
-    acc.region = account.get("region") or None
+    acc.patient_id = account.get("patient_id", acc.patient_id)
+    acc.region = account.get("region", acc.region)
     acc.api_version = account.get("api_version", acc.api_version)
 
     cfg.display.unit = display.get("unit", cfg.display.unit)
@@ -367,25 +390,23 @@ def load(path: Path) -> Config:
         display.get("stale_after_min", cfg.display.stale_after_min)
     )
 
-    # Same [display] table, second half: the keys only the VR frontend
-    # reads. One section in the file, two on the Python side.
     vr = cfg.vr
-    vr.hand = display.get("hand", vr.hand)
-    vr.width_m = float(display.get("width_m", vr.width_m))
-    vr.offset = tuple(display.get("offset", vr.offset))  # type: ignore[assignment]
+    vr.hand = raw_vr.get("hand", vr.hand)
+    vr.width_m = float(raw_vr.get("width_m", vr.width_m))
+    vr.offset = tuple(raw_vr.get("offset", vr.offset))  # type: ignore[assignment]
     vr.rotation_deg = tuple(  # type: ignore[assignment]
-        display.get("rotation_deg", vr.rotation_deg)
+        raw_vr.get("rotation_deg", vr.rotation_deg)
     )
-    vr.opacity = float(display.get("opacity", vr.opacity))
-    vr.flip_vertical = bool(display.get("flip_vertical", vr.flip_vertical))
-    vr.orbit = bool(display.get("orbit", vr.orbit))
-    vr.orbit_radius_m = float(display.get("orbit_radius_m", vr.orbit_radius_m))
-    vr.orbit_limit_deg = float(display.get("orbit_limit_deg", vr.orbit_limit_deg))
-    vr.arm_guide = bool(display.get("arm_guide", vr.arm_guide))
-    vr.gaze_fade = bool(display.get("gaze_fade", vr.gaze_fade))
-    vr.gaze_full_deg = float(display.get("gaze_full_deg", vr.gaze_full_deg))
-    vr.gaze_fade_deg = float(display.get("gaze_fade_deg", vr.gaze_fade_deg))
-    vr.gaze_min_alpha = float(display.get("gaze_min_alpha", vr.gaze_min_alpha))
+    vr.opacity = float(raw_vr.get("opacity", vr.opacity))
+    vr.flip_vertical = bool(raw_vr.get("flip_vertical", vr.flip_vertical))
+    vr.orbit = bool(raw_vr.get("orbit", vr.orbit))
+    vr.orbit_radius_m = float(raw_vr.get("orbit_radius_m", vr.orbit_radius_m))
+    vr.orbit_limit_deg = float(raw_vr.get("orbit_limit_deg", vr.orbit_limit_deg))
+    vr.arm_guide = bool(raw_vr.get("arm_guide", vr.arm_guide))
+    vr.gaze_fade = bool(raw_vr.get("gaze_fade", vr.gaze_fade))
+    vr.gaze_full_deg = float(raw_vr.get("gaze_full_deg", vr.gaze_full_deg))
+    vr.gaze_fade_deg = float(raw_vr.get("gaze_fade_deg", vr.gaze_fade_deg))
+    vr.gaze_min_alpha = float(raw_vr.get("gaze_min_alpha", vr.gaze_min_alpha))
 
     win = cfg.window
     win.scale = float(window.get("scale", win.scale))
@@ -438,17 +459,17 @@ def _validate(cfg: Config) -> None:
     if cfg.display.unit not in ("mgdl", "mmol"):
         raise ValueError(f"display.unit must be mgdl or mmol: {cfg.display.unit!r}")
     if cfg.vr.hand not in ("left", "right"):
-        raise ValueError(f"display.hand must be left or right: {cfg.vr.hand!r}")
+        raise ValueError(f"vr.hand must be left or right: {cfg.vr.hand!r}")
     if len(cfg.vr.offset) != 3 or len(cfg.vr.rotation_deg) != 3:
-        raise ValueError("display.offset and rotation_deg must have three elements")
+        raise ValueError("vr.offset and vr.rotation_deg must have three elements")
     if cfg.vr.orbit_radius_m <= 0:
         raise ValueError(
-            f"display.orbit_radius_m must be positive: {cfg.vr.orbit_radius_m}"
+            f"vr.orbit_radius_m must be positive: {cfg.vr.orbit_radius_m}"
         )
     # 180 is a full half turn either way, which is the whole circle.
     if not (0 < cfg.vr.orbit_limit_deg <= 180):
         raise ValueError(
-            f"display.orbit_limit_deg must be in (0, 180]: {cfg.vr.orbit_limit_deg}"
+            f"vr.orbit_limit_deg must be in (0, 180]: {cfg.vr.orbit_limit_deg}"
         )
 
     # 180 is the whole hemisphere behind you, so a fade that only ever
@@ -456,12 +477,12 @@ def _validate(cfg: Config) -> None:
     # if pointless. full == fade is not: it would step rather than fade.
     if not (0 <= cfg.vr.gaze_full_deg < cfg.vr.gaze_fade_deg <= 180):
         raise ValueError(
-            "display.gaze_full_deg and gaze_fade_deg must satisfy "
+            "vr.gaze_full_deg and gaze_fade_deg must satisfy "
             f"0 <= full < fade <= 180: {cfg.vr.gaze_full_deg} / {cfg.vr.gaze_fade_deg}"
         )
     if not (GAZE_ALPHA_FLOOR <= cfg.vr.gaze_min_alpha <= 1):
         raise ValueError(
-            f"display.gaze_min_alpha must be between {GAZE_ALPHA_FLOOR} and 1: "
+            f"vr.gaze_min_alpha must be between {GAZE_ALPHA_FLOOR} and 1: "
             f"{cfg.vr.gaze_min_alpha}. A face that fades to nothing looks exactly "
             "like the process having died, which is the failure this exists to "
             "avoid, so it always leaves something on screen"

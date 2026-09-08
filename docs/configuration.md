@@ -5,7 +5,8 @@ at setup. This file explains what each section does; the example file
 carries the same thing as comments next to the values.
 
 - [How the file is read](#how-the-file-is-read)
-- [`[display]` — the face and where it goes](#display--the-face-and-where-it-goes)
+- [`[display]` — the reading itself](#display--the-reading-itself)
+- [`[vr]` — the face on your arm](#vr--the-face-on-your-arm)
 - [`[window]` — the desktop window](#window--the-desktop-window)
 - [`[thresholds]` — the colour bands](#thresholds--the-colour-bands)
 - [`[polling]` — fetching, and being told about a low](#polling--fetching-and-being-told-about-a-low)
@@ -53,17 +54,27 @@ most likely to arrive holding a key this does not read, and an
 `api_verison` that quietly kept the default would turn up as a login the
 API rejects hours later -- which is a worse morning than not starting.
 
-## `[display]` — the face and where it goes
+## `[display]` — the reading itself
 
-`unit` picks mg/dL or mmol/L, `width_m` sets how big the overlay is, and
-`stale_after_min` decides when a reading goes grey. The rest of the
-section is placement, and placement is a job of its own: see
+`unit` picks mg/dL or mmol/L and `stale_after_min` decides when a reading
+goes grey. Two keys, and both are about the number rather than about the
+screen it is on, which is what is left here now that the controller keys
+have moved out.
+
+## `[vr]` — the face on your arm
+
+`hand` picks the controller to follow and `width_m` sets how big the
+overlay is. The rest is placement, and placement is a job of its own: see
 [Placing the face in VR](placement.md) for `offset`, `rotation_deg`,
 orbit mode, the arm guides, and gaze fading.
 
-The window ignores every placement key, since it has no controller to
-follow. Under `--window` there is no overlay for them to reach at all,
-so editing one of them there does nothing and says nothing.
+Only the overlay reads this section, so `vr-cgm-overlay --window`
+ignores all of it — editing a key here with no overlay running does
+nothing and says nothing.
+
+**These keys used to be in `[display]`.** A `config.toml` written before
+the split does not start: every one of them is named, with `[vr]` given
+as where it belongs, so the error message is the list of what to move.
 
 ## `[window]` — the desktop window
 

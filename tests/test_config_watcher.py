@@ -28,7 +28,7 @@ def setUpModule():
 
 def body(width: float = 0.14, interval: int = 60) -> str:
     return (
-        f"{ACCOUNT}\n[display]\nwidth_m = {width}\n"
+        f"{ACCOUNT}\n[vr]\nwidth_m = {width}\n"
         f"\n[polling]\ninterval_sec = {interval}\n"
     )
 
@@ -100,7 +100,7 @@ class BadEdit(WatcherTestCase):
     def test_a_half_written_file_is_ignored(self):
         # An editor writing in place can be caught mid-save. Taking the
         # process down for it would mean pulling the headset off.
-        self.write("[display]\nwidth_m = ")
+        self.write("[vr]\nwidth_m = ")
         self.assertIsNone(self.watcher.poll())
 
     def test_a_rejected_setting_is_ignored(self):
