@@ -155,9 +155,11 @@ nothing else — the running app picks the edit up the same way it picks
 up one made in a text editor, and it refuses to write anything the app
 would not start from.
 
-Placement is not in there, on purpose. Where the face sits on your arm
-can only be judged with the headset on, so `[vr]` stays a file you edit
-while looking at it: see [Placing the face in VR](docs/placement.md).
+Placement is in there too, `offset` and `rotation_deg` as three boxes
+each. It is still judged with the headset on — change a number, press
+Save, watch the face move — which is the same loop as editing the file,
+because both go back through the same watcher. See
+[Placing the face in VR](docs/placement.md) for what the numbers mean.
 
 Everything is in `config.toml` either way, and it is **re-read while the
 app runs** — edit it with the headset on and the face changes within a

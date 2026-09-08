@@ -33,10 +33,13 @@ instead. What it costs is that `window.scale` cannot be dragged and
 watched, which is a fair price for not being able to save nonsense by
 accident.
 
-**`[vr]` is not offered**, and that is the one deliberate hole. Where
-the face sits on your arm cannot be judged from a desktop window with
-the headset on your head, so live file reload stays the better tool for
-it; see docs/placement.md. Everything else here is decided at a desk.
+**Every section is offered, `[vr]` included.** It was left out at
+first, on the grounds that placement can only be judged with the headset
+on. That is true and it is not a reason to withhold it: pressing Save
+here is the same loop as saving the file, because both go back through
+the watcher and land within the second. What was actually missing was a
+widget for three numbers, and that is `Vector3Var`. The tab says how the
+loop goes; docs/placement.md says what the numbers mean.
 
 tkinter is imported at module scope, so `cgm.main` imports this module
 lazily, the same way it does `cgm.desk.window`.
@@ -53,19 +56,21 @@ from cgm.core import config as config_mod
 
 log = logging.getLogger(__name__)
 
-# Sections this window does not offer, with the reason, which is shown
-# at the bottom rather than left for somebody to wonder about.
-SKIPPED = {
+# A line at the top of one tab, where the section needs something said
+# about it that no single row does.
+NOTES = {
     "vr": (
-        "[vr] is left to config.toml: where the face sits on your arm can "
-        "only be judged with the headset on. See docs/placement.md."
-    )
+        "Placement is judged with the headset on: change a number, press "
+        "Save, and watch the face move. Nudging it in config.toml works "
+        "the same way. See docs/placement.md for what the numbers mean."
+    ),
 }
 
 # Settings whose value is one of a short list. A free text box for these
 # is a way of typing a value the loader then refuses.
 CHOICES = {
     "display.unit": ("mgdl", "mmol"),
+    "vr.hand": ("left", "right"),
 }
 
 # Shown as dots. The only one, and the reason the window exists at all
@@ -83,6 +88,18 @@ HINTS = {
     "window.scale": (
         f"{config_mod.WINDOW_SCALE_MIN} to {config_mod.WINDOW_SCALE_MAX}"
     ),
+    "vr.hand": "which controller to follow; the off hand works best",
+    "vr.width_m": "how wide the card is, in metres",
+    "vr.offset": "metres: X right, Y up off the back of the hand, Z to the elbow",
+    "vr.rotation_deg": "degrees, applied X then Y then Z",
+    "vr.orbit": "ride around the forearm instead of being bolted to the controller",
+    "vr.orbit_radius_m": "how far off the arm's centreline the face floats",
+    "vr.orbit_limit_deg": "how far round the arm it may travel, up to 180",
+    "vr.arm_guide": "draw the arm orbit mode is aiming at, while you tune it",
+    "vr.gaze_fade": "dim the face while you are not looking at it",
+    "vr.gaze_full_deg": "within this of the centre of view: full opacity",
+    "vr.gaze_fade_deg": "past this: gaze_min_alpha, fading in between",
+    "vr.gaze_min_alpha": "what is left when you look away; never below 0.1",
     "graph.window_min": "minutes of history; 0 for all of it",
     "graph.axis_high_mgdl": "top of the axis, mg/dL",
     "thresholds.low_mgdl": "mg/dL, whatever the display unit is",
@@ -97,26 +114,34 @@ HINTS = {
 
 
 def sections() -> list[str]:
-    """The sections the window offers, in the order it offers them."""
-    return [name for name in config_mod.FIELD_TYPES if name not in SKIPPED]
+    """The sections the window offers, in the order it offers them.
+
+    All of them. `[vr]` was left out at first, on the grounds that
+    placement can only be judged with the headset on -- which is true and
+    is not a reason to withhold it, because pressing Save here is the
+    same loop as saving the file: the watcher picks either up within the
+    second. What was actually missing was a widget for three numbers.
+    """
+    return list(config_mod.FIELD_TYPES)
 
 
-# The kinds this form has a widget for: a checkbox, a dropdown, or a
-# text box. `tuple[float, float, float]` is the one it does not have,
-# and it only exists under `[vr]`, which is not offered.
-SHOWN_KINDS = (str, float, bool)
+# The kinds this form has a widget for: a checkbox, a dropdown, a text
+# box, and three text boxes for the one setting that is a vector.
+SHOWN_KINDS = (str, float, bool, config_mod.VECTOR3)
 
 
-def _check_shown_kinds() -> None:
+def _check_shown_kinds(field_types: dict[str, dict[str, type]] | None = None) -> None:
     """Refuse at import a setting there is no widget for.
 
     `cgm.core.config` does the same thing one layer down, and for the
-    same reason. Without this, a vector added to an offered section gets
-    a text box holding `(0.0, 0.02, 0.1)` that nothing can convert back,
-    and the failure is somebody pressing Save.
+    same reason. Without it a new kind gets whatever widget the last
+    branch happens to be, holding text nothing can convert back, and the
+    failure is somebody pressing Save.
     """
-    for section in sections():
-        for key, kind in config_mod.FIELD_TYPES[section].items():
+    if field_types is None:
+        field_types = {name: config_mod.FIELD_TYPES[name] for name in sections()}
+    for section, kinds in field_types.items():
+        for key, kind in kinds.items():
             if kind not in SHOWN_KINDS:
                 raise TypeError(
                     f"{section}.{key} is annotated {kind!r}, which the settings "
@@ -137,6 +162,29 @@ def spell(value) -> str:
     if isinstance(value, float):
         return str(int(value)) if value.is_integer() else repr(value)
     return str(value)
+
+
+class Vector3Var:
+    """Three boxes that answer as one setting.
+
+    `offset` and `rotation_deg` are the only compound values there are,
+    and a single box holding `0.0, -0.02, 0.12` would be a text format
+    to parse and to complain about. Three boxes instead, and this stands
+    in for a `tk.Variable` in the two ways the window uses one: `get`
+    hands back the three strings, which `config.parse` already accepts
+    because a TOML array arrives as a list too, and `trace_add` marks the
+    window edited from any of them.
+    """
+
+    def __init__(self, value) -> None:
+        self.parts = [tk.StringVar(value=spell(part)) for part in value]
+
+    def get(self) -> list[str]:
+        return [part.get() for part in self.parts]
+
+    def trace_add(self, mode: str, callback) -> None:
+        for part in self.parts:
+            part.trace_add(mode, callback)
 
 
 def apply_values(cfg: config_mod.Config, values: dict[tuple[str, str], object]) -> None:
@@ -171,7 +219,7 @@ class SettingsWindow:
         # the file is what this is about to write, and it is also where
         # an edit made in a text editor a moment ago will be.
         self._cfg = config_mod.load(path)
-        self._vars: dict[tuple[str, str], tk.Variable] = {}
+        self._vars: dict[tuple[str, str], tk.Variable | Vector3Var] = {}
 
         self._top = tk.Toplevel(master)
         self._top.title(f"settings - {path.name}")
@@ -191,12 +239,7 @@ class SettingsWindow:
             notebook.add(frame, text=section)
             self._fill(frame, section)
 
-        for reason in SKIPPED.values():
-            ttk.Label(
-                self._top, text=reason, foreground="gray40", wraplength=460
-            ).pack(fill="x", padx=12, pady=(8, 0))
-
-        self._status = ttk.Label(self._top, text="", wraplength=460)
+        self._status = ttk.Label(self._top, text="", wraplength=560)
         self._status.pack(fill="x", padx=12, pady=(8, 0))
 
         buttons = ttk.Frame(self._top, padding=(10, 10))
@@ -222,9 +265,36 @@ class SettingsWindow:
 
     def _fill(self, frame: ttk.Frame, section: str) -> None:
         held = getattr(self._cfg, section)
-        for row, (key, kind) in enumerate(config_mod.FIELD_TYPES[section].items()):
+        first = 0
+        note = NOTES.get(section)
+        if note:
+            # Above the rows rather than at the bottom of the window:
+            # what it says is about this section, and a line under the
+            # tabs reads as being about whichever one is open.
+            ttk.Label(
+                frame, text=note, foreground="gray40", wraplength=520
+            ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+            first = 1
+
+        for offset, (key, kind) in enumerate(config_mod.FIELD_TYPES[section].items()):
+            row = first + offset
             name = f"{section}.{key}"
             value = getattr(held, key)
+
+            if kind == config_mod.VECTOR3:
+                variable: tk.Variable | Vector3Var = Vector3Var(value)
+                ttk.Label(frame, text=key).grid(
+                    row=row, column=0, sticky="w", pady=3
+                )
+                boxes = ttk.Frame(frame)
+                for part in variable.parts:
+                    ttk.Entry(boxes, textvariable=part, width=8).pack(
+                        side="left", padx=(0, 4)
+                    )
+                boxes.grid(row=row, column=1, sticky="w", padx=(12, 0), pady=3)
+                self._hint(frame, row, name)
+                self._vars[(section, key)] = variable
+                continue
 
             if kind is bool:
                 # The name goes on the box rather than in the column
@@ -234,7 +304,7 @@ class SettingsWindow:
                 # which reads as damage rather than as focus. It also
                 # makes the whole word clickable, which is how a
                 # checkbox is expected to behave.
-                variable: tk.Variable = tk.BooleanVar(value=value)
+                variable = tk.BooleanVar(value=value)
                 widget: tk.Widget = ttk.Checkbutton(
                     frame, text=key, variable=variable
                 )

@@ -27,7 +27,13 @@ Nothing has exercised these yet. Each says how to check it.
   of `config.example.toml`, so nothing saved from it reaches a real
   config. Worth asking of it: whether the tabs are in a sensible order,
   whether the hints read as help or as noise, and whether the window is
-  the right size at 7 tabs and 25 rows.
+  the right size at 8 tabs and 39 rows.
+
+  The `[vr]` tab is the one with a question of its own. Tuning placement
+  is a tight loop -- nudge, save, look -- and whether pressing a button
+  in a dialog is as quick as Ctrl+S in an editor already open is not
+  something a screenshot answers. It is only worth changing if the
+  answer is no.
 - **Controller sleep and wake.** With the process running, power the
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and

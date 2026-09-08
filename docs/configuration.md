@@ -29,13 +29,16 @@ text editor. Save says so at the bottom of the window, and a value the
 loader would refuse is reported there instead of being written, so the
 window cannot leave you with a config the app will not start from.
 
-Two things it does not do. There is **no live apply** — nothing is
-written until Save, because every save is a full re-read and a value
-half typed on the way to `80` is a real setting for as long as it takes
-to type the next digit. And **`[vr]` is not offered**: where the face
-sits on your arm cannot be judged from a desktop window while the
-headset is on your head, so placement stays an edit you make in the file
-while watching it move. See [Placing the face in VR](placement.md).
+One thing it does not do: there is **no live apply**. Nothing is written
+until Save, because every save is a full re-read and a value half typed
+on the way to `80` is a real setting for as long as it takes to type the
+next digit.
+
+`[vr]` gets a tab like everything else, with `offset` and `rotation_deg`
+as three boxes each. Placement is still something you judge with the
+headset on — change a number, press Save, watch the face move — which is
+the same loop as saving the file, since both arrive through the same
+watcher. See [Placing the face in VR](placement.md).
 
 `vr-cgm-overlay --vr` has no window, so it has no settings window
 either.

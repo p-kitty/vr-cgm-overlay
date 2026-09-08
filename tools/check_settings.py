@@ -115,8 +115,13 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     }
     assert not expected - set(rows), f"no widget for {sorted(expected - set(rows))}"
     assert not set(rows) - expected, f"a widget for {sorted(set(rows) - expected)}"
-    assert not any(section == "vr" for section, _ in rows), "[vr] is offered"
-    say("a widget per setting", f"{len(expected)} rows, {len(settings_mod.sections())} tabs")
+    # The compound one, which is three boxes standing in for a variable.
+    assert isinstance(rows[("vr", "offset")], settings_mod.Vector3Var)
+    assert len(rows[("vr", "offset")].parts) == 3
+    say(
+        "a widget per setting",
+        f"{len(expected)} rows, {len(settings_mod.sections())} tabs",
+    )
 
     # Nothing has been touched, so there is nothing to write.
     assert window._save_button.instate(["disabled"]), "Save is offered at rest"
@@ -140,10 +145,16 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     assert LANDMARK in text, "the example's comments are gone"
     say("and keeps the comments", f"{text.count('#')} lines")
 
-    # Placement was never on screen, so it has to come through untouched.
-    assert "[vr]" in text, "the section the window does not show was dropped"
+    # Placement was not touched, so it has to come through unchanged --
+    # and then be changeable from here, which is the whole reason the
+    # section is offered at all.
+    assert "[vr]" in text, "the placement section was dropped"
     assert saved.vr.offset == before_offset, saved.vr.offset
-    say("[vr] survives a save", f"offset still {saved.vr.offset}")
+    for part, value in zip(rows[("vr", "offset")].parts, ("0.0", "-0.03", "0.11")):
+        part.set(value)
+    assert window.save(), "placement was refused"
+    assert config_mod.load(path).vr.offset == (0.0, -0.03, 0.11)
+    say("[vr] is editable from here", "offset nudged to (0.0, -0.03, 0.11)")
 
     # A refused value stays on the window. Taking the process down for a
     # typo would mean losing the face as well.

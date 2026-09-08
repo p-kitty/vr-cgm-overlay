@@ -6,12 +6,12 @@ checkbox on a frame is something Tk either does or does not.
 
 What is worth asserting is everything between the boxes and the file.
 The form is built by walking `cgm.core.config.FIELD_TYPES`, so the
-checks are about that walk staying honest -- every offered setting has a
-widget it can be saved out of, every table keyed by name names something
-real, and a value that goes into a box comes back out of the file as
-what it was. Then the save itself: it must refuse rather than write a
-config.toml the app would not start from, and it must not touch `[vr]`,
-which it never showed.
+checks are about that walk staying honest -- every setting has a widget
+it can be saved out of, every table keyed by name names something real,
+and a value that goes into a box comes back out of the file as what it
+was. Then the save itself: it must refuse rather than write a
+config.toml the app would not start from, and it must leave alone
+whatever it was not handed.
 """
 
 from __future__ import annotations
@@ -32,6 +32,8 @@ NAMED = (
     ("SECRET", settings_mod.SECRET),
 )
 
+VECTOR = ("vr", "offset")
+
 
 def names() -> set[str]:
     """Every `section.key` there is."""
@@ -42,48 +44,66 @@ def names() -> set[str]:
     }
 
 
-class Offered(unittest.TestCase):
-    def test_placement_is_not_offered(self):
-        # The one deliberate hole. Where the face sits on your arm cannot
-        # be judged from a desktop window with the headset on.
-        self.assertNotIn("vr", settings_mod.sections())
-        self.assertIn("vr", settings_mod.SKIPPED)
+def boxes(cfg: config_mod.Config) -> dict[tuple[str, str], object]:
+    """What the window's variables would hand back, for a whole config.
 
-    def test_everything_else_is(self):
-        self.assertEqual(
-            set(settings_mod.sections()),
-            set(config_mod.FIELD_TYPES) - set(settings_mod.SKIPPED),
-        )
+    One string per box, and three of them for a vector, which is what
+    `Vector3Var.get` returns.
+    """
+    out: dict[tuple[str, str], object] = {}
+    for section in settings_mod.sections():
+        held = getattr(cfg, section)
+        for key, kind in config_mod.FIELD_TYPES[section].items():
+            value = getattr(held, key)
+            out[(section, key)] = (
+                [settings_mod.spell(part) for part in value]
+                if kind == config_mod.VECTOR3
+                else settings_mod.spell(value)
+            )
+    return out
+
+
+class Offered(unittest.TestCase):
+    def test_every_section_is_offered(self):
+        # `[vr]` was left out at first, on the grounds that placement can
+        # only be judged with the headset on. It still can -- and Save
+        # here is the same loop as saving the file, so that was never a
+        # reason to withhold it.
+        self.assertEqual(settings_mod.sections(), list(config_mod.FIELD_TYPES))
+        self.assertIn("vr", settings_mod.sections())
 
     def test_the_tabs_follow_the_config(self):
         # So the window and the file read in the same order.
-        self.assertEqual(
-            settings_mod.sections(),
-            [s for s in config_mod.FIELD_TYPES if s not in settings_mod.SKIPPED],
-        )
+        self.assertEqual(settings_mod.sections(), list(config_mod.FIELD_TYPES))
 
-    def test_a_skipped_section_says_why(self):
-        for section, reason in settings_mod.SKIPPED.items():
+    def test_a_note_is_about_a_section_that_exists(self):
+        for section, note in settings_mod.NOTES.items():
             with self.subTest(section):
-                self.assertTrue(reason.strip())
+                self.assertIn(section, settings_mod.sections())
+                self.assertTrue(note.strip())
 
-    def test_every_offered_setting_has_a_widget(self):
+    def test_placement_says_how_it_is_meant_to_be_used(self):
+        # The tab a desk cannot judge on its own. Saying nothing would
+        # leave somebody typing offsets and wondering why nothing looks
+        # different on their monitor.
+        note = settings_mod.NOTES["vr"]
+        self.assertIn("headset", note)
+        self.assertIn("placement.md", note)
+
+    def test_every_setting_has_a_widget(self):
         # This runs at import too. Here so it fails by name rather than
         # by every test in the file erroring at once.
         settings_mod._check_shown_kinds()
 
     def test_a_kind_with_no_widget_is_refused(self):
-        # What would otherwise happen: a text box holding
-        # `(0.0, 0.02, 0.1)` that nothing can convert back, found by
-        # whoever pressed Save.
-        original = settings_mod.SKIPPED
-        try:
-            settings_mod.SKIPPED = {}  # so [vr], which holds vectors, is offered
-            with self.assertRaises(TypeError) as caught:
-                settings_mod._check_shown_kinds()
-            self.assertIn("vr.offset", str(caught.exception))
-        finally:
-            settings_mod.SKIPPED = original
+        # What would otherwise happen: a box holding text nothing can
+        # convert back, found by whoever pressed Save.
+        with self.assertRaises(TypeError) as caught:
+            settings_mod._check_shown_kinds({"polling": {"retries": int}})
+        self.assertIn("polling.retries", str(caught.exception))
+
+    def test_three_numbers_have_a_widget(self):
+        settings_mod._check_shown_kinds({"vr": {"offset": config_mod.VECTOR3}})
 
 
 class Tables(unittest.TestCase):
@@ -134,19 +154,15 @@ class Tables(unittest.TestCase):
 
 class Spelling(unittest.TestCase):
     def test_a_default_survives_the_trip_through_a_text_box(self):
-        # Every offered setting has to come back out of its own box as
-        # what it was, or opening the window and pressing Save would be
-        # an edit.
+        # Every setting has to come back out of its own box as what it
+        # was, or opening the window and pressing Save would be an edit.
         cfg = config_mod.Config()
-        for section in settings_mod.sections():
-            held = getattr(cfg, section)
-            for key in config_mod.FIELD_TYPES[section]:
-                with self.subTest(f"{section}.{key}"):
-                    value = getattr(held, key)
-                    shown = settings_mod.spell(value)
-                    self.assertEqual(
-                        config_mod.parse(section, key, shown), value
-                    )
+        for (section, key), shown in boxes(cfg).items():
+            with self.subTest(f"{section}.{key}"):
+                self.assertEqual(
+                    config_mod.parse(section, key, shown),
+                    getattr(getattr(cfg, section), key),
+                )
 
     def test_a_whole_number_is_shown_without_a_decimal_point(self):
         # Held as a float. A box reading `70.0` where the file says `70`
@@ -187,13 +203,27 @@ class Applying(unittest.TestCase):
             settings_mod.apply_values(cfg, {("thresholds", "low_mgdl"): "eighty"})
         self.assertIn("thresholds.low_mgdl", str(caught.exception))
 
-    def test_what_is_not_shown_is_not_touched(self):
-        # `[vr]` is never in the values, so a save from a window that
-        # never showed it leaves it exactly as the file had it.
+    def test_what_is_not_handed_over_is_not_touched(self):
+        # The window always passes every box, but a partial set has to
+        # leave the rest as the file had it -- which is what keeps a save
+        # from being a rewrite of everything.
         cfg = self.write("\n[vr]\nhand = 'right'\noffset = [0.0, -0.02, 0.12]\n")
         before = asdict(cfg.vr)
         settings_mod.apply_values(cfg, {("thresholds", "low_mgdl"): "80"})
         self.assertEqual(asdict(cfg.vr), before)
+
+    def test_three_boxes_become_one_setting(self):
+        # `Vector3Var.get` hands back three strings, which `parse` takes
+        # because a TOML array arrives as a list of numbers the same way.
+        cfg = self.write()
+        settings_mod.apply_values(cfg, {VECTOR: ["0.0", "-0.02", "0.12"]})
+        self.assertEqual(cfg.vr.offset, (0.0, -0.02, 0.12))
+
+    def test_a_box_of_three_that_holds_a_word_names_its_setting(self):
+        cfg = self.write()
+        with self.assertRaises(ValueError) as caught:
+            settings_mod.apply_values(cfg, {VECTOR: ["0.0", "up a bit", "0.12"]})
+        self.assertIn("vr.offset", str(caught.exception))
 
 
 class Saving(unittest.TestCase):
@@ -221,11 +251,29 @@ class Saving(unittest.TestCase):
         self.press_save({("thresholds", "low_mgdl"): "80"})
         self.assertEqual(config_mod.load(self.path).thresholds.low_mgdl, 80.0)
 
-    def test_the_part_the_window_never_showed_survives(self):
+    def test_a_section_the_save_did_not_mention_survives(self):
         self.press_save({("thresholds", "low_mgdl"): "80"})
         text = self.path.read_text(encoding="utf-8")
         self.assertIn("# tuned by hand", text)
         self.assertEqual(config_mod.load(self.path).vr.offset, (0.0, -0.02, 0.12))
+
+    def test_placement_can_be_nudged_from_here(self):
+        # The whole reason [vr] is offered: change a number, press Save,
+        # and the watcher moves the face within the second.
+        self.press_save({VECTOR: ["0.0", "-0.03", "0.11"]})
+        self.assertEqual(config_mod.load(self.path).vr.offset, (0.0, -0.03, 0.11))
+        self.assertIn("# tuned by hand", self.path.read_text(encoding="utf-8"))
+
+    def test_a_placement_rule_still_holds(self):
+        # `_validate` is the same one the file goes through, so the
+        # window cannot save a gaze fade that steps instead of fading.
+        with self.assertRaises(ValueError):
+            self.press_save(
+                {
+                    ("vr", "gaze_full_deg"): "45",
+                    ("vr", "gaze_fade_deg"): "45",
+                }
+            )
 
     def test_nothing_is_written_when_it_would_not_load(self):
         # A threshold above the one above it. Writing it would leave a
@@ -250,13 +298,7 @@ class Saving(unittest.TestCase):
 
     def test_saving_the_values_it_opened_with_changes_nothing(self):
         before = self.path.read_text(encoding="utf-8")
-        cfg = config_mod.load(self.path)
-        values = {
-            (section, key): settings_mod.spell(getattr(getattr(cfg, section), key))
-            for section in settings_mod.sections()
-            for key in config_mod.FIELD_TYPES[section]
-        }
-        self.press_save(values)
+        self.press_save(boxes(config_mod.load(self.path)))
         self.assertEqual(self.path.read_text(encoding="utf-8"), before)
 
 
