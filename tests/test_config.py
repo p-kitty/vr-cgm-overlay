@@ -686,5 +686,129 @@ class FieldKinds(unittest.TestCase):
         )
 
 
+class Saving(ConfigTestCase):
+    """Writing a Config back into the file it was read from.
+
+    Nothing calls `save` yet; it is what a settings window needs. What is
+    asserted here is that it can be called on a real config.toml without
+    the user losing anything -- their comments, their formatting, or the
+    password, which is the one value in the file that cannot be worked
+    out again.
+    """
+
+    def test_a_round_trip_changes_nothing(self):
+        cfg = self.load(
+            "\n[display]\nunit = 'mmol'\n"
+            "\n[vr]\nhand = 'right'\noffset = [0.0, -0.02, 0.1]\n"
+            "\n[polling]\ninterval_sec = 90\n"
+        )
+        config_mod.save(cfg, self.path)
+        self.assertEqual(asdict(config_mod.load(self.path)), asdict(cfg))
+
+    def test_saving_an_unedited_config_leaves_the_file_alone(self):
+        # The strongest form of the anti-churn rule: a save that changed
+        # nothing must write nothing, byte for byte.
+        body = ACCOUNT + "\n[vr]\nhand = 'right'\nwidth_m = 0.2\n"
+        self.path.write_text(body, encoding="utf-8")
+        config_mod.save(config_mod.load(self.path), self.path)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), body)
+
+    def test_comments_survive_a_save(self):
+        # They are the documentation for anyone editing by hand, and
+        # most of what they say is not repeated anywhere that person
+        # will look.
+        self.path.write_text(
+            ACCOUNT + "\n# 90 because the sensor is slow here\n"
+            "[polling]\ninterval_sec = 90\n",
+            encoding="utf-8",
+        )
+        cfg = config_mod.load(self.path)
+        cfg.polling.interval_sec = 120.0
+        config_mod.save(cfg, self.path)
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("# 90 because the sensor is slow here", text)
+        self.assertIn("interval_sec = 120", text)
+
+    def test_an_untouched_integer_is_not_churned_into_a_float(self):
+        # Held as a float, written as `60`. Rewriting it as `60.0` on
+        # every save would bury the one line that did change under a
+        # diff of lines that did not.
+        cfg = self.load("\n[polling]\ninterval_sec = 60\n")
+        config_mod.save(cfg, self.path)
+        self.assertIn("interval_sec = 60\n", self.path.read_text(encoding="utf-8"))
+
+    def test_a_whole_number_stays_a_whole_number(self):
+        # `low_mgdl = 70` nudged to 75 should read `75`. Every number
+        # here is held as a float, so without this the settings window
+        # would put a `.0` on every threshold it ever touched.
+        cfg = self.load("\n[thresholds]\nlow_mgdl = 70\n")
+        cfg.thresholds.low_mgdl = 75.0
+        config_mod.save(cfg, self.path)
+        self.assertIn("low_mgdl = 75\n", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(config_mod.load(self.path).thresholds.low_mgdl, 75.0)
+
+    def test_a_fraction_is_still_written_as_one(self):
+        # The rule above is about how a whole number is spelled, not
+        # about rounding anything.
+        cfg = self.load("\n[vr]\nwidth_m = 1\n")
+        cfg.vr.width_m = 0.16
+        config_mod.save(cfg, self.path)
+        self.assertIn("width_m = 0.16", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(config_mod.load(self.path).vr.width_m, 0.16)
+
+    def test_a_changed_setting_the_file_never_had_is_added(self):
+        cfg = self.load()
+        cfg.thresholds.low_mgdl = 80.0
+        config_mod.save(cfg, self.path)
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("[thresholds]", text)
+        self.assertEqual(config_mod.load(self.path).thresholds.low_mgdl, 80.0)
+
+    def test_a_default_the_file_never_had_is_left_out(self):
+        # Changing one threshold must not paste all fifty settings into
+        # a file that was holding six.
+        cfg = self.load()
+        cfg.window.scale = 2.0
+        config_mod.save(cfg, self.path)
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("scale = 2", text)
+        self.assertNotIn("always_on_top", text)
+        self.assertNotIn("[vr]", text)
+
+    def test_placement_goes_back_as_an_array(self):
+        # TOML has no tuple, so the one compound kind has to survive the
+        # trip out and back.
+        cfg = self.load()
+        cfg.vr.offset = (0.0, -0.02, 0.12)
+        config_mod.save(cfg, self.path)
+        self.assertIn("offset = [", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(config_mod.load(self.path).vr.offset, (0.0, -0.02, 0.12))
+
+    def test_the_password_survives(self):
+        cfg = self.load()
+        cfg.display.unit = "mmol"
+        config_mod.save(cfg, self.path)
+        self.assertEqual(config_mod.load(self.path).account.password, "secret")
+
+    def test_a_file_that_is_not_there_yet_is_written_from_nothing(self):
+        target = Path(self._dir.name) / "fresh.toml"
+        cfg = config_mod.Config()
+        cfg.account.email = "someone@example.com"
+        cfg.account.password = "secret"
+        config_mod.save(cfg, target)
+        self.assertEqual(asdict(config_mod.load(target)), asdict(cfg))
+
+    def test_the_temporary_file_does_not_survive(self):
+        # The write lands beside the real file so the move is atomic.
+        # What must not happen is a config.toml.new left in the checkout.
+        cfg = self.load()
+        cfg.thresholds.low_mgdl = 80.0
+        config_mod.save(cfg, self.path)
+        self.assertEqual(
+            sorted(p.name for p in Path(self._dir.name).iterdir()),
+            [self.path.name],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

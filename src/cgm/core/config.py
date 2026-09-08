@@ -1,4 +1,4 @@
-"""Reading config.toml.
+"""Reading config.toml, and writing it back.
 
 config.toml holds the LibreLinkUp password, which grants access to health
 data, so it must stay out of the repository (.gitignore already excludes
@@ -11,14 +11,14 @@ a headset, everything under `Window` needs a screen, everything else
 needs neither -- and, more to the point, both directions can walk the
 same shape.
 
-`load` is that walk, and `save` is the half still to come. Adding a
-setting is adding a field: reading it and recognising its name both
-follow from the declaration, and there is no second list of keys to
-keep in step. There was one until this -- ninety lines of `.get(key,
-default)` -- and the symptom of forgetting a line in it was a setting
-that silently stayed at its default, which reads as a broken feature
-rather than a bug. That is now unwritable, and it is why the
-annotations are restricted to four kinds: see `FIELD_KINDS`.
+`load` and `save` are that walk. Adding a setting is adding a field:
+reading it, writing it and recognising its name all follow from the
+declaration, and there is no second list of keys to keep in step. There
+was one until this -- ninety lines of `.get(key, default)` -- and the
+symptom of forgetting a line in it was a setting that silently stayed
+at its default, which reads as a broken feature rather than a bug. That
+is now unwritable, and it is why the annotations are restricted to four
+kinds: see `FIELD_KINDS`.
 
 `[vr]` was part of `[display]` until this, on the grounds that moving
 those keys would break every existing config.toml to gain nothing a user
@@ -37,6 +37,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import get_type_hints
+
+import tomlkit
 
 from cgm.face.graph import AXIS_FLOOR_MGDL, TICK_MAJOR_MIN
 
@@ -437,6 +439,28 @@ def _read(section: str, key: str, kind: type, value):
         ) from exc
 
 
+def _written(value, existing):
+    """The value as it should appear in the file.
+
+    Two adjustments, both about not changing a line beyond what was
+    asked. TOML has no tuple, so VECTOR3 goes out as the array it came
+    in as. And a key the file spelled as a whole number stays one:
+    `low_mgdl = 70` edited to 75 should read `75`, since every number
+    here is held as a float and the trailing `.0` is churn.
+    """
+    if isinstance(value, tuple):
+        return list(value)
+    if (
+        isinstance(value, float)
+        and value.is_integer()
+        # bool is a subclass of int, and `true` is not a whole number.
+        and isinstance(existing, int)
+        and not isinstance(existing, bool)
+    ):
+        return int(value)
+    return value
+
+
 def load(path: Path) -> Config:
     """Read the config file, falling back to defaults for absent keys.
 
@@ -468,6 +492,63 @@ def load(path: Path) -> Config:
 
     _validate(cfg)
     return cfg
+
+
+def save(cfg: Config, path: Path) -> None:
+    """Write `cfg` back to `path`, keeping the file that is already there.
+
+    tomlkit rather than a fresh dump, because the comments in
+    config.toml are the only explanation of most of these settings that
+    anyone editing by hand will ever see. Rewriting the file from the
+    values alone would throw all of it away, once, silently.
+
+    **Only what actually differs is touched.** A key the file already
+    holds is compared through the same conversion `load` uses, so
+    `interval_sec = 60` stays as it is rather than being churned to
+    `60.0` on every save; a key the file does not hold is added only
+    when it is not the default, so saving does not paste all fifty
+    settings into a file that was holding six.
+
+    The write goes through a temporary file, because the thing being
+    overwritten is the only copy of a password.
+
+    Nothing calls this yet. It is what a settings window needs, and it
+    is here rather than there because it is the other half of `load`.
+    """
+    document = (
+        tomlkit.parse(path.read_text(encoding="utf-8"))
+        if path.exists()
+        else tomlkit.document()
+    )
+    defaults = Config()
+
+    for section, kinds in FIELD_TYPES.items():
+        table = document.get(section)
+        held = getattr(cfg, section)
+        default = getattr(defaults, section)
+        for key, kind in kinds.items():
+            value = getattr(held, key)
+            existing = table[key] if table is not None and key in table else None
+            if existing is not None:
+                try:
+                    if _as(kind, existing) == value:
+                        continue
+                except (TypeError, ValueError):
+                    pass  # unreadable, so it is about to be replaced
+            elif value == getattr(default, key):
+                # Absent, and what would be written is what absent
+                # already means. Adding it only makes the file longer.
+                continue
+            if table is None:
+                table = tomlkit.table()
+                document[section] = table
+            table[key] = _written(value, existing)
+
+    # Written beside the real file so the move is a rename within one
+    # directory, which is the case os.replace makes atomic.
+    scratch = path.with_name(path.name + ".new")
+    scratch.write_text(tomlkit.dumps(document), encoding="utf-8")
+    scratch.replace(path)
 
 
 def _validate(cfg: Config) -> None:

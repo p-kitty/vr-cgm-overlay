@@ -31,6 +31,11 @@ dependencies = [
     # carries 18 open CVEs. 12.3 is the first with none. Nothing here
     # decodes an untrusted image, so this is hygiene rather than a fix.
     "Pillow>=12.3",
+    # Writing config.toml back without losing its comments -- they are
+    # the only explanation of most of those settings anyone editing by
+    # hand will see. Reading stays on tomllib: stdlib, strict, and
+    # already there. 0.14.0 is the first release that claims 3.14.
+    "tomlkit>=0.14.0",
 ]
 
 [project.optional-dependencies]
