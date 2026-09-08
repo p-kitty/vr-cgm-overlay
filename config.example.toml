@@ -19,11 +19,31 @@ region = ""
 api_version = "4.16.0"
 
 
-# Everything in this section is re-read while the app runs. Edit and save
-# with the headset on and the face moves within a second; see
-# docs/configuration.md.
+# The reading itself: how the number is spelled, and when it stops being
+# trusted. Re-read while the app runs, like everything below [account];
+# see docs/configuration.md.
 [display]
 unit = "mgdl"        # "mgdl" or "mmol"
+
+# Readings older than this go grey. The floor here is set by the poll
+# cycle rather than by taste. A value already carries some age when it
+# arrives -- the gap between the sensor publishing it and this asking for
+# it -- and that gap drifts through the whole 0 to 60 seconds as the two
+# cycles slide past each other. On top of it the value is held for
+# interval_sec plus a few seconds of jitter, so on screen the age peaks
+# at up to about 122 seconds with nothing wrong at all. Under 2.1 the
+# face blinks grey every minute for part of that drift and not at all for
+# the rest of it. 2.5 clears the whole cycle and still greys about a
+# minute after one update actually goes missing.
+stale_after_min = 2.5
+
+
+# Where the face sits on your arm, and when it is lit. Only the overlay
+# reads this section: `vr-cgm-overlay --window` ignores all of it. Edit
+# and save with the headset on and it lands within a second, so change one
+# value at a time and watch the result. `hand` costs a second more,
+# because it reopens the overlay.
+[vr]
 hand = "left"        # which controller to follow; the off hand works best
                      # (this one costs a second: the overlay is reopened)
 width_m = 0.14       # overlay width in metres
@@ -68,23 +88,12 @@ gaze_min_alpha = 0.25   # how much is left when you look away; at least 0.1
 
 opacity = 1.0
 flip_vertical = false   # set true if the face renders upside down
-# Readings older than this go grey. The floor here is set by the poll
-# cycle rather than by taste. A value already carries some age when it
-# arrives -- the gap between the sensor publishing it and this asking for
-# it -- and that gap drifts through the whole 0 to 60 seconds as the two
-# cycles slide past each other. On top of it the value is held for
-# interval_sec plus a few seconds of jitter, so on screen the age peaks
-# at up to about 122 seconds with nothing wrong at all. Under 2.1 the
-# face blinks grey every minute for part of that drift and not at all for
-# the rest of it. 2.5 clears the whole cycle and still greys about a
-# minute after one update actually goes missing.
-stale_after_min = 2.5
 
 
-# Only `vr-cgm-overlay --window` reads this section: the same watch face
-# in a desktop window instead of on a controller. The overlay ignores it,
-# the same way the window ignores every placement key above. Both are
-# re-read while running.
+# The desktop window: the same watch face on a monitor instead of on a
+# controller. Only the window reads this section, so `vr-cgm-overlay --vr`
+# ignores it, the same way the overlay's own [vr] means nothing to a
+# window. Both are re-read while running.
 [window]
 # Size, as a multiple of the face's own 512x256. Between 0.25 and 4.0.
 scale = 1.0

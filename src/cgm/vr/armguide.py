@@ -20,7 +20,7 @@ circle across the arm is edge-on and invisible from the side, which is
 where a wrist is usually looked at. Each dot is turned to face the head
 instead, so the arc reads from anywhere.
 
-This is a tuning aid, not a feature. It is off unless `display.arm_guide`
+This is a tuning aid, not a feature. It is off unless `vr.arm_guide`
 is on, and it is meant to be deleted once the placement is settled.
 """
 

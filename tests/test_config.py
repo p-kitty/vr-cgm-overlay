@@ -45,7 +45,8 @@ class Loading(ConfigTestCase):
 
     def test_values_are_read_from_the_file(self):
         cfg = self.load(
-            "\n[display]\nunit = 'mmol'\nhand = 'right'\nwidth_m = 0.2\n"
+            "\n[display]\nunit = 'mmol'\n"
+            "\n[vr]\nhand = 'right'\nwidth_m = 0.2\n"
             "\n[thresholds]\nlow_mgdl = 80\nhigh_mgdl = 170\nvery_high_mgdl = 250\n"
             "\n[polling]\ninterval_sec = 90\nalert_on_low = false\n"
         )
@@ -64,7 +65,7 @@ class Loading(ConfigTestCase):
 
     def test_placement_arrives_as_a_tuple(self):
         cfg = self.load(
-            "\n[display]\noffset = [0.0, -0.02, 0.1]\nrotation_deg = [-40, 0, 90]\n"
+            "\n[vr]\noffset = [0.0, -0.02, 0.1]\nrotation_deg = [-40, 0, 90]\n"
         )
         self.assertEqual(cfg.vr.offset, (0.0, -0.02, 0.1))
         self.assertEqual(cfg.vr.rotation_deg, (-40, 0, 90))
@@ -80,7 +81,7 @@ class Loading(ConfigTestCase):
 
     def test_orbit_settings_are_read(self):
         cfg = self.load(
-            "\n[display]\norbit = true\norbit_radius_m = 0.05\n"
+            "\n[vr]\norbit = true\norbit_radius_m = 0.05\n"
             "orbit_limit_deg = 100\narm_guide = true\n"
         )
         self.assertTrue(cfg.vr.orbit)
@@ -112,7 +113,7 @@ class Loading(ConfigTestCase):
 
     def test_gaze_settings_are_read(self):
         cfg = self.load(
-            "\n[display]\ngaze_fade = true\ngaze_full_deg = 15\n"
+            "\n[vr]\ngaze_fade = true\ngaze_full_deg = 15\n"
             "gaze_fade_deg = 60\ngaze_min_alpha = 0.4\n"
         )
         self.assertTrue(cfg.vr.gaze_fade)
@@ -203,69 +204,69 @@ class Validation(ConfigTestCase):
         self.assertRejected("\n[display]\nunit = 'mmoll'\n")
 
     def test_hand_must_be_one_of_the_two(self):
-        self.assertRejected("\n[display]\nhand = 'both'\n")
+        self.assertRejected("\n[vr]\nhand = 'both'\n")
 
     def test_placement_needs_three_numbers(self):
-        self.assertRejected("\n[display]\noffset = [0.0, 0.1]\n")
-        self.assertRejected("\n[display]\nrotation_deg = [0, 0, 0, 0]\n")
+        self.assertRejected("\n[vr]\noffset = [0.0, 0.1]\n")
+        self.assertRejected("\n[vr]\nrotation_deg = [0, 0, 0, 0]\n")
 
     def test_orbit_radius_must_be_positive(self):
         # A zero radius puts the face on the arm's own centreline, where
         # there is no outward direction to turn it towards.
-        self.assertRejected("\n[display]\norbit_radius_m = 0\n")
-        self.assertRejected("\n[display]\norbit_radius_m = -0.06\n")
+        self.assertRejected("\n[vr]\norbit_radius_m = 0\n")
+        self.assertRejected("\n[vr]\norbit_radius_m = -0.06\n")
 
     def test_orbit_limit_must_be_within_half_a_turn(self):
-        message = self.assertRejected("\n[display]\norbit_limit_deg = 181\n")
+        message = self.assertRejected("\n[vr]\norbit_limit_deg = 181\n")
         self.assertIn("(0, 180]", message)
-        self.assertRejected("\n[display]\norbit_limit_deg = 0\n")
-        self.assertRejected("\n[display]\norbit_limit_deg = -20\n")
+        self.assertRejected("\n[vr]\norbit_limit_deg = 0\n")
+        self.assertRejected("\n[vr]\norbit_limit_deg = -20\n")
 
     def test_half_a_turn_either_way_is_allowed(self):
         # 180 each way is the whole circle: the most travel that can be
         # asked for, rather than one degree too much.
-        cfg = self.load("\n[display]\norbit_limit_deg = 180\n")
+        cfg = self.load("\n[vr]\norbit_limit_deg = 180\n")
         self.assertEqual(cfg.vr.orbit_limit_deg, 180.0)
 
     def test_orbit_is_checked_even_when_it_is_switched_off(self):
         # Orbit is turned on from inside the headset. A radius that is
         # only rejected at that point is rejected at the worst moment.
-        self.assertRejected("\n[display]\norbit = false\norbit_radius_m = 0\n")
+        self.assertRejected("\n[vr]\norbit = false\norbit_radius_m = 0\n")
 
     def test_gaze_angles_must_be_ordered(self):
         # Equal bounds would step from full to the floor at one angle
         # rather than fade across a span, which is the one thing a fade
         # must not do: a face that blinks reads as a fault.
         message = self.assertRejected(
-            "\n[display]\ngaze_full_deg = 45\ngaze_fade_deg = 45\n"
+            "\n[vr]\ngaze_full_deg = 45\ngaze_fade_deg = 45\n"
         )
         self.assertIn("full < fade", message)
-        self.assertRejected("\n[display]\ngaze_full_deg = 60\ngaze_fade_deg = 30\n")
-        self.assertRejected("\n[display]\ngaze_full_deg = -5\n")
-        self.assertRejected("\n[display]\ngaze_fade_deg = 181\n")
+        self.assertRejected("\n[vr]\ngaze_full_deg = 60\ngaze_fade_deg = 30\n")
+        self.assertRejected("\n[vr]\ngaze_full_deg = -5\n")
+        self.assertRejected("\n[vr]\ngaze_fade_deg = 181\n")
 
     def test_the_gaze_floor_may_not_reach_zero(self):
         # This is the condition NOTES.md set for the fade existing at
         # all. A face that faded to nothing would look exactly like the
         # process having died, which is the failure the whole thing
         # exists to avoid, so it is a rule and not just a default.
-        message = self.assertRejected("\n[display]\ngaze_min_alpha = 0\n")
+        message = self.assertRejected("\n[vr]\ngaze_min_alpha = 0\n")
         self.assertIn(str(config_mod.GAZE_ALPHA_FLOOR), message)
-        self.assertRejected("\n[display]\ngaze_min_alpha = 0.05\n")
-        self.assertRejected("\n[display]\ngaze_min_alpha = -1\n")
-        self.assertRejected("\n[display]\ngaze_min_alpha = 1.5\n")
+        self.assertRejected("\n[vr]\ngaze_min_alpha = 0.05\n")
+        self.assertRejected("\n[vr]\ngaze_min_alpha = -1\n")
+        self.assertRejected("\n[vr]\ngaze_min_alpha = 1.5\n")
 
     def test_the_gaze_floor_may_be_fully_opaque(self):
         # A floor of 1 is a fade that does nothing. Pointless rather than
         # wrong, and rejecting it would only be a trap while tuning.
-        cfg = self.load("\n[display]\ngaze_min_alpha = 1.0\n")
+        cfg = self.load("\n[vr]\ngaze_min_alpha = 1.0\n")
         self.assertEqual(cfg.vr.gaze_min_alpha, 1.0)
 
     def test_gaze_is_checked_even_when_it_is_switched_off(self):
         # Like orbit, the fade is turned on from inside the headset. A
         # setting only rejected at that point is rejected at the worst
         # moment.
-        self.assertRejected("\n[display]\ngaze_fade = false\ngaze_min_alpha = 0\n")
+        self.assertRejected("\n[vr]\ngaze_fade = false\ngaze_min_alpha = 0\n")
 
     def test_the_window_scale_has_both_a_floor_and_a_ceiling(self):
         for scale in (0.0, 0.1, 8.0):
@@ -575,10 +576,21 @@ class UnknownKeys(ConfigTestCase):
         cfg = self.load(account=ACCOUNT + 'region = "jp"\n')
         self.assertEqual(cfg.account.region, "jp")
 
-    def test_both_halves_of_the_display_section_are_recognised(self):
-        # [display] fills two dataclasses. Neither half may be treated
-        # as foreign because the other one is where the key is read.
-        cfg = self.load("\n[display]\nunit = 'mmol'\nhand = 'right'\n")
+    def test_a_vr_key_left_in_display_is_sent_to_its_new_section(self):
+        # The migration message. These keys were in [display] until the
+        # sections were split, so a config.toml written before that is
+        # full of them -- and each has to name where it goes rather than
+        # only be refused, since the error is the list of what to move.
+        with self.assertRaises(ValueError) as caught:
+            self.load("\n[display]\nhand = 'right'\n")
+        message = str(caught.exception)
+        self.assertIn("display.hand", message)
+        self.assertIn("[vr]", message)
+
+    def test_the_two_sections_are_read_side_by_side(self):
+        # One dataclass each now, and neither may swallow the other's
+        # keys.
+        cfg = self.load("\n[display]\nunit = 'mmol'\n\n[vr]\nhand = 'right'\n")
         self.assertEqual(cfg.display.unit, "mmol")
         self.assertEqual(cfg.vr.hand, "right")
 
