@@ -143,11 +143,21 @@ looking at.
 
 ## Settings
 
-Everything is in `config.toml`, which is **re-read while the app runs** —
-edit it with the headset on and the face changes within a second. Only
-`[account]` needs a restart (`hand` reopens the overlay by itself, which
-takes about a second), and a key nothing recognises stops the app rather
-than being silently ignored.
+**Right-click the face** for a settings window: thresholds, units,
+polling, alerts and the graph, in tabs. It writes `config.toml` and does
+nothing else — the running app picks the edit up the same way it picks
+up one made in a text editor, and it refuses to write anything the app
+would not start from.
+
+Placement is not in there, on purpose. Where the face sits on your arm
+can only be judged with the headset on, so `[vr]` stays a file you edit
+while looking at it: see [Placing the face in VR](docs/placement.md).
+
+Everything is in `config.toml` either way, and it is **re-read while the
+app runs** — edit it with the headset on and the face changes within a
+second. Only `[account]` needs a restart (`hand` reopens the overlay by
+itself, which takes about a second), and a key nothing recognises stops
+the app rather than being silently ignored.
 
 | Where to look | For |
 |---|---|

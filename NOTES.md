@@ -15,6 +15,18 @@ on it.
 
 Nothing has exercised these yet. Each says how to check it.
 
+- **Whether the settings window is any good to look at.** Everything it
+  does is checked -- `tests/test_settings.py` over what pressing Save
+  means, and `tools/check_settings.py` over the real window from the
+  right-click on -- but no one has read it. Seven tabs of rows labelled
+  with their key names is a shape that either works or is a wall of
+  identifiers, and only eyes settle that.
+
+  `python tools/check_settings.py --show` opens it over a throwaway
+  copy of `config.example.toml`, so nothing saved from it reaches a real
+  config. Worth asking of it: whether the tabs are in a sensible order,
+  whether the hints read as help or as noise, and whether the window is
+  the right size at 7 tabs and 25 rows.
 - **Controller sleep and wake.** With the process running, power the
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and

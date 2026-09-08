@@ -4,6 +4,7 @@ Every setting lives in `config.toml`, copied from `config.example.toml`
 at setup. This file explains what each section does; the example file
 carries the same thing as comments next to the values.
 
+- [The settings window](#the-settings-window)
 - [How the file is read](#how-the-file-is-read)
 - [`[display]` — the reading itself](#display--the-reading-itself)
 - [`[vr]` — the face on your arm](#vr--the-face-on-your-arm)
@@ -12,6 +13,30 @@ carries the same thing as comments next to the values.
 - [`[polling]` — fetching, and being told about a low](#polling--fetching-and-being-told-about-a-low)
 - [`[trend]` — the arrow](#trend--the-arrow)
 - [`[graph]` — the history sparkline](graph.md)
+
+## The settings window
+
+**Right-click the face** in the desktop window. Every section below gets
+a tab, with one row per setting, labelled with the key's own name — so
+what you change there is what this page explains.
+
+It writes `config.toml` and stops. There is no separate path into the
+running app: the file is saved, the watcher notices within a second, and
+the change lands exactly as it would have if you had typed it into a
+text editor. Save says so at the bottom of the window, and a value the
+loader would refuse is reported there instead of being written, so the
+window cannot leave you with a config the app will not start from.
+
+Two things it does not do. There is **no live apply** — nothing is
+written until Save, because every save is a full re-read and a value
+half typed on the way to `80` is a real setting for as long as it takes
+to type the next digit. And **`[vr]` is not offered**: where the face
+sits on your arm cannot be judged from a desktop window while the
+headset is on your head, so placement stays an edit you make in the file
+while watching it move. See [Placing the face in VR](placement.md).
+
+`vr-cgm-overlay --vr` has no window, so it has no settings window
+either.
 
 ## How the file is read
 
