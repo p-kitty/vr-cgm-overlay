@@ -167,12 +167,23 @@ class Loading(ConfigTestCase):
             self.load("\n[graph]\naxis_low_mgdl = 40\n")
         self.assertIn("axis_low_mgdl", str(caught.exception))
 
-    def test_a_blank_patient_id_means_unset(self):
-        # An empty string would be sent as a patient id and 404; absent
-        # means "work it out from the connections list".
+    def test_a_blank_patient_id_stays_a_blank_string(self):
+        # Empty is how the file spells "not set", and both readers ask
+        # these for truthiness rather than for None, so there is nothing
+        # left for a second empty value to mean. What must not happen is
+        # the blank being sent as a patient id, which would 404.
         cfg = self.load(account=ACCOUNT + 'patient_id = ""\nregion = ""\n')
-        self.assertIsNone(cfg.account.patient_id)
-        self.assertIsNone(cfg.account.region)
+        self.assertEqual(cfg.account.patient_id, "")
+        self.assertEqual(cfg.account.region, "")
+        self.assertFalse(cfg.account.patient_id)
+        self.assertFalse(cfg.account.region)
+
+    def test_an_absent_patient_id_is_the_same_blank(self):
+        # Absent and blank have to agree: one type per field is what
+        # lets the file be written back by walking the dataclasses.
+        cfg = self.load()
+        self.assertEqual(cfg.account.patient_id, "")
+        self.assertEqual(cfg.account.region, "")
 
     def test_a_missing_file_says_what_to_do(self):
         missing = Path(self._dir.name) / "nope.toml"

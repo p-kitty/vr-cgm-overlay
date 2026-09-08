@@ -52,8 +52,14 @@ class Account:
 
     email: str = ""
     password: str = ""
-    patient_id: str | None = None
-    region: str | None = None
+    # Empty rather than None. "" is what the file holds when these are
+    # left blank, both readers already ask them for truthiness --
+    # `REGION_URLS.get(region or "")` and `if self._patient_id:` -- and
+    # nothing has ever read either one as None. Holding one type means
+    # the annotation is the whole story about how the field is read and
+    # written, which is what lets both directions be walked.
+    patient_id: str = ""
+    region: str = ""
     api_version: str = "4.16.0"
 
 
@@ -375,8 +381,8 @@ def load(path: Path) -> Config:
     acc = cfg.account
     acc.email = account.get("email", "")
     acc.password = account.get("password", "")
-    acc.patient_id = account.get("patient_id") or None
-    acc.region = account.get("region") or None
+    acc.patient_id = account.get("patient_id", acc.patient_id)
+    acc.region = account.get("region", acc.region)
     acc.api_version = account.get("api_version", acc.api_version)
 
     cfg.display.unit = display.get("unit", cfg.display.unit)
