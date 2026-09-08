@@ -120,8 +120,21 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     assert len(rows[("vr", "offset")].parts) == 3
     say(
         "a widget per setting",
-        f"{len(expected)} rows, {len(settings_mod.sections())} tabs",
+        f"{len(expected)} rows, {len(settings_mod.tabs())} tabs",
     )
+
+    # No tab taller than the sections nobody had to carve. This is the
+    # whole of what the split bought: a notebook is as tall as its
+    # tallest page, so one long section was setting the height of every
+    # other tab and leaving most of them half empty.
+    tallest = max(settings_mod.tabs(), key=lambda tab: len(tab[2]))
+    ungrouped = max(
+        len(keys)
+        for label, _section, keys in settings_mod.tabs()
+        if label in config_mod.FIELD_TYPES and label not in settings_mod.GROUPS
+    )
+    assert len(tallest[2]) <= ungrouped, f"{tallest[0]} is {len(tallest[2])} rows"
+    say("no tab is over-long", f"tallest is {tallest[0]}, {len(tallest[2])} rows")
 
     # Nothing has been touched, so there is nothing to write.
     assert window._save_button.instate(["disabled"]), "Save is offered at rest"

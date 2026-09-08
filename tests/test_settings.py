@@ -7,9 +7,9 @@ checkbox on a frame is something Tk either does or does not.
 What is worth asserting is everything between the boxes and the file.
 The form is built by walking `cgm.core.config.FIELD_TYPES`, so the
 checks are about that walk staying honest -- every setting has a widget
-it can be saved out of, every table keyed by name names something real,
-and a value that goes into a box comes back out of the file as what it
-was. Then the save itself: it must refuse rather than write a
+it can be saved out of and lands on exactly one tab, every table keyed
+by name names something real, and a value that goes into a box comes
+back out of the file as what it was. Then the save itself: it must refuse rather than write a
 config.toml the app would not start from, and it must leave alone
 whatever it was not handed.
 """
@@ -76,10 +76,11 @@ class Offered(unittest.TestCase):
         # So the window and the file read in the same order.
         self.assertEqual(settings_mod.sections(), list(config_mod.FIELD_TYPES))
 
-    def test_a_note_is_about_a_section_that_exists(self):
-        for section, note in settings_mod.NOTES.items():
-            with self.subTest(section):
-                self.assertIn(section, settings_mod.sections())
+    def test_a_note_is_about_a_tab_that_exists(self):
+        labels = {label for label, _section, _keys in settings_mod.tabs()}
+        for label, note in settings_mod.NOTES.items():
+            with self.subTest(label):
+                self.assertIn(label, labels)
                 self.assertTrue(note.strip())
 
     def test_placement_says_how_it_is_meant_to_be_used(self):
@@ -104,6 +105,85 @@ class Offered(unittest.TestCase):
 
     def test_three_numbers_have_a_widget(self):
         settings_mod._check_shown_kinds({"vr": {"offset": config_mod.VECTOR3}})
+
+
+class Tabs(unittest.TestCase):
+    """The tabs, once the long section is carved up.
+
+    A notebook is as tall as its tallest page, so `[vr]` -- fourteen
+    settings against seven for the next largest -- was setting the height
+    of the whole window. It is three tabs now, and what has to stay true
+    is that carving them up did not lose a setting or show one twice.
+    """
+
+    def test_every_setting_is_on_exactly_one_tab(self):
+        shown = [
+            (section, key)
+            for _label, section, keys in settings_mod.tabs()
+            for key in keys
+        ]
+        self.assertEqual(len(shown), len(set(shown)), "a setting is on two tabs")
+        self.assertEqual(set(shown), {tuple(n.split(".")) for n in names()})
+
+    def test_a_section_that_is_not_carved_is_one_whole_tab(self):
+        for label, section, keys in settings_mod.tabs():
+            if section in settings_mod.GROUPS:
+                continue
+            with self.subTest(label):
+                self.assertEqual(label, section)
+                self.assertEqual(list(keys), list(config_mod.FIELD_TYPES[section]))
+
+    def test_a_carved_section_keeps_its_own_tab_first(self):
+        # The leftovers are computed rather than listed, so a setting
+        # added to `[vr]` appears there without anybody editing GROUPS.
+        labels = [label for label, _section, _keys in settings_mod.tabs()]
+        for section, groups in settings_mod.GROUPS.items():
+            with self.subTest(section):
+                at = labels.index(section)
+                self.assertEqual(
+                    labels[at + 1 : at + 1 + len(groups)],
+                    [label for label, _keys in groups],
+                )
+                self.assertTrue(
+                    all(label.startswith(f"{section} ") for label, _keys in groups),
+                    "a carved tab has to say which section it is part of",
+                )
+
+    def test_no_tab_is_taller_than_the_sections_nobody_carved(self):
+        # The whole of what the split bought. Without this the window
+        # goes back to being shaped by one section as soon as a fifteenth
+        # setting lands in `[vr]`.
+        room = max(
+            len(config_mod.FIELD_TYPES[section])
+            for section in settings_mod.sections()
+            if section not in settings_mod.GROUPS
+        )
+        for label, _section, keys in settings_mod.tabs():
+            with self.subTest(label):
+                self.assertLessEqual(len(keys), room)
+
+    def test_the_groups_are_checked(self):
+        # Runs at import too, the same way the widget check does.
+        settings_mod._check_groups()
+
+    def test_a_group_naming_a_setting_that_does_not_exist_is_refused(self):
+        # Otherwise it is quiet twice over: the key stays on the
+        # section's own tab, and the carved tab reads a field the
+        # dataclass has not got, while the window is being built.
+        with self.assertRaises(KeyError) as caught:
+            settings_mod._check_groups({"vr": (("vr orbit", ("orbut",)),)})
+        self.assertIn("vr.orbut", str(caught.exception))
+
+    def test_a_setting_on_two_tabs_is_refused(self):
+        with self.assertRaises(KeyError) as caught:
+            settings_mod._check_groups(
+                {"vr": (("vr orbit", ("orbit",)), ("vr gaze", ("orbit",)))}
+            )
+        self.assertIn("vr.orbit", str(caught.exception))
+
+    def test_carving_a_section_that_does_not_exist_is_refused(self):
+        with self.assertRaises(KeyError):
+            settings_mod._check_groups({"vrr": (("vrr orbit", ("orbit",)),)})
 
 
 class Tables(unittest.TestCase):

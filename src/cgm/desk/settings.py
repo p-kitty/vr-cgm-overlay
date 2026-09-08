@@ -41,6 +41,18 @@ the watcher and land within the second. What was actually missing was a
 widget for three numbers, and that is `Vector3Var`. The tab says how the
 loop goes; docs/placement.md says what the numbers mean.
 
+**A section too tall for the window is split across tabs.** A notebook
+is as tall as its tallest page, and `[vr]` has fourteen settings where
+the next largest has seven -- so one section was setting the height of
+the whole window and leaving the other seven tabs half empty. `GROUPS`
+carves the long one into `vr`, `vr orbit` and `vr gaze`, none of them
+taller than the tabs around it. It names keys rather than hiding them,
+and the section's own tab takes whatever is left over, so a setting
+added to `[vr]` still appears without anybody editing this file. The
+labels keep the section's name in front for the same reason the rows are
+labelled `rearm_margin_mgdl`: there is no `[orbit]` section to go
+looking for.
+
 tkinter is imported at module scope, so `cgm.main` imports this module
 lazily, the same way it does `cgm.desk.window`.
 """
@@ -56,13 +68,40 @@ from cgm.core import config as config_mod
 
 log = logging.getLogger(__name__)
 
-# A line at the top of one tab, where the section needs something said
-# about it that no single row does.
+# Tabs carved out of one section, in the order they follow it. Only
+# `[vr]` needs it -- see the module docstring for why -- and only the
+# groups are named: whatever is left over stays on the section's own tab,
+# so a setting added later appears there rather than going missing.
+GROUPS = {
+    "vr": (
+        ("vr orbit", ("orbit", "orbit_radius_m", "orbit_limit_deg", "arm_guide")),
+        (
+            "vr gaze",
+            ("gaze_fade", "gaze_full_deg", "gaze_fade_deg", "gaze_min_alpha"),
+        ),
+    ),
+}
+
+# A line at the top of one tab, where the tab needs something said about
+# it that no single row does. Keyed by tab rather than by section, so a
+# carved one can say what it is for -- and, for the two modes, that the
+# rows under it do nothing until the switch at the top is on.
 NOTES = {
     "vr": (
         "Placement is judged with the headset on: change a number, press "
         "Save, and watch the face move. Nudging it in config.toml works "
         "the same way. See docs/placement.md for what the numbers mean."
+    ),
+    "vr orbit": (
+        "Off, the face is bolted to the controller. On, it rides round the "
+        "modelled centreline of your forearm -- and offset and rotation_deg "
+        "on the vr tab change meaning. arm_guide draws that line while you "
+        "tune it; turn it off when you are done."
+    ),
+    "vr gaze": (
+        "Dims the face while you are not looking at it. The other three do "
+        "nothing while gaze_fade is off, and a reading under "
+        "thresholds.low_mgdl is never faded whatever they say."
     ),
 }
 
@@ -123,6 +162,55 @@ def sections() -> list[str]:
     second. What was actually missing was a widget for three numbers.
     """
     return list(config_mod.FIELD_TYPES)
+
+
+def tabs() -> list[tuple[str, str, tuple[str, ...]]]:
+    """Every tab as (label, section, the keys it holds), left to right.
+
+    One per section, each followed by whatever `GROUPS` carves out of it.
+    The section's own tab gets the leftovers, computed rather than
+    listed, which is what keeps a new setting from falling between the
+    two.
+    """
+    out: list[tuple[str, str, tuple[str, ...]]] = []
+    for section in sections():
+        groups = GROUPS.get(section, ())
+        taken = {key for _label, keys in groups for key in keys}
+        rest = tuple(
+            key for key in config_mod.FIELD_TYPES[section] if key not in taken
+        )
+        out.append((section, section, rest))
+        out.extend((label, section, keys) for label, keys in groups)
+    return out
+
+
+def _check_groups(groups_by_section=None) -> None:
+    """Refuse at import a group that names a setting that is not there.
+
+    A typo here is quiet in both directions: the key stays on the
+    section's own tab as though nothing had been asked, and the carved
+    tab goes looking for a field the dataclass does not have. The second
+    is an AttributeError while the window is being built, which takes the
+    face down with it, so it is worth catching at import instead.
+    """
+    if groups_by_section is None:
+        groups_by_section = GROUPS
+    for section, groups in groups_by_section.items():
+        if section not in config_mod.FIELD_TYPES:
+            raise KeyError(f"{section} is grouped but is not a config section")
+        seen: set[str] = set()
+        for label, keys in groups:
+            for key in keys:
+                if key not in config_mod.FIELD_TYPES[section]:
+                    raise KeyError(
+                        f"the {label} tab names {section}.{key}, which does not exist"
+                    )
+                if key in seen:
+                    raise KeyError(f"{section}.{key} is on two tabs")
+                seen.add(key)
+
+
+_check_groups()
 
 
 # The kinds this form has a widget for: a checkbox, a dropdown, a text
@@ -234,10 +322,10 @@ class SettingsWindow:
 
         notebook = ttk.Notebook(self._top)
         notebook.pack(fill="both", expand=True, padx=10, pady=(10, 0))
-        for section in sections():
+        for label, section, keys in tabs():
             frame = ttk.Frame(notebook, padding=12)
-            notebook.add(frame, text=section)
-            self._fill(frame, section)
+            notebook.add(frame, text=label)
+            self._fill(frame, label, section, keys)
 
         self._status = ttk.Label(self._top, text="", wraplength=560)
         self._status.pack(fill="x", padx=12, pady=(8, 0))
@@ -263,20 +351,23 @@ class SettingsWindow:
 
     # -- building -----------------------------------------------------------
 
-    def _fill(self, frame: ttk.Frame, section: str) -> None:
+    def _fill(
+        self, frame: ttk.Frame, label: str, section: str, keys: tuple[str, ...]
+    ) -> None:
         held = getattr(self._cfg, section)
         first = 0
-        note = NOTES.get(section)
+        note = NOTES.get(label)
         if note:
             # Above the rows rather than at the bottom of the window:
-            # what it says is about this section, and a line under the
-            # tabs reads as being about whichever one is open.
+            # what it says is about this tab, and a line under the tabs
+            # reads as being about whichever one is open.
             ttk.Label(
                 frame, text=note, foreground="gray40", wraplength=520
             ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
             first = 1
 
-        for offset, (key, kind) in enumerate(config_mod.FIELD_TYPES[section].items()):
+        for offset, key in enumerate(keys):
+            kind = config_mod.FIELD_TYPES[section][key]
             row = first + offset
             name = f"{section}.{key}"
             value = getattr(held, key)

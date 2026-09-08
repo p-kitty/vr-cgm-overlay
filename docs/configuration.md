@@ -19,7 +19,10 @@ carries the same thing as comments next to the values.
 **Click the gear** in the top corner of the face, or right-click
 anywhere on it. Every section below gets a tab, with one row per
 setting, labelled with the key's own name — so what you change there is
-what this page explains. Save is greyed out until you change something,
+what this page explains. `[vr]` is long enough to have been setting the
+height of the window on its own, so it is three tabs: `vr` for where the
+face sits, `vr orbit` and `vr gaze` for the two modes. They are all one
+section in the file. Save is greyed out until you change something,
 and greys itself out again once it has written.
 
 It writes `config.toml` and stops. There is no separate path into the
@@ -34,9 +37,9 @@ until Save, because every save is a full re-read and a value half typed
 on the way to `80` is a real setting for as long as it takes to type the
 next digit.
 
-`[vr]` gets a tab like everything else, with `offset` and `rotation_deg`
-as three boxes each. Placement is still something you judge with the
-headset on — change a number, press Save, watch the face move — which is
+`[vr]` is offered like everything else, with `offset` and
+`rotation_deg` as three boxes each. Placement is still something you
+judge with the headset on — change a number, press Save, watch the face move — which is
 the same loop as saving the file, since both arrive through the same
 watcher. See [Placing the face in VR](placement.md).
 
