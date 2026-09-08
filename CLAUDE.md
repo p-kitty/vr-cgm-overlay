@@ -147,8 +147,8 @@ python -m compileall -q src tools tests
 `tests/` covers what can be asserted without a device: timestamp
 parsing, the trend fit and the arrow angle it maps to, the fetch
 schedule and its backoff and the thread that drives it, config
-validation, the live reload and which settings a restart is still
-needed for, the colour thresholds, the window's compositing and title,
+validation, the walk that reads config.toml, the live reload and which
+settings a restart is still needed for, the colour thresholds, the window's compositing and title,
 the overlay's thread driven by a stand-in overlay, and that every import
 inside the package resolves -- including the lazy ones in `run()`, which
 only execute with a headset attached. It deliberately does not mock the

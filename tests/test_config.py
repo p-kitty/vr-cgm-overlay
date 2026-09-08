@@ -1,10 +1,17 @@
-"""Loading config.toml, and the rules it has to satisfy.
+"""Loading config.toml, writing it back, and the rules it has to satisfy.
 
 `_validate` exists so a contradictory setting is caught at startup rather
 than after the headset is on. Two of its rules are project decisions
 rather than mechanical checks -- the thirty second polling floor and the
 low < high < very_high ordering -- and this file is where they stop being
 prose and become something that runs.
+
+Both directions are one walk over the dataclasses now, so most of what
+used to be asserted here about individual keys is really asserting that
+the walk reaches them. The rest is about `save` not damaging the file it
+writes into: the comments in config.toml are the only documentation of
+most of these settings that anyone editing by hand will see, and a save
+that quietly threw them away would be discovered long after the fact.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ from __future__ import annotations
 import tempfile
 import tomllib
 import unittest
+from dataclasses import asdict, fields
 from pathlib import Path
 
 from cgm.core import config as config_mod
@@ -272,6 +280,22 @@ class Validation(ConfigTestCase):
         # wrong, and rejecting it would only be a trap while tuning.
         cfg = self.load("\n[vr]\ngaze_min_alpha = 1.0\n")
         self.assertEqual(cfg.vr.gaze_min_alpha, 1.0)
+
+    def test_a_value_of_the_wrong_type_names_the_key(self):
+        # Unnamed, this is `could not convert string to float: 'wide'`,
+        # which says nothing about which line to go and fix.
+        message = self.assertRejected("\n[vr]\nwidth_m = 'wide'\n")
+        self.assertIn("vr.width_m", message)
+        self.assertIn("number", message)
+
+    def test_three_numbers_are_required_where_three_numbers_belong(self):
+        # A bare number is not iterable and a string comes apart into
+        # characters. Both are refused by name rather than by traceback.
+        message = self.assertRejected("\n[vr]\noffset = 3\n")
+        self.assertIn("vr.offset", message)
+        self.assertIn("vr.rotation_deg", self.assertRejected(
+            "\n[vr]\nrotation_deg = 'flat'\n"
+        ))
 
     def test_gaze_is_checked_even_when_it_is_switched_off(self):
         # Like orbit, the fade is turned on from inside the headset. A
@@ -611,6 +635,55 @@ class UnknownKeys(ConfigTestCase):
         example = Path(__file__).resolve().parents[1] / "config.example.toml"
         with example.open("rb") as fh:
             config_mod._check_keys(tomllib.load(fh))
+
+
+class FieldKinds(unittest.TestCase):
+    """The four types a setting may be declared as, and the guard on them.
+
+    `load` and `save` both walk the annotations, and they can walk
+    exactly these four. A fifth would load as whatever TOML happened to
+    hand over and save as something else -- found by whoever hit it,
+    rather than by whoever added it -- so it fails at import instead.
+    """
+
+    def test_every_setting_declared_is_one_of_the_four(self):
+        # This runs at import as well. Here so it is a named failure
+        # rather than every test in the suite erroring at once.
+        config_mod._check_field_kinds()
+
+    def test_the_table_and_the_key_check_are_the_same_table(self):
+        self.assertEqual(set(config_mod.FIELD_TYPES), set(config_mod.SECTION_KEYS))
+        for section, kinds in config_mod.FIELD_TYPES.items():
+            with self.subTest(section):
+                self.assertEqual(
+                    config_mod.SECTION_KEYS[section], frozenset(kinds)
+                )
+
+    def test_the_sections_are_the_fields_of_config(self):
+        # If these drifted, a whole section would stop being read while
+        # its keys carried on being recognised.
+        self.assertEqual(
+            set(config_mod.SECTIONS),
+            {f.name for f in fields(config_mod.Config)},
+        )
+
+    def test_an_unsupported_annotation_is_refused_by_name(self):
+        with self.assertRaises(TypeError) as caught:
+            config_mod._check_field_kinds({"polling": {"retries": int}})
+        message = str(caught.exception)
+        self.assertIn("polling.retries", message)
+
+    def test_the_four_are_accepted(self):
+        config_mod._check_field_kinds(
+            {
+                "made_up": {
+                    "a": str,
+                    "b": float,
+                    "c": bool,
+                    "d": config_mod.VECTOR3,
+                }
+            }
+        )
 
 
 if __name__ == "__main__":
