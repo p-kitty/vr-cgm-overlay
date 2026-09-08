@@ -19,12 +19,13 @@ region = ""
 api_version = "4.16.0"
 
 
-# Everything in this section is re-read while the app runs, except
-# `hand`. Edit and save with the headset on and the face moves within a
-# second; see docs/configuration.md.
+# Everything in this section is re-read while the app runs. Edit and save
+# with the headset on and the face moves within a second; see
+# docs/configuration.md.
 [display]
 unit = "mgdl"        # "mgdl" or "mmol"
 hand = "left"        # which controller to follow; the off hand works best
+                     # (this one costs a second: the overlay is reopened)
 width_m = 0.14       # overlay width in metres
 
 # Ride around the forearm instead of being bolted to the controller, so

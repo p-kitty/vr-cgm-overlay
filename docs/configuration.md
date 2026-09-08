@@ -16,8 +16,13 @@ carries the same thing as comments next to the values.
 
 **`config.toml` is re-read while the app runs**, so edits show up in the
 headset within a second. Leave it running, keep the headset on, and
-change one number at a time. Only `hand` and the `[account]` settings
-need a restart, and the log says so when one of them changes.
+change one number at a time. Only the `[account]` settings need a
+restart, and the log says so when one of them changes.
+
+`hand` is the one edit that is not instant. The controller role is read
+when the overlay is created, so changing it closes the overlay and opens
+another -- which takes about a second and needs nothing from you. The
+window, if one is up, does not blink.
 
 **A setting nothing recognises stops the app** instead of being ignored.
 A key in the wrong section, a misspelled key or a misspelled section is
@@ -57,8 +62,8 @@ section is placement, and placement is a job of its own: see
 orbit mode, the arm guides, and gaze fading.
 
 The window ignores every placement key, since it has no controller to
-follow — editing `hand` there says nothing rather than asking you to
-restart for it.
+follow. Under `--window` there is no overlay for them to reach at all,
+so editing one of them there does nothing and says nothing.
 
 ## `[window]` — the desktop window
 
@@ -69,8 +74,8 @@ always_on_top = true
 ```
 
 `scale` is a multiple of the face's own size, between `0.25` and `4.0`;
-both it and `always_on_top` change while the window is up. Only
-`vr-cgm-overlay --window` reads this section.
+both it and `always_on_top` change while the window is up. Only the
+window reads this section, so `vr-cgm-overlay --vr` ignores it.
 
 ## `[thresholds]` — the colour bands
 
