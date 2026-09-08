@@ -202,9 +202,19 @@ class SettingsWindow:
         buttons = ttk.Frame(self._top, padding=(10, 10))
         buttons.pack(fill="x")
         ttk.Button(buttons, text="Close", command=self.close).pack(side="right")
-        ttk.Button(buttons, text="Save", command=self.save).pack(
-            side="right", padx=(0, 8)
+        self._save_button = ttk.Button(
+            buttons, text="Save", command=self.save, state="disabled"
         )
+        self._save_button.pack(side="right", padx=(0, 8))
+
+        # Watched only after every row is built, so filling the boxes in
+        # is not itself an edit. What counts as one is any write to any
+        # variable -- not a comparison against the file. Typing a digit
+        # and deleting it again offers a Save that writes nothing, which
+        # costs nothing; the alternative is comparing 25 values on every
+        # keystroke to be right about a greyed-out button.
+        for variable in self._vars.values():
+            variable.trace_add("write", self._touched)
 
         self._top.protocol("WM_DELETE_WINDOW", self.close)
 
@@ -216,12 +226,26 @@ class SettingsWindow:
             name = f"{section}.{key}"
             value = getattr(held, key)
 
+            if kind is bool:
+                # The name goes on the box rather than in the column
+                # beside it. Focus draws a dotted ring around a
+                # checkbutton's label, and around an empty label that is
+                # a small box of dashes floating next to the tick --
+                # which reads as damage rather than as focus. It also
+                # makes the whole word clickable, which is how a
+                # checkbox is expected to behave.
+                variable: tk.Variable = tk.BooleanVar(value=value)
+                widget: tk.Widget = ttk.Checkbutton(
+                    frame, text=key, variable=variable
+                )
+                widget.grid(row=row, column=0, columnspan=2, sticky="w", pady=3)
+                self._hint(frame, row, name)
+                self._vars[(section, key)] = variable
+                continue
+
             ttk.Label(frame, text=key).grid(row=row, column=0, sticky="w", pady=3)
 
-            if kind is bool:
-                variable: tk.Variable = tk.BooleanVar(value=value)
-                widget: tk.Widget = ttk.Checkbutton(frame, variable=variable)
-            elif name in CHOICES:
+            if name in CHOICES:
                 variable = tk.StringVar(value=spell(value))
                 widget = ttk.Combobox(
                     frame,
@@ -239,14 +263,15 @@ class SettingsWindow:
                     show="•" if name in SECRET else "",
                 )
             widget.grid(row=row, column=1, sticky="w", padx=(12, 0), pady=3)
-
-            hint = HINTS.get(name)
-            if hint:
-                ttk.Label(frame, text=hint, foreground="gray40").grid(
-                    row=row, column=2, sticky="w", padx=(12, 0)
-                )
-
+            self._hint(frame, row, name)
             self._vars[(section, key)] = variable
+
+    def _hint(self, frame: ttk.Frame, row: int, name: str) -> None:
+        hint = HINTS.get(name)
+        if hint:
+            ttk.Label(frame, text=hint, foreground="gray40").grid(
+                row=row, column=2, sticky="w", padx=(12, 0)
+            )
 
     # -- saving -------------------------------------------------------------
 
@@ -267,12 +292,28 @@ class SettingsWindow:
             apply_values(cfg, {key: var.get() for key, var in self._vars.items()})
             config_mod.save(cfg, self._path)
         except (OSError, ValueError) as exc:
+            # Still something unsaved, so Save stays available: the fix
+            # is to correct the box and press it again.
             self._say(str(exc))
             return False
 
+        self._offer_save(False)
         self._say(f"saved {self._path.name}")
         log.info("settings saved to %s", self._path)
         return True
+
+    def _touched(self, *_trace) -> None:
+        """A box changed, so there is now something to write."""
+        self._offer_save(True)
+
+    def _offer_save(self, offer: bool) -> None:
+        """Grey the Save button out when pressing it would write nothing.
+
+        A button that does nothing is worse than no button: it says the
+        window is unsure whether it has your change.
+        """
+        if self._top.winfo_exists():
+            self._save_button.configure(state="normal" if offer else "disabled")
 
     def _say(self, text: str) -> None:
         if self._top.winfo_exists():

@@ -101,12 +101,19 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     assert not any(section == "vr" for section, _ in rows), "[vr] is offered"
     say("a widget per setting", f"{len(expected)} rows, {len(settings_mod.sections())} tabs")
 
+    # Nothing has been touched, so there is nothing to write.
+    assert window._save_button.instate(["disabled"]), "Save is offered at rest"
+
     # The variables are what Save reads, so setting one is setting the
     # widget it is attached to.
     before_offset = cfg.vr.offset
     rows[("thresholds", "low_mgdl")].set("80")
     rows[("polling", "alert_haptic")].set(False)
+    assert window._save_button.instate(["!disabled"]), "an edit did not offer Save"
+    say("Save follows the edits", "off at rest, on once a box changes")
+
     assert window.save(), "a good value was refused"
+    assert window._save_button.instate(["disabled"]), "Save is still offered after it"
     saved = config_mod.load(path)
     assert saved.thresholds.low_mgdl == 80.0, saved.thresholds.low_mgdl
     assert not saved.polling.alert_haptic
@@ -131,6 +138,8 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     assert "30" in complaint, complaint
     assert window.alive(), "a bad value closed the window"
     assert not face.should_quit(), "a bad value closed the face"
+    # There is still something unsaved, so the way to fix it stays lit.
+    assert window._save_button.instate(["!disabled"]), "Save went away with the error"
     say("a bad value is refused", complaint.split(";")[0])
 
     if show:
