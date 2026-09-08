@@ -1,7 +1,6 @@
 # vr-cgm-overlay
 
-A SteamVR overlay that keeps your current blood glucose on your wrist
-while you play.
+FreeStyle Libre glucose on your desktop and on your wrist in SteamVR, read through LibreLinkUp.
 
 **FreeStyle Libre only.** Every reading comes from a LibreLinkUp
 follower account, and that is the only source there is: no Dexcom, no
