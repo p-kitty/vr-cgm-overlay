@@ -1,10 +1,17 @@
-"""Loading config.toml, and the rules it has to satisfy.
+"""Loading config.toml, writing it back, and the rules it has to satisfy.
 
 `_validate` exists so a contradictory setting is caught at startup rather
 than after the headset is on. Two of its rules are project decisions
 rather than mechanical checks -- the thirty second polling floor and the
 low < high < very_high ordering -- and this file is where they stop being
 prose and become something that runs.
+
+Both directions are one walk over the dataclasses now, so most of what
+used to be asserted here about individual keys is really asserting that
+the walk reaches them. The rest is about `save` not damaging the file it
+writes into: the comments in config.toml are the only documentation of
+most of these settings that anyone editing by hand will see, and a save
+that quietly threw them away would be discovered long after the fact.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ from __future__ import annotations
 import tempfile
 import tomllib
 import unittest
+from dataclasses import asdict, fields
 from pathlib import Path
 
 from cgm.core import config as config_mod
@@ -272,6 +280,22 @@ class Validation(ConfigTestCase):
         # wrong, and rejecting it would only be a trap while tuning.
         cfg = self.load("\n[vr]\ngaze_min_alpha = 1.0\n")
         self.assertEqual(cfg.vr.gaze_min_alpha, 1.0)
+
+    def test_a_value_of_the_wrong_type_names_the_key(self):
+        # Unnamed, this is `could not convert string to float: 'wide'`,
+        # which says nothing about which line to go and fix.
+        message = self.assertRejected("\n[vr]\nwidth_m = 'wide'\n")
+        self.assertIn("vr.width_m", message)
+        self.assertIn("number", message)
+
+    def test_three_numbers_are_required_where_three_numbers_belong(self):
+        # A bare number is not iterable and a string comes apart into
+        # characters. Both are refused by name rather than by traceback.
+        message = self.assertRejected("\n[vr]\noffset = 3\n")
+        self.assertIn("vr.offset", message)
+        self.assertIn("vr.rotation_deg", self.assertRejected(
+            "\n[vr]\nrotation_deg = 'flat'\n"
+        ))
 
     def test_gaze_is_checked_even_when_it_is_switched_off(self):
         # Like orbit, the fade is turned on from inside the headset. A
@@ -611,6 +635,179 @@ class UnknownKeys(ConfigTestCase):
         example = Path(__file__).resolve().parents[1] / "config.example.toml"
         with example.open("rb") as fh:
             config_mod._check_keys(tomllib.load(fh))
+
+
+class FieldKinds(unittest.TestCase):
+    """The four types a setting may be declared as, and the guard on them.
+
+    `load` and `save` both walk the annotations, and they can walk
+    exactly these four. A fifth would load as whatever TOML happened to
+    hand over and save as something else -- found by whoever hit it,
+    rather than by whoever added it -- so it fails at import instead.
+    """
+
+    def test_every_setting_declared_is_one_of_the_four(self):
+        # This runs at import as well. Here so it is a named failure
+        # rather than every test in the suite erroring at once.
+        config_mod._check_field_kinds()
+
+    def test_the_table_and_the_key_check_are_the_same_table(self):
+        self.assertEqual(set(config_mod.FIELD_TYPES), set(config_mod.SECTION_KEYS))
+        for section, kinds in config_mod.FIELD_TYPES.items():
+            with self.subTest(section):
+                self.assertEqual(
+                    config_mod.SECTION_KEYS[section], frozenset(kinds)
+                )
+
+    def test_the_sections_are_the_fields_of_config(self):
+        # If these drifted, a whole section would stop being read while
+        # its keys carried on being recognised.
+        self.assertEqual(
+            set(config_mod.SECTIONS),
+            {f.name for f in fields(config_mod.Config)},
+        )
+
+    def test_an_unsupported_annotation_is_refused_by_name(self):
+        with self.assertRaises(TypeError) as caught:
+            config_mod._check_field_kinds({"polling": {"retries": int}})
+        message = str(caught.exception)
+        self.assertIn("polling.retries", message)
+
+    def test_the_four_are_accepted(self):
+        config_mod._check_field_kinds(
+            {
+                "made_up": {
+                    "a": str,
+                    "b": float,
+                    "c": bool,
+                    "d": config_mod.VECTOR3,
+                }
+            }
+        )
+
+
+class Saving(ConfigTestCase):
+    """Writing a Config back into the file it was read from.
+
+    Nothing calls `save` yet; it is what a settings window needs. What is
+    asserted here is that it can be called on a real config.toml without
+    the user losing anything -- their comments, their formatting, or the
+    password, which is the one value in the file that cannot be worked
+    out again.
+    """
+
+    def test_a_round_trip_changes_nothing(self):
+        cfg = self.load(
+            "\n[display]\nunit = 'mmol'\n"
+            "\n[vr]\nhand = 'right'\noffset = [0.0, -0.02, 0.1]\n"
+            "\n[polling]\ninterval_sec = 90\n"
+        )
+        config_mod.save(cfg, self.path)
+        self.assertEqual(asdict(config_mod.load(self.path)), asdict(cfg))
+
+    def test_saving_an_unedited_config_leaves_the_file_alone(self):
+        # The strongest form of the anti-churn rule: a save that changed
+        # nothing must write nothing, byte for byte.
+        body = ACCOUNT + "\n[vr]\nhand = 'right'\nwidth_m = 0.2\n"
+        self.path.write_text(body, encoding="utf-8")
+        config_mod.save(config_mod.load(self.path), self.path)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), body)
+
+    def test_comments_survive_a_save(self):
+        # They are the documentation for anyone editing by hand, and
+        # most of what they say is not repeated anywhere that person
+        # will look.
+        self.path.write_text(
+            ACCOUNT + "\n# 90 because the sensor is slow here\n"
+            "[polling]\ninterval_sec = 90\n",
+            encoding="utf-8",
+        )
+        cfg = config_mod.load(self.path)
+        cfg.polling.interval_sec = 120.0
+        config_mod.save(cfg, self.path)
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("# 90 because the sensor is slow here", text)
+        self.assertIn("interval_sec = 120", text)
+
+    def test_an_untouched_integer_is_not_churned_into_a_float(self):
+        # Held as a float, written as `60`. Rewriting it as `60.0` on
+        # every save would bury the one line that did change under a
+        # diff of lines that did not.
+        cfg = self.load("\n[polling]\ninterval_sec = 60\n")
+        config_mod.save(cfg, self.path)
+        self.assertIn("interval_sec = 60\n", self.path.read_text(encoding="utf-8"))
+
+    def test_a_whole_number_stays_a_whole_number(self):
+        # `low_mgdl = 70` nudged to 75 should read `75`. Every number
+        # here is held as a float, so without this the settings window
+        # would put a `.0` on every threshold it ever touched.
+        cfg = self.load("\n[thresholds]\nlow_mgdl = 70\n")
+        cfg.thresholds.low_mgdl = 75.0
+        config_mod.save(cfg, self.path)
+        self.assertIn("low_mgdl = 75\n", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(config_mod.load(self.path).thresholds.low_mgdl, 75.0)
+
+    def test_a_fraction_is_still_written_as_one(self):
+        # The rule above is about how a whole number is spelled, not
+        # about rounding anything.
+        cfg = self.load("\n[vr]\nwidth_m = 1\n")
+        cfg.vr.width_m = 0.16
+        config_mod.save(cfg, self.path)
+        self.assertIn("width_m = 0.16", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(config_mod.load(self.path).vr.width_m, 0.16)
+
+    def test_a_changed_setting_the_file_never_had_is_added(self):
+        cfg = self.load()
+        cfg.thresholds.low_mgdl = 80.0
+        config_mod.save(cfg, self.path)
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("[thresholds]", text)
+        self.assertEqual(config_mod.load(self.path).thresholds.low_mgdl, 80.0)
+
+    def test_a_default_the_file_never_had_is_left_out(self):
+        # Changing one threshold must not paste all fifty settings into
+        # a file that was holding six.
+        cfg = self.load()
+        cfg.window.scale = 2.0
+        config_mod.save(cfg, self.path)
+        text = self.path.read_text(encoding="utf-8")
+        self.assertIn("scale = 2", text)
+        self.assertNotIn("always_on_top", text)
+        self.assertNotIn("[vr]", text)
+
+    def test_placement_goes_back_as_an_array(self):
+        # TOML has no tuple, so the one compound kind has to survive the
+        # trip out and back.
+        cfg = self.load()
+        cfg.vr.offset = (0.0, -0.02, 0.12)
+        config_mod.save(cfg, self.path)
+        self.assertIn("offset = [", self.path.read_text(encoding="utf-8"))
+        self.assertEqual(config_mod.load(self.path).vr.offset, (0.0, -0.02, 0.12))
+
+    def test_the_password_survives(self):
+        cfg = self.load()
+        cfg.display.unit = "mmol"
+        config_mod.save(cfg, self.path)
+        self.assertEqual(config_mod.load(self.path).account.password, "secret")
+
+    def test_a_file_that_is_not_there_yet_is_written_from_nothing(self):
+        target = Path(self._dir.name) / "fresh.toml"
+        cfg = config_mod.Config()
+        cfg.account.email = "someone@example.com"
+        cfg.account.password = "secret"
+        config_mod.save(cfg, target)
+        self.assertEqual(asdict(config_mod.load(target)), asdict(cfg))
+
+    def test_the_temporary_file_does_not_survive(self):
+        # The write lands beside the real file so the move is atomic.
+        # What must not happen is a config.toml.new left in the checkout.
+        cfg = self.load()
+        cfg.thresholds.low_mgdl = 80.0
+        config_mod.save(cfg, self.path)
+        self.assertEqual(
+            sorted(p.name for p in Path(self._dir.name).iterdir()),
+            [self.path.name],
+        )
 
 
 if __name__ == "__main__":

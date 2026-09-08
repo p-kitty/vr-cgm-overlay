@@ -1,16 +1,24 @@
-"""Configuration loading.
+"""Reading config.toml, and writing it back.
 
 config.toml holds the LibreLinkUp password, which grants access to health
 data, so it must stay out of the repository (.gitignore already excludes
 it).
 
 **A section here is a section in the file.** One dataclass per
-`[table]`, one field per key, and nothing that fills two of anything.
-That buys two things. A frontend can be handed the part that concerns
-it -- everything under `Vr` needs a headset, everything under `Window`
-needs a screen, everything else needs neither -- and the file can be
-written back out by walking the same shape it was read from, rather than
-against a second list of keys that only has to be forgotten once.
+`[table]`, one field per key, one annotation per type. A frontend can
+then be handed the part that concerns it -- everything under `Vr` needs
+a headset, everything under `Window` needs a screen, everything else
+needs neither -- and, more to the point, both directions can walk the
+same shape.
+
+`load` and `save` are that walk. Adding a setting is adding a field:
+reading it, writing it and recognising its name all follow from the
+declaration, and there is no second list of keys to keep in step. There
+was one until this -- ninety lines of `.get(key, default)` -- and the
+symptom of forgetting a line in it was a setting that silently stayed
+at its default, which reads as a broken feature rather than a bug. That
+is now unwritable, and it is why the annotations are restricted to four
+kinds: see `FIELD_KINDS`.
 
 `[vr]` was part of `[display]` until this, on the grounds that moving
 those keys would break every existing config.toml to gain nothing a user
@@ -26,8 +34,11 @@ from __future__ import annotations
 import difflib
 import logging
 import tomllib
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import get_type_hints
+
+import tomlkit
 
 from cgm.face.graph import AXIS_FLOOR_MGDL, TICK_MAJOR_MIN
 
@@ -201,25 +212,61 @@ class Config:
     polling: Polling = field(default_factory=Polling)
 
 
-def _keys_of(*classes: type) -> frozenset[str]:
-    return frozenset(f.name for cls in classes for f in fields(cls))
+# Every setting there is: section, key, and the type it is held as.
+# Read off the dataclasses above rather than written out a second time,
+# and read with get_type_hints because `from __future__ import
+# annotations` leaves every annotation up there as a string.
+#
+# This is the only such table. Loading, saving and key checking all walk
+# it, so the thing that used to be possible -- a field declared and then
+# forgotten by one of the three -- has nowhere left to happen.
+SECTIONS: dict[str, type] = get_type_hints(Config)
+FIELD_TYPES: dict[str, dict[str, type]] = {
+    name: get_type_hints(cls) for name, cls in SECTIONS.items()
+}
+
+# Three numbers: `offset` and `rotation_deg`, which are the only settings
+# here that are not a single value. TOML has no tuples, so they are held
+# as one and written as an array.
+VECTOR3 = tuple[float, float, float]
+
+# What a setting may be annotated as. Short on purpose. Generic code is
+# harder to read than the explicit lines it replaces, and it only stays
+# worth it while the number of cases stays small -- each of these has one
+# obvious spelling in TOML and one obvious way back out of it. A fifth
+# kind is a decision, not an accident, which is what the check below is
+# for.
+FIELD_KINDS = (str, float, bool, VECTOR3)
 
 
-# What each section of the file is allowed to contain. Read off the
-# dataclasses rather than written out a second time: every field above is
-# loaded under its own name, so a key is recognised exactly when some
-# dataclass has a field called that, and adding a setting cannot forget
-# to register it here. One dataclass each, now that `[display]` has
-# stopped filling two.
+def _check_field_kinds(field_types: dict[str, dict[str, type]] | None = None) -> None:
+    """Refuse an unsupported annotation at import rather than at load.
+
+    Run below, on the way in. A setting the walk cannot read would
+    otherwise load as whatever TOML happened to hand over and save as
+    something else, and be found by whoever hit it in the headset rather
+    than by whoever added it.
+    """
+    if field_types is None:
+        field_types = FIELD_TYPES
+    allowed = ", ".join(str(getattr(k, "__name__", k)) for k in FIELD_KINDS)
+    for section, kinds in field_types.items():
+        for key, kind in kinds.items():
+            if kind not in FIELD_KINDS:
+                raise TypeError(
+                    f"{section}.{key} is annotated {kind!r}, which config.toml "
+                    f"cannot be read or written for; use one of {allowed}"
+                )
+
+
+_check_field_kinds()
+
+
+# What each section of the file is allowed to contain: the same table
+# with the types dropped. A key is recognised exactly when some dataclass
+# has a field called that.
 SECTION_KEYS: dict[str, frozenset[str]] = {
-    "account": _keys_of(Account),
-    "display": _keys_of(Display),
-    "vr": _keys_of(Vr),
-    "window": _keys_of(Window),
-    "graph": _keys_of(Graph),
-    "thresholds": _keys_of(Thresholds),
-    "trend": _keys_of(Trend),
-    "polling": _keys_of(Polling),
+    name: frozenset(kinds) for name, kinds in FIELD_TYPES.items()
 }
 
 # [account] is in that table like everything else. It was briefly exempt,
@@ -349,11 +396,81 @@ def _check_keys(raw: dict) -> None:
         )
 
 
+def _kind_name(kind: type) -> str:
+    """What to call a type in a message aimed at whoever edits the file."""
+    return {
+        str: "string",
+        float: "number",
+        bool: "true or false",
+        VECTOR3: "list of three numbers",
+    }[kind]
+
+
+def _as(kind: type, value):
+    """One TOML value, as the type its field is declared to hold.
+
+    `bool` before `float`, because bool is a subclass of int and the
+    other order would turn `true` into 1.0.
+    """
+    if kind is bool:
+        return bool(value)
+    if kind is float:
+        return float(value)
+    if kind is str:
+        return str(value)
+    # VECTOR3. A string is iterable and would come apart into
+    # characters, which is a worse error than being refused.
+    if isinstance(value, str):
+        raise TypeError(f"{value!r} is a string, not three numbers")
+    return tuple(float(v) for v in value)
+
+
+def _read(section: str, key: str, kind: type, value):
+    """`_as`, with the key named when the file holds something else.
+
+    Unnamed, the failure is `could not convert string to float: 'left'`,
+    which says nothing about which line to go and fix.
+    """
+    try:
+        return _as(kind, value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{section}.{key} must be a {_kind_name(kind)}: {value!r}"
+        ) from exc
+
+
+def _written(value, existing):
+    """The value as it should appear in the file.
+
+    Two adjustments, both about not changing a line beyond what was
+    asked. TOML has no tuple, so VECTOR3 goes out as the array it came
+    in as. And a key the file spelled as a whole number stays one:
+    `low_mgdl = 70` edited to 75 should read `75`, since every number
+    here is held as a float and the trailing `.0` is churn.
+    """
+    if isinstance(value, tuple):
+        return list(value)
+    if (
+        isinstance(value, float)
+        and value.is_integer()
+        # bool is a subclass of int, and `true` is not a whole number.
+        and isinstance(existing, int)
+        and not isinstance(existing, bool)
+    ):
+        return int(value)
+    return value
+
+
 def load(path: Path) -> Config:
     """Read the config file, falling back to defaults for absent keys.
 
     Absent is not the same as unrecognised: a key nothing reads is an
     error, not a default. See `_check_keys`.
+
+    The walk is the point. Every setting is read because it is declared,
+    so the failure this used to have -- a field added to a dataclass and
+    not to the ninety lines of `.get` that were here, which showed up as
+    a setting stuck at its default -- cannot be written any more.
     """
     if not path.exists():
         raise FileNotFoundError(f"{path} not found; copy config.example.toml to create it")
@@ -365,86 +482,73 @@ def load(path: Path) -> Config:
     # Past this point the unrecognised ones have already been dropped.
     _check_keys(raw)
 
-    account = raw.get("account", {})
-    display = raw.get("display", {})
-    # `raw_vr` rather than `vr`, and only here: this is the one section
-    # whose name in the file is also its name on the Config, so the raw
-    # table and the dataclass would otherwise want the same word.
-    raw_vr = raw.get("vr", {})
-    window = raw.get("window", {})
-    graph = raw.get("graph", {})
-    thresholds = raw.get("thresholds", {})
-    trend = raw.get("trend", {})
-    polling = raw.get("polling", {})
-
     cfg = Config()
-    acc = cfg.account
-    acc.email = account.get("email", "")
-    acc.password = account.get("password", "")
-    acc.patient_id = account.get("patient_id", acc.patient_id)
-    acc.region = account.get("region", acc.region)
-    acc.api_version = account.get("api_version", acc.api_version)
-
-    cfg.display.unit = display.get("unit", cfg.display.unit)
-    cfg.display.stale_after_min = float(
-        display.get("stale_after_min", cfg.display.stale_after_min)
-    )
-
-    vr = cfg.vr
-    vr.hand = raw_vr.get("hand", vr.hand)
-    vr.width_m = float(raw_vr.get("width_m", vr.width_m))
-    vr.offset = tuple(raw_vr.get("offset", vr.offset))  # type: ignore[assignment]
-    vr.rotation_deg = tuple(  # type: ignore[assignment]
-        raw_vr.get("rotation_deg", vr.rotation_deg)
-    )
-    vr.opacity = float(raw_vr.get("opacity", vr.opacity))
-    vr.flip_vertical = bool(raw_vr.get("flip_vertical", vr.flip_vertical))
-    vr.orbit = bool(raw_vr.get("orbit", vr.orbit))
-    vr.orbit_radius_m = float(raw_vr.get("orbit_radius_m", vr.orbit_radius_m))
-    vr.orbit_limit_deg = float(raw_vr.get("orbit_limit_deg", vr.orbit_limit_deg))
-    vr.arm_guide = bool(raw_vr.get("arm_guide", vr.arm_guide))
-    vr.gaze_fade = bool(raw_vr.get("gaze_fade", vr.gaze_fade))
-    vr.gaze_full_deg = float(raw_vr.get("gaze_full_deg", vr.gaze_full_deg))
-    vr.gaze_fade_deg = float(raw_vr.get("gaze_fade_deg", vr.gaze_fade_deg))
-    vr.gaze_min_alpha = float(raw_vr.get("gaze_min_alpha", vr.gaze_min_alpha))
-
-    win = cfg.window
-    win.scale = float(window.get("scale", win.scale))
-    win.always_on_top = bool(window.get("always_on_top", win.always_on_top))
-
-    gr = cfg.graph
-    gr.in_window = bool(graph.get("in_window", gr.in_window))
-    gr.in_vr = bool(graph.get("in_vr", gr.in_vr))
-    gr.window_min = float(graph.get("window_min", gr.window_min))
-    gr.axis_high_mgdl = float(graph.get("axis_high_mgdl", gr.axis_high_mgdl))
-
-    th = cfg.thresholds
-    th.low_mgdl = float(thresholds.get("low_mgdl", th.low_mgdl))
-    th.high_mgdl = float(thresholds.get("high_mgdl", th.high_mgdl))
-    th.very_high_mgdl = float(thresholds.get("very_high_mgdl", th.very_high_mgdl))
-
-    cfg.trend.local = bool(trend.get("local", cfg.trend.local))
-    cfg.trend.fast_mgdl_min = float(
-        trend.get("fast_mgdl_min", cfg.trend.fast_mgdl_min)
-    )
-
-    cfg.polling.interval_sec = float(
-        polling.get("interval_sec", cfg.polling.interval_sec)
-    )
-    pol = cfg.polling
-    pol.alert_on_low = bool(polling.get("alert_on_low", pol.alert_on_low))
-    pol.alert_haptic = bool(polling.get("alert_haptic", pol.alert_haptic))
-    pol.alert_sound = bool(polling.get("alert_sound", pol.alert_sound))
-    pol.sound_path = str(polling.get("sound_path", pol.sound_path))
-    pol.rearm_margin_mgdl = float(
-        polling.get("rearm_margin_mgdl", pol.rearm_margin_mgdl)
-    )
-    pol.repeat_every_min = float(
-        polling.get("repeat_every_min", pol.repeat_every_min)
-    )
+    for section, kinds in FIELD_TYPES.items():
+        body = raw.get(section, {})
+        held = getattr(cfg, section)
+        for key, kind in kinds.items():
+            if key in body:
+                setattr(held, key, _read(section, key, kind, body[key]))
 
     _validate(cfg)
     return cfg
+
+
+def save(cfg: Config, path: Path) -> None:
+    """Write `cfg` back to `path`, keeping the file that is already there.
+
+    tomlkit rather than a fresh dump, because the comments in
+    config.toml are the only explanation of most of these settings that
+    anyone editing by hand will ever see. Rewriting the file from the
+    values alone would throw all of it away, once, silently.
+
+    **Only what actually differs is touched.** A key the file already
+    holds is compared through the same conversion `load` uses, so
+    `interval_sec = 60` stays as it is rather than being churned to
+    `60.0` on every save; a key the file does not hold is added only
+    when it is not the default, so saving does not paste all fifty
+    settings into a file that was holding six.
+
+    The write goes through a temporary file, because the thing being
+    overwritten is the only copy of a password.
+
+    Nothing calls this yet. It is what a settings window needs, and it
+    is here rather than there because it is the other half of `load`.
+    """
+    document = (
+        tomlkit.parse(path.read_text(encoding="utf-8"))
+        if path.exists()
+        else tomlkit.document()
+    )
+    defaults = Config()
+
+    for section, kinds in FIELD_TYPES.items():
+        table = document.get(section)
+        held = getattr(cfg, section)
+        default = getattr(defaults, section)
+        for key, kind in kinds.items():
+            value = getattr(held, key)
+            existing = table[key] if table is not None and key in table else None
+            if existing is not None:
+                try:
+                    if _as(kind, existing) == value:
+                        continue
+                except (TypeError, ValueError):
+                    pass  # unreadable, so it is about to be replaced
+            elif value == getattr(default, key):
+                # Absent, and what would be written is what absent
+                # already means. Adding it only makes the file longer.
+                continue
+            if table is None:
+                table = tomlkit.table()
+                document[section] = table
+            table[key] = _written(value, existing)
+
+    # Written beside the real file so the move is a rename within one
+    # directory, which is the case os.replace makes atomic.
+    scratch = path.with_name(path.name + ".new")
+    scratch.write_text(tomlkit.dumps(document), encoding="utf-8")
+    scratch.replace(path)
 
 
 def _validate(cfg: Config) -> None:
