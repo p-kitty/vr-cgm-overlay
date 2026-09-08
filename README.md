@@ -98,6 +98,11 @@ SteamVR to be up**: put the headset on whenever you like and the overlay
 appears, quit SteamVR and it goes, and the window carries on either way.
 Start it once and leave it there.
 
+A small **VR** appears in the window's top corner while the face is
+actually on a controller, and goes away when it is not — SteamVR down, a
+controller asleep, or nothing paired yet all look the same from a desk,
+and none of them are faults.
+
 Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning: see
 [Placing the face in VR](docs/placement.md).
@@ -143,11 +148,24 @@ looking at.
 
 ## Settings
 
-Everything is in `config.toml`, which is **re-read while the app runs** —
-edit it with the headset on and the face changes within a second. Only
-`[account]` needs a restart (`hand` reopens the overlay by itself, which
-takes about a second), and a key nothing recognises stops the app rather
-than being silently ignored.
+**Click the gear** in the top corner of the face — or right-click
+anywhere on it — for a settings window: thresholds, units, polling,
+alerts and the graph, in tabs. It writes `config.toml` and does
+nothing else — the running app picks the edit up the same way it picks
+up one made in a text editor, and it refuses to write anything the app
+would not start from.
+
+Placement is in there too, `offset` and `rotation_deg` as three boxes
+each. It is still judged with the headset on — change a number, press
+Save, watch the face move — which is the same loop as editing the file,
+because both go back through the same watcher. See
+[Placing the face in VR](docs/placement.md) for what the numbers mean.
+
+Everything is in `config.toml` either way, and it is **re-read while the
+app runs** — edit it with the headset on and the face changes within a
+second. Only `[account]` needs a restart (`hand` reopens the overlay by
+itself, which takes about a second), and a key nothing recognises stops
+the app rather than being silently ignored.
 
 | Where to look | For |
 |---|---|

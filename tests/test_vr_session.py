@@ -180,6 +180,47 @@ class Drawing(unittest.TestCase):
             self.assertIsNone(vr.frame)
 
 
+class Attachment(unittest.TestCase):
+    """The one thing that travels back out of the thread.
+
+    A window is otherwise identical whether SteamVR is running or not,
+    so without this the only way to know the face is on a controller is
+    the log.
+    """
+
+    def test_it_says_when_a_controller_has_the_face(self):
+        overlays = Overlays()
+        vr = session(overlays)
+        # Before the thread runs, which is also what the window shows
+        # for the second before SteamVR answers.
+        self.assertFalse(vr.attached)
+        with vr:
+            overlay = overlays.wait_for_one()
+            self.assertTrue(wait_for(lambda: vr.attached))
+            overlay.attached = False
+            self.assertTrue(wait_for(lambda: not vr.attached))
+
+    def test_a_session_that_ends_lets_go(self):
+        # SteamVR going away leaves the window up, so it has to stop
+        # claiming a controller is holding the face. The pause before
+        # the next session is stretched here so the gap is a state to
+        # look at rather than a moment to catch.
+        overlays = Overlays(quit_after=2)
+        with session(overlays, reopen_sec=5.0) as vr:
+            self.assertIsNotNone(overlays.wait_for_one())
+            self.assertTrue(wait_for(lambda: vr.attached), "never attached")
+            self.assertTrue(wait_for(lambda: not vr.attached), "still attached")
+
+    def test_stopping_lets_go(self):
+        overlays = Overlays()
+        vr = session(overlays)
+        vr.start()
+        self.assertIsNotNone(overlays.wait_for_one())
+        self.assertTrue(wait_for(lambda: vr.attached))
+        vr.stop()
+        self.assertFalse(vr.attached)
+
+
 class Settings(unittest.TestCase):
     def test_settings_are_pushed_once_per_change(self):
         # Compared by identity: a reload rebinds the whole config, so a

@@ -22,7 +22,7 @@ two frontends.
 | `cgm.core` | API client, config, poller, config watcher, fetch thread | nothing special |
 | `cgm.face` | the watch face drawing | Pillow |
 | `cgm.vr` | the SteamVR overlay and its arm guide | a headset |
-| `cgm.desk` | the same face in a desktop window (`--window`) | tkinter |
+| `cgm.desk` | the same face in a desktop window, and the settings window behind a right-click | tkinter |
 
 **Put new code in the shallowest layer that can hold it.** The two
 frontends are the reason: whatever lives in one of them has to be
@@ -133,7 +133,8 @@ Two ways to supply one password was confusing with no real benefit.
 Before committing, confirm the code still runs, on Python 3.14 — the
 version the project targets. All of these import `cgm`, so the package
 has to be installed first (`pip install -e .`, once per checkout). None
-of them need a VR headset or network access:
+of them need a VR headset or network access; `check_settings.py` is the
+only one that needs a desktop, since it opens the window it is checking:
 
 ```bash
 python -m unittest discover -s tests  # the logic that runs headless
@@ -141,6 +142,7 @@ python tools/preview.py --debug       # every watch face state, to a PNG
 python tools/check_orbit.py           # the orbit placement geometry
 python tools/check_gaze.py            # the gaze fade and the rules on it
 python tools/check_palette.py         # the palette under colour blindness
+python tools/check_settings.py        # the settings window, from the right-click on
 python -m compileall -q src tools tests
 ```
 
@@ -149,16 +151,19 @@ parsing, the trend fit and the arrow angle it maps to, the fetch
 schedule and its backoff and the thread that drives it, config
 validation, the walk that reads config.toml and the one that writes it
 back without losing the file's comments, the live reload and which
-settings a restart is still needed for, the colour thresholds, the window's compositing and title,
-the overlay's thread driven by a stand-in overlay, and that every import
-inside the package resolves -- including the lazy ones in `run()`, which
-only execute with a headset attached. It deliberately does not mock the
+settings a restart is still needed for, the colour thresholds, the
+window's compositing and title, what the settings window offers and what
+pressing Save means, the overlay's thread driven by a stand-in overlay,
+and that every import inside the package resolves -- including the lazy
+ones in `run()`, which only execute with a headset attached. It deliberately does not mock the
 LibreLinkUp HTTP calls — the real risk there is the unofficial API
 changing shape, which only `--dry-run` can see — and it does not touch
 the SteamVR bindings: `cgm.vr.session` is tested because it is handed an
 overlay rather than making one, and `cgm.vr.overlay` is not tested at
-all. It does not start Tk either: `cgm.desk` is tested down to the last
-thing before a window would open.
+all. It does not start Tk either: `cgm.desk` is tested down to the last thing
+before a window would open, and `tools/check_settings.py` covers the
+rest -- it opens a real face, right-clicks it, and drives the settings
+window that comes up.
 
 To check the API client against the live service (needs `config.toml`):
 

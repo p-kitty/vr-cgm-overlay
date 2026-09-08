@@ -405,6 +405,7 @@ def run(
             # tkinter is a stdlib module some builds of Python leave out,
             # and PIL.ImageTk needs it in turn, so this import is lazy
             # for the same reason the overlay's is.
+            from cgm.desk.settings import SettingsWindow
             from cgm.desk.window import FaceWindow
 
             window_face = build_renderer(
@@ -416,6 +417,29 @@ def run(
                 )
             )
             window.set_image(window_face.render_message("CONNECTING"))
+
+            # The settings window writes config.toml and stops there, so
+            # nothing below has to know it exists: the edit comes back
+            # round through the watcher like any other. One at a time --
+            # a second copy of the same file, opened over the first,
+            # would be two answers to the same question.
+            settings = None
+
+            def open_settings(master) -> None:
+                nonlocal settings
+                if settings is not None and settings.alive():
+                    settings.lift()
+                    return
+                try:
+                    settings = SettingsWindow(master, config_path)
+                except (OSError, ValueError) as exc:
+                    # The file is unreadable, which the running process
+                    # has survived by keeping what it already loaded.
+                    # Say so rather than taking the window down with it.
+                    log.error("cannot open the settings: %s", exc)
+
+            window.on_menu(open_settings)
+            log.info("click the gear on the face for settings")
 
         def tick() -> None:
             nonlocal cfg, vr_face, window_face
@@ -473,6 +497,11 @@ def run(
                     )
                 )
                 window.set_title(_window_title(reading, error, cfg.display.unit))
+                # The one thing that travels back from the VR half. The
+                # window is otherwise identical whether SteamVR is
+                # running or not, so without this the only way to know
+                # the face is on a controller is the log.
+                window.set_vr(session is not None and session.attached)
 
             if session is not None:
                 # No reading has ever arrived: there is no low on the

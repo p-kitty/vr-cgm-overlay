@@ -288,6 +288,25 @@ class Validation(ConfigTestCase):
         self.assertIn("vr.width_m", message)
         self.assertIn("number", message)
 
+    def test_a_quoted_boolean_is_not_believed_backwards(self):
+        # `bool("false")` is True, and so is every other non-empty
+        # string, so a quoted false used to turn the setting on --
+        # silently, with nothing about the file looking wrong.
+        cfg = self.load('\n[polling]\nalert_on_low = "false"\n')
+        self.assertFalse(cfg.polling.alert_on_low)
+
+    def test_a_boolean_that_is_neither_is_refused_by_name(self):
+        # Two spellings, and no guessing at a third.
+        message = self.assertRejected("\n[graph]\nin_vr = 'yes'\n")
+        self.assertIn("graph.in_vr", message)
+
+    def test_the_toml_spellings_are_taken(self):
+        # The same conversion is what a settings window hands its values
+        # through, and a checkbox on the way out is a Python bool.
+        self.assertIs(config_mod.parse("graph", "in_vr", "true"), True)
+        self.assertIs(config_mod.parse("graph", "in_vr", "False"), False)
+        self.assertIs(config_mod.parse("graph", "in_vr", False), False)
+
     def test_three_numbers_are_required_where_three_numbers_belong(self):
         # A bare number is not iterable and a string comes apart into
         # characters. Both are refused by name rather than by traceback.
@@ -789,6 +808,17 @@ class Saving(ConfigTestCase):
         cfg.display.unit = "mmol"
         config_mod.save(cfg, self.path)
         self.assertEqual(config_mod.load(self.path).account.password, "secret")
+
+    def test_a_config_the_loader_would_refuse_is_not_written(self):
+        # save() validates first. Writing an invalid file would leave a
+        # config.toml the app cannot start from, discovered the next
+        # morning by which time nobody remembers typing it.
+        cfg = self.load()
+        before = self.path.read_text(encoding="utf-8")
+        cfg.polling.interval_sec = 5.0
+        with self.assertRaises(ValueError):
+            config_mod.save(cfg, self.path)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), before)
 
     def test_a_file_that_is_not_there_yet_is_written_from_nothing(self):
         target = Path(self._dir.name) / "fresh.toml"

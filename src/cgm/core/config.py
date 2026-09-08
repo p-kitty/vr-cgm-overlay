@@ -413,6 +413,15 @@ def _as(kind: type, value):
     other order would turn `true` into 1.0.
     """
     if kind is bool:
+        # `bool("false")` is True, and every other non-empty string is
+        # too, so a quoted `"false"` in the file would turn the setting
+        # on -- the wrong answer, given without a word. Spell it the way
+        # TOML does or say so.
+        if isinstance(value, str):
+            spelling = value.strip().lower()
+            if spelling not in ("true", "false"):
+                raise ValueError(f"{value!r} is neither true nor false")
+            return spelling == "true"
         return bool(value)
     if kind is float:
         return float(value)
@@ -437,6 +446,19 @@ def _read(section: str, key: str, kind: type, value):
         raise ValueError(
             f"{section}.{key} must be a {_kind_name(kind)}: {value!r}"
         ) from exc
+
+
+def parse(section: str, key: str, value):
+    """One value as the named setting is declared to hold it.
+
+    The way in for anything that has a setting by name and a value that
+    is not the right type yet -- a settings window, whose values come out
+    of text boxes as strings. It converts exactly as `load` does,
+    including the message when the conversion fails, so a number typed
+    into the wrong box is refused the same way whether it arrived through
+    a widget or through the file.
+    """
+    return _read(section, key, FIELD_TYPES[section][key], value)
 
 
 def _written(value, existing):
@@ -512,9 +534,14 @@ def save(cfg: Config, path: Path) -> None:
     The write goes through a temporary file, because the thing being
     overwritten is the only copy of a password.
 
-    Nothing calls this yet. It is what a settings window needs, and it
-    is here rather than there because it is the other half of `load`.
+    **Validated first, and nothing is written if it fails.** A config
+    the loader would refuse is a file the app will not start from, and
+    writing one would turn a mistyped threshold into a process that
+    comes up dead the next morning. The caller gets the same ValueError
+    a load would have raised, with nothing changed on disk.
     """
+    _validate(cfg)
+
     document = (
         tomlkit.parse(path.read_text(encoding="utf-8"))
         if path.exists()

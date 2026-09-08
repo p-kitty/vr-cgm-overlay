@@ -106,6 +106,13 @@ class VrSession:
         self.settings = None
         self.frame: tuple | None = None
 
+        # Handed back the other way, and the only thing that goes that
+        # direction: True while there is a controller with the face on
+        # it. False covers SteamVR not running, the session between
+        # overlays, and a controller asleep -- all of which look the same
+        # from outside, which is what a window has to say about it.
+        self.attached = False
+
     # -- lifecycle ----------------------------------------------------------
 
     def __enter__(self) -> "VrSession":
@@ -199,7 +206,7 @@ class VrSession:
                 # orbit mode this is what turns the face towards the
                 # head, and at the draw rate it would lag a head turn
                 # badly.
-                attached = overlay.update_attachment()
+                attached = self.attached = overlay.update_attachment()
 
                 frame = self.frame
                 # Nothing to draw on while the controller sleeps, and
@@ -228,4 +235,7 @@ class VrSession:
                 else:
                     next_tick = time.perf_counter()  # fell behind; do not chase
         finally:
+            # Whatever ended the session, there is nothing on a
+            # controller from here until the next one is open.
+            self.attached = False
             overlay.close()
