@@ -15,29 +15,6 @@ on it.
 
 Nothing has exercised these yet. Each says how to check it.
 
-- **The overlay running on a thread, beside a window.** Both frontends
-  are one process now, and the overlay lives on a thread that owns it
-  from `openvr.init` to `destroyOverlay`. Everything a desk can show has
-  been watched -- the window runs while the thread waits for SteamVR,
-  `--vr` starts with no window, and `tests/test_vr_session.py` drives the
-  thread with a stand-in overlay -- but nothing has put a real overlay on
-  the far end of it. Four things to look for with a headset on, in this
-  order, none taking more than a minute:
-
-  - the face is on the controller and tracks the way it always did.
-    Orbit mode is the one to watch: it slides rather than steps only
-    because the loop keeps the headset's rate, and that loop is now a
-    thread. `tracking at 72Hz` in the log says what it thinks it got.
-  - start the process first, then SteamVR. The log should say `SteamVR is
-    not running; waiting for it`, then `SteamVR came up` and `created
-    overlay` without being restarted.
-  - quit SteamVR with the process running. Expect `SteamVR asked us to
-    quit` and `destroyed the overlay`, the window still updating, and the
-    overlay back by itself when SteamVR returns.
-  - edit `hand` and save. The overlay should be destroyed and recreated
-    on the other controller within a second or two, with the window not
-    blinking. That is what took a restart before.
-
 - **Controller sleep and wake.** With the process running, power the
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and
