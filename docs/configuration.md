@@ -16,9 +16,11 @@ carries the same thing as comments next to the values.
 
 ## The settings window
 
-**Right-click the face** in the desktop window. Every section below gets
-a tab, with one row per setting, labelled with the key's own name — so
-what you change there is what this page explains.
+**Click the gear** in the top corner of the face, or right-click
+anywhere on it. Every section below gets a tab, with one row per
+setting, labelled with the key's own name — so what you change there is
+what this page explains. Save is greyed out until you change something,
+and greys itself out again once it has written.
 
 It writes `config.toml` and stops. There is no separate path into the
 running app: the file is saved, the watcher notices within a second, and

@@ -98,6 +98,11 @@ SteamVR to be up**: put the headset on whenever you like and the overlay
 appears, quit SteamVR and it goes, and the window carries on either way.
 Start it once and leave it there.
 
+A small **VR** appears in the window's top corner while the face is
+actually on a controller, and goes away when it is not — SteamVR down, a
+controller asleep, or nothing paired yet all look the same from a desk,
+and none of them are faults.
+
 Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning: see
 [Placing the face in VR](docs/placement.md).
@@ -143,8 +148,9 @@ looking at.
 
 ## Settings
 
-**Right-click the face** for a settings window: thresholds, units,
-polling, alerts and the graph, in tabs. It writes `config.toml` and does
+**Click the gear** in the top corner of the face — or right-click
+anywhere on it — for a settings window: thresholds, units, polling,
+alerts and the graph, in tabs. It writes `config.toml` and does
 nothing else — the running app picks the edit up the same way it picks
 up one made in a text editor, and it refuses to write anything the app
 would not start from.

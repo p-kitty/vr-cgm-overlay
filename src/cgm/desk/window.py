@@ -43,6 +43,12 @@ log = logging.getLogger("vrcgm")
 # card and not a way of making it darker than it was drawn.
 BACKDROP = (32, 34, 40)
 
+# The face's own muted grey, the one "mg/dL" and "now" are drawn in. The
+# corner marks borrow it so they read as part of the card rather than as
+# something stuck on top of it.
+CORNER_FG = "#7e838f"
+CORNER_LIT = "#c8ccd4"
+
 
 def compose(face: Image.Image, scale: float) -> Image.Image:
     """Flatten the face onto the window backdrop at the asked-for size.
@@ -85,6 +91,15 @@ class FaceWindow:
         self._photo: ImageTk.PhotoImage | None = None
         # What size is currently on screen, so a change can be noticed.
         self._shown: tuple[int, int] | None = None
+        # The corner marks: a gear to open the settings, and a badge
+        # saying the overlay is up. Both are None until asked for, and
+        # both sit on the card, so they carry its colour -- taken off
+        # the picture rather than written down here, since the face
+        # decides what colour it is.
+        self._gear: tk.Label | None = None
+        self._badge: tk.Label | None = None
+        self._corner_bg = _hex(BACKDROP)
+        self._vr = False
 
         self._root = tk.Tk()
         self._root.title("vr-cgm-overlay")
@@ -118,8 +133,26 @@ class FaceWindow:
         if shown.size != self._shown:
             self._shown = shown.size
             self._root.geometry("")
+        self._match_corner(shown)
         self._photo = ImageTk.PhotoImage(shown)
         self._label.configure(image=self._photo)
+
+    def _match_corner(self, shown: Image.Image) -> None:
+        """Sit the corner marks on whatever colour the card's corner is.
+
+        Read off the top right pixel rather than named here. The card is
+        translucent and this window flattens it onto BACKDROP, so the
+        colour behind the marks is the result of both -- and the face is
+        free to change its own without this file finding out. The top
+        *left* would not do: that is where the in-range marker lights up.
+        """
+        corner = _hex(shown.getpixel((shown.width - 1, 0))[:3])
+        if corner == self._corner_bg:
+            return
+        self._corner_bg = corner
+        for mark in (self._gear, self._badge):
+            if mark is not None:
+                mark.configure(bg=corner)
 
     def set_scale(self, scale: float) -> None:
         """Resize, effective from the next image."""
@@ -138,21 +171,77 @@ class FaceWindow:
         self._root.title(text)
 
     def on_menu(self, callback) -> None:
-        """Call `callback(master)` when the face is right-clicked.
+        """Offer a way into a menu: a gear in the corner, or a right-click.
 
-        The face is the only thing on screen, so it is also the only
-        place a settings window can be opened from. What this class
-        knows about that is the gesture and nothing else: `cgm.main`
-        decides what opens, the same way it decides everything else
-        about what the two frontends are wired to.
+        Two ways in for one thing. The gear is the one somebody finds
+        without being told; the right-click is the one that works
+        wherever the pointer already is, once they have been.
 
-        `master` is this window, handed over so a dialog can be parented
-        to it -- a Toplevel needs one, and reaching in for it from
-        outside would be worse than passing it out.
+        **A widget in this window's frame, not a mark on the face.** The
+        face image is the same picture the overlay puts on a controller,
+        where a gear cannot be clicked and would be a button that does
+        nothing -- so it goes one step later, in the only place that is
+        this frontend's alone. `place` rather than `pack`, because the
+        window takes its size from the image and forgets its geometry
+        whenever that changes, and a placed widget does not join in.
+
+        `master` is this window, handed to the callback so a dialog can
+        be parented to it -- a Toplevel needs one, and reaching in from
+        outside for it would be worse than passing it out.
         """
         if self._closed:
             return
-        self._label.bind("<Button-3>", lambda _event: callback(self._root))
+
+        def opened(_event=None) -> None:
+            callback(self._root)
+
+        self._label.bind("<Button-3>", opened)
+        self._gear = self._mark("⚙", ("Segoe UI Symbol", 13))
+        self._gear.configure(cursor="hand2")
+        self._gear.bind("<Button-1>", opened)
+        # Lit while the pointer is on it, which is the whole of saying
+        # it is a control rather than a decoration.
+        self._gear.bind("<Enter>", lambda _e: self._gear.configure(fg=CORNER_LIT))
+        self._gear.bind("<Leave>", lambda _e: self._gear.configure(fg=CORNER_FG))
+        self._gear.place(relx=1.0, rely=0.0, x=-8, y=5, anchor="ne")
+
+    def set_vr(self, active: bool) -> None:
+        """Show or hide the mark that says the overlay is on a controller.
+
+        The window is the only place worth saying it. In the headset the
+        answer is the face being on your wrist, and this frontend is
+        otherwise identical whether SteamVR is running or not -- so
+        without it the only way to know is the log.
+
+        Not being up is not a fault: SteamVR may simply not be running,
+        and the session waits for it. So it is a mark that appears rather
+        than one that turns a colour, and its absence says nothing louder
+        than "not yet".
+        """
+        if self._closed or active == self._vr:
+            return
+        self._vr = active
+        if not active:
+            if self._badge is not None:
+                self._badge.place_forget()
+            return
+        if self._badge is None:
+            self._badge = self._mark("VR", ("Segoe UI", 8, "bold"))
+        # Left of the gear when there is one, and in its place when
+        # there is not.
+        self._badge.place(relx=1.0, rely=0.0, x=-30, y=8, anchor="ne")
+
+    def _mark(self, text: str, font) -> tk.Label:
+        """One of the small labels that sit on the card's top corner."""
+        return tk.Label(
+            self._root,
+            text=text,
+            font=font,
+            fg=CORNER_FG,
+            bg=self._corner_bg,
+            bd=0,
+            highlightthickness=0,
+        )
 
     # No `pulse` here. The overlay has one because it has a controller
     # to buzz, and a window does not; the channel a window can use is

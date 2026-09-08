@@ -439,7 +439,7 @@ def run(
                     log.error("cannot open the settings: %s", exc)
 
             window.on_menu(open_settings)
-            log.info("right-click the face for settings")
+            log.info("click the gear on the face for settings")
 
         def tick() -> None:
             nonlocal cfg, vr_face, window_face
@@ -497,6 +497,11 @@ def run(
                     )
                 )
                 window.set_title(_window_title(reading, error, cfg.display.unit))
+                # The one thing that travels back from the VR half. The
+                # window is otherwise identical whether SteamVR is
+                # running or not, so without this the only way to know
+                # the face is on a controller is the log.
+                window.set_vr(session is not None and session.attached)
 
             if session is not None:
                 # No reading has ever arrived: there is no low on the

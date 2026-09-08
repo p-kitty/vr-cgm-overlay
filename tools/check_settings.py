@@ -74,16 +74,33 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
         build_renderer(cfg, with_graph=False, rounded=False).render_message("SETTINGS")
     )
 
-    # The gesture. `cgm.main` binds it to opening the settings; here it
-    # is bound to a list, so what is asserted is that the click arrives
-    # and hands over something a Toplevel can be parented to.
+    # The two gestures. `cgm.main` binds them to opening the settings;
+    # here they are bound to a list, so what is asserted is that the
+    # click arrives and hands over something a Toplevel can be parented
+    # to. The gear is the one somebody finds without being told, so it
+    # is the one that would be missed if it stopped working.
     opened: list[tk.Misc] = []
     face.on_menu(opened.append)
     face._root.update()
+    face._gear.event_generate("<Button-1>", x=2, y=2)
+    face._root.update()
+    assert opened, "clicking the gear did nothing"
+    assert face._gear.winfo_ismapped(), "the gear is not on screen"
     face._label.event_generate("<Button-3>", x=10, y=10)
     face._root.update()
-    assert opened, "right-clicking the face did nothing"
-    say("right-click opens something", type(opened[0]).__name__)
+    assert len(opened) == 2, "right-clicking the face did nothing"
+    say("both ways in open something", type(opened[0]).__name__)
+
+    # The mark that says the overlay is up. Absent is not an error -- it
+    # is SteamVR not running -- so it appears and disappears rather than
+    # changing colour.
+    face.set_vr(True)
+    face._root.update()
+    assert face._badge is not None and face._badge.winfo_ismapped(), "no VR mark"
+    face.set_vr(False)
+    face._root.update()
+    assert not face._badge.winfo_ismapped(), "the VR mark stayed up"
+    say("the VR mark comes and goes", "shown while a controller has the face")
 
     window = settings_mod.SettingsWindow(opened[0], path)
     face._root.update()
