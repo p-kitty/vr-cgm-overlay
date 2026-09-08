@@ -137,6 +137,23 @@ class FaceWindow:
             return
         self._root.title(text)
 
+    def on_menu(self, callback) -> None:
+        """Call `callback(master)` when the face is right-clicked.
+
+        The face is the only thing on screen, so it is also the only
+        place a settings window can be opened from. What this class
+        knows about that is the gesture and nothing else: `cgm.main`
+        decides what opens, the same way it decides everything else
+        about what the two frontends are wired to.
+
+        `master` is this window, handed over so a dialog can be parented
+        to it -- a Toplevel needs one, and reaching in for it from
+        outside would be worse than passing it out.
+        """
+        if self._closed:
+            return
+        self._label.bind("<Button-3>", lambda _event: callback(self._root))
+
     # No `pulse` here. The overlay has one because it has a controller
     # to buzz, and a window does not; the channel a window can use is
     # sound, which `cgm.core.alert` owns and plays for both frontends.
