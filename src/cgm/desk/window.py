@@ -31,6 +31,8 @@ import tkinter as tk
 
 from PIL import Image, ImageTk
 
+from cgm.face.renderer import CLEAR_COLUMN, WIDTH
+
 log = logging.getLogger("vrcgm")
 
 # The card is drawn translucent so the VR compositor can show the game
@@ -48,6 +50,14 @@ BACKDROP = (32, 34, 40)
 # something stuck on top of it.
 CORNER_FG = "#7e838f"
 CORNER_LIT = "#c8ccd4"
+
+# The corner marks' type, sized at window.scale 1.0. In pixels, not
+# points: they have to fit a column measured in the face's own pixels,
+# and a point is a different number of those on every display. These
+# are what the 13pt gear and 8pt badge came to at 96 dpi, so the marks
+# look as they always did at 1.0 and scale with the face from there.
+GEAR_FONT = ("Segoe UI Symbol", 17, "normal")
+BADGE_FONT = ("Segoe UI", 11, "bold")
 
 
 def compose(face: Image.Image, scale: float) -> Image.Image:
@@ -133,6 +143,7 @@ class FaceWindow:
         if shown.size != self._shown:
             self._shown = shown.size
             self._root.geometry("")
+            self._place_marks()
         self._match_corner(shown)
         self._photo = ImageTk.PhotoImage(shown)
         self._label.configure(image=self._photo)
@@ -196,14 +207,14 @@ class FaceWindow:
             callback(self._root)
 
         self._label.bind("<Button-3>", opened)
-        self._gear = self._mark("⚙", ("Segoe UI Symbol", 13))
+        self._gear = self._mark("⚙")
         self._gear.configure(cursor="hand2")
         self._gear.bind("<Button-1>", opened)
         # Lit while the pointer is on it, which is the whole of saying
         # it is a control rather than a decoration.
         self._gear.bind("<Enter>", lambda _e: self._gear.configure(fg=CORNER_LIT))
         self._gear.bind("<Leave>", lambda _e: self._gear.configure(fg=CORNER_FG))
-        self._gear.place(relx=1.0, rely=0.0, x=-8, y=5, anchor="ne")
+        self._place_marks()
 
     def set_vr(self, active: bool) -> None:
         """Show or hide the mark that says the overlay is on a controller.
@@ -226,17 +237,57 @@ class FaceWindow:
                 self._badge.place_forget()
             return
         if self._badge is None:
-            self._badge = self._mark("VR", ("Segoe UI", 8, "bold"))
-        # Left of the gear when there is one, and in its place when
-        # there is not.
-        self._badge.place(relx=1.0, rely=0.0, x=-30, y=8, anchor="ne")
+            self._badge = self._mark("VR")
+        self._place_marks()
 
-    def _mark(self, text: str, font) -> tk.Label:
-        """One of the small labels that sit on the card's top corner."""
+    def _place_marks(self) -> None:
+        """Stand the gear and the VR mark in the face's clear column.
+
+        `CLEAR_COLUMN` is the strip down the right edge that no status
+        marker ever lights. Anywhere else these would sit on one: a label
+        is opaque, so over a lit edge it cuts a dark box out of it, and a
+        high used to put the VR mark in the middle of the top bar and the
+        gear hard against its end, where both read as a notch in the bar
+        rather than as marks of their own.
+
+        Stacked, gear first -- it is the control, and the badge comes and
+        goes -- with the badge in the gear's place when there is no gear.
+        Everything is multiplied by the scale of the picture on screen,
+        the type included, so they fit the column at every window.scale
+        rather than only at 1.0. Called again whenever that size changes.
+        """
+        scale = self._shown[0] / WIDTH if self._shown else self._scale
+        left, right = (edge * scale for edge in CLEAR_COLUMN)
+        y = None
+        for mark, (family, size, weight) in (
+            (self._gear, GEAR_FONT),
+            (self._badge if self._vr else None, BADGE_FONT),
+        ):
+            if mark is None:
+                continue
+            # Negative is pixels to Tk. Never zero, which is its default
+            # size rather than none -- far too big for the column a
+            # quarter-scale face leaves.
+            mark.configure(font=(family, -max(1, round(size * scale)), weight))
+            if y is None:
+                # As much air above the first mark as there is either
+                # side of it, measured down from where the stale frame
+                # stops, so it clears the frame the way it clears the
+                # bars -- by more than resampling blurs their edges.
+                air = max(0, right - left - mark.winfo_reqwidth()) / 2
+                y = scale * WIDTH - right + air
+            mark.place(x=round((left + right) / 2), y=round(y), anchor="n")
+            y += mark.winfo_reqheight()
+
+    def _mark(self, text: str) -> tk.Label:
+        """One of the small labels that stand in the face's clear column.
+
+        No font yet: that depends on the scale, and `_place_marks` sets
+        it every time it lays them out.
+        """
         return tk.Label(
             self._root,
             text=text,
-            font=font,
             fg=CORNER_FG,
             bg=self._corner_bg,
             bd=0,
