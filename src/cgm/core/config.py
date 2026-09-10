@@ -40,9 +40,20 @@ from typing import get_type_hints
 
 import tomlkit
 
-from cgm.face.graph import AXIS_FLOOR_MGDL, TICK_MAJOR_MIN
+from cgm.core.alert import REARM_MGDL, REPEAT_MIN
+from cgm.core.librelink import API_VERSION
+from cgm.face.graph import AXIS_FLOOR_MGDL, TICK_MAJOR_MIN, GraphTuning
+from cgm.face.renderer import STALE_AFTER_MIN, Theme, TrendTuning
 
 log = logging.getLogger(__name__)
+
+# Where a default below is also the default of the thing it tunes, it is
+# read off that thing rather than written out again. The face, the alert
+# and the client each have to work on their own -- tools/preview.py
+# draws with no config at all -- so each needs a default, and two copies
+# of 70 mg/dL is how a preview ends up drawn against a threshold the app
+# stopped using. The `[vr]` ones are written here because the overlay
+# needs openvr to import and takes every value from here anyway.
 
 # The lowest vr.gaze_min_alpha that may be asked for. A face that
 # faded to nothing would look exactly like the process having died, which
@@ -71,7 +82,7 @@ class Account:
     # written, which is what lets both directions be walked.
     patient_id: str = ""
     region: str = ""
-    api_version: str = "4.16.0"
+    api_version: str = API_VERSION
 
 
 @dataclass
@@ -84,7 +95,7 @@ class Display:
     """
 
     unit: str = "mgdl"
-    stale_after_min: float = 10.0
+    stale_after_min: float = STALE_AFTER_MIN
 
 
 @dataclass
@@ -146,21 +157,21 @@ class Graph:
     # carried, with the X axis spanning the oldest to the newest rather
     # than a fixed length. Eight hours by default -- long enough to hold
     # a night, short enough that the points are not touching.
-    window_min: float = 480.0
+    window_min: float = GraphTuning.window_min
     # A minimum, not a ceiling: the axis grows past this only far enough
     # to keep a reading on the chart. The bottom of the axis is not here
     # because it is not settable -- see AXIS_FLOOR_MGDL. See
     # cgm.face.graph for why neither end fits itself to the data.
-    axis_high_mgdl: float = 300.0
+    axis_high_mgdl: float = GraphTuning.axis_high_mgdl
 
 
 @dataclass
 class Thresholds:
     """[thresholds]. Always mg/dL, whatever the display unit is."""
 
-    low_mgdl: float = 70.0
-    high_mgdl: float = 180.0
-    very_high_mgdl: float = 240.0
+    low_mgdl: float = Theme.low_mgdl
+    high_mgdl: float = Theme.high_mgdl
+    very_high_mgdl: float = Theme.very_high_mgdl
 
 
 @dataclass
@@ -173,8 +184,8 @@ class Trend:
     which is a constant in `cgm.core.librelink`.
     """
 
-    local: bool = True
-    fast_mgdl_min: float = 2.0
+    local: bool = TrendTuning.local
+    fast_mgdl_min: float = TrendTuning.fast_mgdl_min
 
 
 @dataclass
@@ -195,9 +206,9 @@ class Polling:
     sound_path: str = ""
     # How far above low_mgdl a reading has to climb before the next dip
     # counts as a new low. 0 restores the bare threshold test.
-    rearm_margin_mgdl: float = 5.0
+    rearm_margin_mgdl: float = REARM_MGDL
     # 0 is off: the alert fires once, on the way in.
-    repeat_every_min: float = 0.0
+    repeat_every_min: float = REPEAT_MIN
 
 
 @dataclass
@@ -316,13 +327,14 @@ def _listed(names) -> str:
 def _check_keys(raw: dict) -> None:
     """Refuse a file that contains anything nothing reads.
 
-    Every setting below is read with `.get(key, default)`, which cannot
-    tell a key that is absent from one that is misspelled or filed under
-    the wrong section. Both then do nothing, silently, and the only
-    evidence is a setting that appears not to work -- which reads as a
-    broken feature rather than a typo. `[thresholds]` is why this is an
-    error and not a warning: someone raising `low_mgdl` to match their
-    own low would otherwise find out when an alert did not fire.
+    `load` reads only the keys a dataclass declares, so a key that is
+    misspelled or filed under the wrong section is never looked for, and
+    looks exactly like one that is absent. It then does nothing,
+    silently, and the only evidence is a setting that appears not to
+    work -- which reads as a broken feature rather than a typo.
+    `[thresholds]` is why this is an error and not a warning: someone
+    raising `low_mgdl` to match their own low would otherwise find out
+    when an alert did not fire.
 
     Every rejection carries something to act on. A near miss is named, a
     misfiled key is sent to its section, and a key that resembles nothing

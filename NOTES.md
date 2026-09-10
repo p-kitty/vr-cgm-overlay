@@ -82,7 +82,7 @@ Nothing has exercised these yet. Each says how to check it.
   a gap of up to an hour, because that gap is `graphData` being
   published late rather than the sensor not reading. An hour was picked
   as comfortably past the largest lag anyone has seen -- 18 minutes
-  measured on 2026-09-07, 30 in the entry below -- and nothing has ever
+  measured on 2026-09-07, 30 in the entry above -- and nothing has ever
   watched the lag long enough to say how far it really goes.
 
   It can be wrong in both directions, and each shows differently:
@@ -179,7 +179,7 @@ Three ways to reach it, cheapest first:
 - **A controller button, through `getControllerState`.** The obvious
   answer, and the one with a known risk: that is the legacy input API,
   and the legacy haptic call on the same API does nothing on this stack
-  (see the buzz entry above). Whether button state fares better than
+  (see the buzz entry below). Whether button state fares better than
   haptics through Virtual Desktop's driver is unknown and worth ten
   minutes to find out before designing anything around it.
 - **`IVRInput` with an action manifest.** Settles it for every stack and

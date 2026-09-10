@@ -154,6 +154,21 @@ class Retuning(unittest.TestCase):
         alert.set_tuning(LOW, 5.0, 0.0)
         self.assertFalse(alert.update(60.0, 5 * MINUTE))
 
+    def test_the_config_reaches_the_alert_on_a_reload(self):
+        # `cgm.main` builds the alert and retunes it from one mapping, so
+        # the two cannot drift -- and that mapping has to fit both.
+        from cgm.core.config import Config
+        from cgm.main import alert_tuning
+
+        before = Config()
+        alert = LowAlert(**alert_tuning(before))
+        self.assertEqual(feed(alert, [75.0]), [])
+
+        after = Config()
+        after.thresholds.low_mgdl = 80.0
+        alert.set_tuning(**alert_tuning(after))
+        self.assertTrue(alert.update(75.0, 10 * MINUTE))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,50 +15,43 @@ restart. What is asserted below is that it is no longer reported: a
 warning telling somebody to restart for a setting that already applied
 itself is worse than no warning at all.
 
-The comparison walks a dotted path per setting, which is a string, which
-means a typo in it is invisible until someone saves the file with the
-headset on and the draw loop dies on an AttributeError. That is what
-these assert against.
+The list is read off `[account]` rather than written out, so a name in
+it cannot be misspelled -- which used to mean an AttributeError in the
+draw loop on the first reload after the edit, with the headset on. What
+is asserted is that it stays the whole of that section and nothing else.
 """
 
 from __future__ import annotations
 
 import unittest
 
-from cgm.core.config import Config
+from cgm.core.config import FIELD_TYPES, Config
 from cgm.main import RESTART_ONLY, _setting, warn_restart_only
 
 
-def changed(before: Config, after: Config, settings=RESTART_ONLY) -> list[str]:
-    return warn_restart_only(after, before, settings)
+def changed(before: Config, after: Config) -> list[str]:
+    return warn_restart_only(after, before)
 
 
-class Paths(unittest.TestCase):
-    def test_every_path_resolves(self):
-        # A typo here would raise on the first reload after the edit --
-        # inside the headset, in the draw loop, rather than at startup.
+class Names(unittest.TestCase):
+    def test_every_name_resolves(self):
         cfg = Config()
-        for name, path in RESTART_ONLY.items():
-            with self.subTest(name):
-                _setting(cfg, path)
-
-    def test_the_account_is_the_whole_of_it(self):
-        # The client is built once from it, whichever frontends are up.
-        # Everything else in the file is either re-readable or reopens
-        # the session that read it.
         for name in RESTART_ONLY:
             with self.subTest(name):
-                self.assertTrue(name.startswith("account."))
+                _setting(cfg, name)
+
+    def test_the_account_is_the_whole_of_it(self):
+        # The client is built once from all of it, whichever frontends
+        # are up. Everything else in the file is either re-readable or
+        # reopens the session that read it.
+        self.assertEqual(
+            set(RESTART_ONLY), {f"account.{key}" for key in FIELD_TYPES["account"]}
+        )
 
     def test_the_names_are_the_ones_in_the_file(self):
         # The warning tells the user what to go and change back, so it
-        # has to name the key as config.toml spells it, not as the
-        # sectioned dataclass does.
-        for name in RESTART_ONLY:
-            with self.subTest(name):
-                section, _, key = name.partition(".")
-                self.assertEqual(section, "account")
-                self.assertTrue(key)
+        # has to name the key as config.toml spells it.
+        self.assertIn("account.api_version", RESTART_ONLY)
 
 
 class Detection(unittest.TestCase):

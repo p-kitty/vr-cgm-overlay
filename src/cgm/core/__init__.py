@@ -1,10 +1,13 @@
 """The frontend-neutral half: fetching, config, and the schedules.
 
 Nothing in here needs a headset, so all of it runs under a desktop
-window or a bare test as readily as under the VR draw loop.
+window or a bare test as readily as with the overlay up.
 
-`cgm.core.poller` does reach into `cgm.face` for `TrendTuning`, because
-the fetch log and the face have to name the same trend source or the log
-will claim one the face is not drawing. That is the only crossing, and it
-goes downwards -- `cgm.face` imports nothing from here.
+`cgm.core` does reach into `cgm.face`, and only ever so that one number
+is not written down twice: `cgm.core.poller` takes `TrendTuning`, so the
+fetch log cannot name a trend source the face is not drawing, and
+`cgm.core.config` takes the graph's floor and time step, so a config is
+rejected against the axis it will actually be drawn on, and the face's
+defaults, so the settings start where the face does. The crossing goes
+one way only -- `cgm.face` imports nothing from here.
 """

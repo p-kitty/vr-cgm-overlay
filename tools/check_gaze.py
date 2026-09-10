@@ -30,27 +30,13 @@ import math
 import sys
 import time
 
-# openvr is an optional extra (`pip install -e .[vr]`), and none of this
-# needs it: the fade is arithmetic and one setOverlayAlpha call. A stub
-# keeps the check able to run on a core-only install, or with no SteamVR.
-try:
-    import openvr  # noqa: F401
-except ModuleNotFoundError:
-    import types
+import openvr_stub
 
-    class _HmdMatrix34_t:
-        def __init__(self) -> None:
-            self.m = [[0.0] * 4 for _ in range(3)]
+# None of this needs openvr: the fade is arithmetic and one
+# setOverlayAlpha call.
+openvr_stub.install()
 
-    stub = types.ModuleType("openvr")
-    stub.HmdMatrix34_t = _HmdMatrix34_t  # type: ignore[attr-defined]
-    sys.modules["openvr"] = stub
-
-from cgm.vr.overlay import (  # noqa: E402
-    GAZE_SMOOTH_SEC,
-    WristOverlay,
-    _gaze_alpha,
-)
+from cgm.vr.overlay import WristOverlay, _gaze_alpha  # noqa: E402
 
 FULL = 20.0
 FADE = 45.0

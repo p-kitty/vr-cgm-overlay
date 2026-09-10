@@ -38,6 +38,13 @@ except ImportError:  # not Windows
     winsound = None  # type: ignore[assignment]
 
 
+# The defaults for `polling.rearm_margin_mgdl` and `polling.repeat_every_min`,
+# which read them from here so an alert built without a config behaves
+# like one built from an empty config.toml.
+REARM_MGDL = 5.0
+REPEAT_MIN = 0.0
+
+
 class LowAlert:
     """Decides whether a reading should announce a low, and how often.
 
@@ -67,8 +74,8 @@ class LowAlert:
         self,
         low_mgdl: float,
         *,
-        rearm_mgdl: float = 5.0,
-        repeat_min: float = 0.0,
+        rearm_mgdl: float = REARM_MGDL,
+        repeat_min: float = REPEAT_MIN,
     ) -> None:
         self._low = low_mgdl
         self._rearm = rearm_mgdl
@@ -132,9 +139,9 @@ def play(sound_path: str = "") -> None:
     """Sound the alert once, without waiting for it to finish.
 
     SND_ASYNC is not optional. Without it PlaySound blocks until the
-    clip ends, which stalls the VR draw loop and freezes the window's
-    event loop -- for an alert whose entire purpose is to arrive while
-    something else is going on.
+    clip ends, which stalls the draw tick that called it and freezes the
+    window's event loop -- for an alert whose entire purpose is to
+    arrive while something else is going on.
 
     An empty path means the user's own configured Exclamation sound via
     MessageBeep, which is why nothing ships a WAV: a bundled tone is a

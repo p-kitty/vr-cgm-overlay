@@ -155,11 +155,8 @@ HINTS = {
 def sections() -> list[str]:
     """The sections the window offers, in the order it offers them.
 
-    All of them. `[vr]` was left out at first, on the grounds that
-    placement can only be judged with the headset on -- which is true and
-    is not a reason to withhold it, because pressing Save here is the
-    same loop as saving the file: the watcher picks either up within the
-    second. What was actually missing was a widget for three numbers.
+    All of them, in the file's order; the module docstring says why
+    `[vr]` is among them.
     """
     return list(config_mod.FIELD_TYPES)
 
@@ -283,8 +280,9 @@ def apply_values(cfg: config_mod.Config, values: dict[tuple[str, str], object]) 
     Tk. Raises ValueError naming the setting when a box holds something
     its field cannot be.
 
-    Whatever is not in `values` is left alone -- which is how `[vr]`
-    survives a save from a window that never showed it.
+    Whatever is not in `values` is left alone. The window always hands
+    over every box, so that is a property of this function rather than
+    of pressing Save.
     """
     for (section, key), value in values.items():
         setattr(
@@ -439,10 +437,11 @@ class SettingsWindow:
     def save(self) -> bool:
         """Write the boxes back to config.toml. True when something was.
 
-        Re-reads the file first, so a change made in a text editor while
-        this was open -- to `[vr]`, most likely, since that is what is
-        not here -- is not overwritten by the values this window was
-        opened with.
+        Every box is written, touched or not: after a Save the file holds
+        what the window shows. So an edit made in a text editor while
+        this was open is overwritten by the value the window opened
+        with. Editing the same file two ways at once is not a case this
+        is built for; close the window, edit, and open it again.
 
         Nothing is written when anything is wrong, and the reason is put
         on the window rather than in the log: whoever typed it is looking

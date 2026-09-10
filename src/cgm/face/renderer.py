@@ -86,6 +86,11 @@ GRAPH_LABEL_GUTTER = 46
 GRAPH_TOP = 244
 GRAPH_BOTTOM_MARGIN = 60
 
+# How old a reading gets before the face goes grey, when nobody says.
+# `display.stale_after_min` takes its default from here, so the preview
+# sheets and the running face agree about when grey starts.
+STALE_AFTER_MIN = 10.0
+
 # Tried in order; all ship with Windows.
 FONT_CANDIDATES = [
     "C:/Windows/Fonts/segoeuib.ttf",  # Segoe UI Bold
@@ -489,7 +494,7 @@ class WatchFaceRenderer:
     # -- public API ---------------------------------------------------------
 
     def render(
-        self, reading, *, stale_after_min: float = 10.0, now=None
+        self, reading, *, stale_after_min: float = STALE_AFTER_MIN, now=None
     ) -> Image.Image:
         """Draw the watch face for a reading.
 

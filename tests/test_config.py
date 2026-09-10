@@ -527,11 +527,12 @@ class Validation(ConfigTestCase):
 class UnknownKeys(ConfigTestCase):
     """A key nothing reads is an error rather than a shrug.
 
-    Every setting is loaded with `.get(key, default)`, which cannot tell
-    absent from misspelled or misfiled, so without this check the file
-    accepts anything and the setting simply does not happen. The rows
-    below are the ways that was reachable: right key wrong section, no
-    section at all, misspelled key, misspelled section.
+    `load` reads only the keys a dataclass declares, so a misspelled or
+    misfiled key is never looked for and looks the same as a missing
+    one. Without this check the file accepts anything and the setting
+    simply does not happen. The rows below are the ways that was
+    reachable: right key wrong section, no section at all, misspelled
+    key, misspelled section.
     """
 
     def test_a_key_in_the_wrong_section_is_rejected(self):

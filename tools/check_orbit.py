@@ -24,21 +24,10 @@ from __future__ import annotations
 import math
 import sys
 
-# openvr is an optional extra (`pip install -e .[vr]`), and the geometry
-# does not need it: only the matrix type it returns. A stub keeps the
-# check able to run on a core-only install, or with no SteamVR at all.
-try:
-    import openvr  # noqa: F401
-except ModuleNotFoundError:
-    import types
+import openvr_stub
 
-    class _HmdMatrix34_t:
-        def __init__(self) -> None:
-            self.m = [[0.0] * 4 for _ in range(3)]
-
-    stub = types.ModuleType("openvr")
-    stub.HmdMatrix34_t = _HmdMatrix34_t  # type: ignore[attr-defined]
-    sys.modules["openvr"] = stub
+# The geometry needs nothing from openvr but its matrix type.
+openvr_stub.install()
 
 from cgm.vr.armguide import MARKER_COUNT as MARKERS  # noqa: E402
 from cgm.vr.overlay import _billboard, _orbit_transform  # noqa: E402
