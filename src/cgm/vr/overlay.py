@@ -119,6 +119,32 @@ def _to_openvr(
     return matrix
 
 
+def _eased(elapsed: float, time_constant: float) -> float:
+    """How much of the remaining gap to close after `elapsed` seconds.
+
+    Exponential, so the motion depends on time rather than on how often
+    it is asked: about 63% of the gap is gone after one `time_constant`,
+    whatever the loop rate. A negative `elapsed` -- a clock read out of
+    order -- closes nothing rather than overshooting.
+    """
+    return 1.0 - math.exp(-max(0.0, elapsed) / time_constant)
+
+
+def _orbit_point(
+    centre: tuple[float, float, float], radius: float, angle: float
+) -> tuple[float, float, float]:
+    """Where `angle` around the arm puts something, in controller space.
+
+    The arm runs along the controller's Z through `centre`, and the angle
+    is measured from the top of the wrist (+Y) towards +X.
+    """
+    return (
+        centre[0] + math.sin(angle) * radius,
+        centre[1] + math.cos(angle) * radius,
+        centre[2],
+    )
+
+
 def _cross(a, b) -> tuple[float, float, float]:
     return (
         a[1] * b[2] - a[2] * b[1],
@@ -277,11 +303,10 @@ def _orbit_transform(
         # Both ends are inside [-limit, limit], so easing between them stays
         # inside it and sweeps over the top of the arm rather than under it.
         # Only limit_deg = 180 has no forbidden side for that to matter.
-        eased = 1.0 - math.exp(-max(0.0, elapsed) / ORBIT_SMOOTH_SEC)
-        angle = previous + (target - previous) * eased
+        angle = previous + (target - previous) * _eased(elapsed, ORBIT_SMOOTH_SEC)
 
+    position = _orbit_point(centre, radius, angle)
     nx, ny = math.sin(angle), math.cos(angle)
-    position = (centre[0] + nx * radius, centre[1] + ny * radius, centre[2])
 
     # Axes of the face in controller space, as columns: Z out of the face
     # towards the head, Y up the texture towards the hand, X = Y x Z.
@@ -506,12 +531,7 @@ class WristOverlay:
         """
         if not self._orbit or self._orbit_angle is None:
             return self._offset
-        cx, cy, cz = self._offset
-        return (
-            cx + math.sin(self._orbit_angle) * self._orbit_radius,
-            cy + math.cos(self._orbit_angle) * self._orbit_radius,
-            cz,
-        )
+        return _orbit_point(self._offset, self._orbit_radius, self._orbit_angle)
 
     def _apply_gaze(
         self, head: tuple[float, float, float], forward: tuple[float, float, float]
@@ -536,8 +556,9 @@ class WristOverlay:
                 self._gaze_fade,
                 self._gaze_min,
             )
-            eased = 1.0 - math.exp(-max(0.0, elapsed) / GAZE_SMOOTH_SEC)
-            self._gaze_factor += (target - self._gaze_factor) * eased
+            self._gaze_factor += (target - self._gaze_factor) * _eased(
+                elapsed, GAZE_SMOOTH_SEC
+            )
         self._apply_alpha()
 
     def _apply_guide(self, index: int, head: tuple[float, float, float]) -> None:
@@ -552,17 +573,12 @@ class WristOverlay:
             self._offset, 0.0, 180.0, (0.0, 0.0, 0.0), head, None, 0.0
         )
 
-        cx, cy, cz = self._offset
         limit = math.radians(self._orbit_limit)
         markers = []
         for i in range(MARKER_COUNT):
             # -1 at one end of the travel, +1 at the other, 0 in the middle.
             angle = (i / (MARKER_COUNT - 1) * 2.0 - 1.0) * limit
-            position = (
-                cx + math.sin(angle) * self._orbit_radius,
-                cy + math.cos(angle) * self._orbit_radius,
-                cz,
-            )
+            position = _orbit_point(self._offset, self._orbit_radius, angle)
             markers.append(_to_openvr(_billboard(position, head), position))
 
         self._guide.update(index, axis, markers)
