@@ -7,6 +7,7 @@ window or a bare test as readily as with the overlay up.
 is not written down twice: `cgm.core.poller` takes `TrendTuning`, so the
 fetch log cannot name a trend source the face is not drawing, and
 `cgm.core.config` takes the graph's floor and time step, so a config is
-rejected against the axis it will actually be drawn on. The crossing
-goes one way only -- `cgm.face` imports nothing from here.
+rejected against the axis it will actually be drawn on, and the face's
+defaults, so the settings start where the face does. The crossing goes
+one way only -- `cgm.face` imports nothing from here.
 """

@@ -38,6 +38,13 @@ except ImportError:  # not Windows
     winsound = None  # type: ignore[assignment]
 
 
+# The defaults for `polling.rearm_margin_mgdl` and `polling.repeat_every_min`,
+# which read them from here so an alert built without a config behaves
+# like one built from an empty config.toml.
+REARM_MGDL = 5.0
+REPEAT_MIN = 0.0
+
+
 class LowAlert:
     """Decides whether a reading should announce a low, and how often.
 
@@ -67,8 +74,8 @@ class LowAlert:
         self,
         low_mgdl: float,
         *,
-        rearm_mgdl: float = 5.0,
-        repeat_min: float = 0.0,
+        rearm_mgdl: float = REARM_MGDL,
+        repeat_min: float = REPEAT_MIN,
     ) -> None:
         self._low = low_mgdl
         self._rearm = rearm_mgdl

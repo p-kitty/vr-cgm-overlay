@@ -40,7 +40,10 @@ up for `TrendTuning`, so the fetch log cannot name a trend source the
 face is not drawing, and `cgm.core.config` reaches up for
 `AXIS_FLOOR_MGDL` and `TICK_MAJOR_MIN`, so the floor and the window
 length it rejects a config against are the floor the graph is drawn on
-and the step its time axis is labelled at.
+and the step its time axis is labelled at -- and for the face's own
+defaults (`Theme`, `TrendTuning`, `GraphTuning`, `STALE_AFTER_MIN`), so
+a preview drawn with no config at all uses the numbers an empty
+`config.toml` does.
 
 `NOTES.md` holds what is still open: unverified paths, limits that are
 not going away, decisions that still stand. Keep it out of `README.md`,

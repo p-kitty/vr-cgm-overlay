@@ -367,5 +367,35 @@ class Threading(unittest.TestCase):
         self.assertNotIn(threading.get_ident(), seen)
 
 
+class Wiring(unittest.TestCase):
+    """What `cgm.main` hands a new overlay.
+
+    `WristOverlay` has no defaults of its own -- `[vr]` is where they
+    live -- so a key the wiring forgot is a TypeError the moment a
+    session opens, with the headset on. Both halves are checked here
+    instead: that every key is handed over, and that the overlay takes
+    exactly those.
+    """
+
+    def test_every_vr_setting_is_handed_to_the_overlay(self):
+        from cgm.core.config import FIELD_TYPES, Config
+        from cgm.main import build_overlay
+
+        handed = build_overlay(lambda **kwargs: kwargs, Config())
+        self.assertEqual(set(handed), set(FIELD_TYPES["vr"]))
+
+    def test_the_overlay_takes_exactly_the_vr_settings(self):
+        import inspect
+
+        from cgm.core.config import FIELD_TYPES
+
+        try:
+            from cgm.vr.overlay import WristOverlay
+        except ImportError:
+            self.skipTest("no SteamVR bindings; pip install -e .[vr]")
+        taken = set(inspect.signature(WristOverlay).parameters)
+        self.assertEqual(taken, set(FIELD_TYPES["vr"]))
+
+
 if __name__ == "__main__":
     unittest.main()

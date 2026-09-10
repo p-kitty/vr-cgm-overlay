@@ -300,25 +300,29 @@ class WristOverlay:
     Use it as a context manager, or call close() without fail. If the
     process dies with the overlay still registered, SteamVR keeps the key
     and the next run cannot create it.
+
+    Every argument is required. They are the `[vr]` section one for one,
+    and `cgm.core.config.Vr` is where their defaults live; a second set
+    here would only be a copy for somebody to change on its own.
     """
 
     def __init__(
         self,
         *,
-        hand: str = "left",
-        width_m: float = 0.14,
-        offset: tuple[float, float, float] = (0.0, 0.02, 0.10),
-        rotation_deg: tuple[float, float, float] = (-40.0, 0.0, 0.0),
-        opacity: float = 1.0,
-        flip_vertical: bool = False,
-        orbit: bool = False,
-        orbit_radius_m: float = 0.06,
-        orbit_limit_deg: float = 120.0,
-        arm_guide: bool = False,
-        gaze_fade: bool = False,
-        gaze_full_deg: float = 20.0,
-        gaze_fade_deg: float = 45.0,
-        gaze_min_alpha: float = 0.25,
+        hand: str,
+        width_m: float,
+        offset: tuple[float, float, float],
+        rotation_deg: tuple[float, float, float],
+        opacity: float,
+        flip_vertical: bool,
+        orbit: bool,
+        orbit_radius_m: float,
+        orbit_limit_deg: float,
+        arm_guide: bool,
+        gaze_fade: bool,
+        gaze_full_deg: float,
+        gaze_fade_deg: float,
+        gaze_min_alpha: float,
     ) -> None:
         self._hand = hand
         self._offset = offset
