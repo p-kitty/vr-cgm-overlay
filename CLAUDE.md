@@ -157,7 +157,8 @@ back without losing the file's comments, the live reload and which
 settings a restart is still needed for, the colour thresholds, the
 window's compositing and title, what the settings window offers and what
 pressing Save means, the overlay's thread driven by a stand-in overlay,
-and that every import inside the package resolves -- including the lazy
+what one pass of the draw loop hands each frontend and the alert, and
+that every import inside the package resolves -- including the lazy
 ones in `run()`, which only execute with a headset attached. It deliberately does not mock the
 LibreLinkUp HTTP calls — the real risk there is the unofficial API
 changing shape, which only `--dry-run` can see — and it does not touch
