@@ -172,6 +172,18 @@ MARKER_THICKNESS = 14
 # the bar being the same length whichever frontend is showing it keeps
 # that one thing identical between them.
 MARKER_INSET = 32
+# The stale frame: an outline this far inside the card's edge, this wide.
+FRAME_INSET = 2
+FRAME_WIDTH = 6
+
+# The one strip of the card no marker ever lights, as the x range it
+# covers: down the right-hand edge, from where the top and bottom bars
+# stop to where the stale frame starts, the whole height of the card.
+# Nothing lights it because there is no right-hand marker, and the
+# desktop window counts on that -- it stands its gear and its VR mark
+# here, where an opaque label cannot cut a hole in a lit edge. A marker
+# on the right would leave them nowhere to go.
+CLEAR_COLUMN = (WIDTH - MARKER_INSET, WIDTH - FRAME_INSET - FRAME_WIDTH)
 
 # Status -> which edge of the card lights up. Position is the half of the
 # signal that does not depend on colour vision: above range lights the
@@ -625,15 +637,16 @@ class WatchFaceRenderer:
             # The whole outline, which is the one shape that cannot be
             # mistaken for a direction. Stale is not "high" or "low"; it is
             # "do not read this as either".
+            inset = FRAME_INSET
             draw.rounded_rectangle(
-                (2, 2, self.width - 3, self.height - 3),
-                # The outline runs 2px inside the card, so its radius
-                # is 2px tighter and follows the arc instead of cutting
+                (inset, inset, self.width - 1 - inset, self.height - 1 - inset),
+                # The outline runs inside the card, so its radius is that
+                # much tighter and follows the arc instead of cutting
                 # across it. Never below zero, though: a square card
-                # would take it to -2 and Pillow rejects that.
-                radius=max(0, self.corner_radius - 2),
+                # would take it negative and Pillow rejects that.
+                radius=max(0, self.corner_radius - inset),
                 outline=fill,
-                width=6,
+                width=FRAME_WIDTH,
             )
             return
 
