@@ -242,6 +242,16 @@ class FetchLog(unittest.TestCase):
         self.assertIn("(API)", line)
         self.assertNotIn("mg/dL/min", line)
 
+    def test_the_history_lag_is_logged(self):
+        # It is what decides between a bend and a fit, so a `(fit)` has
+        # to be readable against it on the same line.
+        entry = reading(slope=1.5)
+        entry.graph_newest_utc = entry.timestamp_utc - timedelta(minutes=25)
+        self.assertIn("history 25.0 min behind", self.log_line(entry))
+
+    def test_a_response_without_history_says_so(self):
+        self.assertIn("no history", self.log_line(reading()))
+
 
 if __name__ == "__main__":
     unittest.main()

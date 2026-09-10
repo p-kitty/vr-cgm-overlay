@@ -401,7 +401,7 @@ def segments(
     it close enough to connect to.
 
     The newest point is the exception. It is the current measurement,
-    folded into the series by `_parse_graph_data` because graphData
+    folded into the series by `_with_latest` because graphData
     stops short of it, and the distance back to graphData's own newest
     entry is publication lag rather than missing data -- see
     LAST_GAP_MIN. It is joined across up to that much, and left stranded
