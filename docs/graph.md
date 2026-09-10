@@ -109,6 +109,15 @@ Each of these is a rule rather than a preference:
 - **The newest point is marked in the status colour**, the same colour
   as the digits. It is the one place the graph and the number are the
   same fact, and it says which end is now.
+- **The line is red where it was low, and nowhere else.** Each stretch
+  that went under `low_mgdl` is red from where it crossed the dashed low
+  line to where it came back over it — cut at the crossing, not at the
+  nearest sample. That is how the phone app draws it, and it colours
+  nothing at the high end, so neither does this: the dashed
+  `very_high_mgdl` line and the axis growing to hold a hyper are what
+  mark the top. This is not the line taking the colour of the present
+  reading, which would repaint the last few hours every time the newest
+  point changed band; it is the line saying what actually happened.
 - **The labels follow `display.unit` and your own clock.** The levels
   read 50 / 100 / 150 … in mg/dL mode and 2.8 / 6 / 9 … in mmol/L; the
   times along the bottom are local. The comparisons behind all of it
