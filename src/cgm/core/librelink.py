@@ -103,7 +103,7 @@ FIT_WINDOW_MIN = 60.0
 #
 # BEND_MIN_GAP_MIN is how far apart two points have to be before the
 # rate between them means anything. The current measurement is folded
-# into the series at its own timestamp (see _parse_graph_data), so when
+# into the series at its own timestamp (see _with_latest), so when
 # `graphData` has just been published it can land a minute or two after
 # the newest graph point -- and two mg/dL of sensor jitter read off a
 # two minute gap is a rate of one mg/dL per minute, which is half of
@@ -158,6 +158,12 @@ class Reading:
     # holding them would only be a second verdict that can disagree with
     # the colour on the face.
     history: tuple[GlucosePoint, ...] = ()
+    # When the newest point graphData itself carried was taken, as
+    # distinct from the measurement folded onto the end of `history`.
+    # None when there was no graphData. Kept apart because the two can
+    # share a timestamp, and once folded together the series cannot say
+    # which of them its last point came from.
+    graph_newest_utc: datetime | None = None
 
     @property
     def value_mmol(self) -> float:
@@ -202,6 +208,20 @@ class Reading:
         """Minutes since the measurement, used to decide staleness."""
         now = now or datetime.now(timezone.utc)
         return (now - self.timestamp_utc).total_seconds() / 60.0
+
+    def history_lag_minutes(self) -> float | None:
+        """How far graphData's newest point trails this measurement.
+
+        Against the measurement rather than the clock, so this is the
+        publication delay of the history alone: a stalled upload ages
+        the measurement and the history together, and `age_minutes`
+        already says that. It is also the gap the graph draws in front
+        of the newest point, which is what cgm.face.graph's LAST_GAP_MIN
+        joins up. None when the response carried no graphData.
+        """
+        if self.graph_newest_utc is None:
+            return None
+        return (self.timestamp_utc - self.graph_newest_utc).total_seconds() / 60.0
 
     def display_value(self, unit: str) -> str:
         if unit == "mmol":
@@ -323,18 +343,12 @@ def read_segments(
     )
 
 
-def _parse_graph_data(
-    entries: list[dict] | None, latest: GlucosePoint
-) -> tuple[GlucosePoint, ...]:
+def _parse_graph_data(entries: list[dict] | None) -> tuple[GlucosePoint, ...]:
     """Turn the graphData array into a series, oldest first.
 
     Entries that will not parse are dropped rather than fatal. The
     series is supplementary -- the number is what the request was made
     for -- so one malformed sample must not cost the reading too.
-
-    `latest` is folded in because graphData stops short of the current
-    measurement, and a trend has to be anchored on the newest value
-    there is.
     """
     by_time: dict[datetime, float] = {}
     dropped = 0
@@ -348,6 +362,20 @@ def _parse_graph_data(
     if dropped:
         log.debug("dropped %d unparseable graphData entries", dropped)
 
+    return tuple(GlucosePoint(at, by_time[at]) for at in sorted(by_time))
+
+
+def _with_latest(
+    graph: tuple[GlucosePoint, ...], latest: GlucosePoint
+) -> tuple[GlucosePoint, ...]:
+    """The graph series with the current measurement folded onto it.
+
+    graphData stops short of the current measurement, and a trend has
+    to be anchored on the newest value there is. The same sample can
+    turn up in both halves of the response; it is one measurement, so
+    it becomes one point, and the measurement's value is the one kept.
+    """
+    by_time = dict(graph)
     by_time[latest.at] = latest.mgdl
     return tuple(GlucosePoint(at, by_time[at]) for at in sorted(by_time))
 
@@ -532,7 +560,8 @@ class LibreLinkUp:
             _parse_factory_timestamp(measurement["FactoryTimestamp"]),
             float(measurement["ValueInMgPerDl"]),
         )
-        history = _parse_graph_data((body.get("data") or {}).get("graphData"), latest)
+        graph = _parse_graph_data((body.get("data") or {}).get("graphData"))
+        history = _with_latest(graph, latest)
         log.debug("history: %d points", len(history))
 
         return Reading(
@@ -540,4 +569,5 @@ class LibreLinkUp:
             trend=int(measurement.get("TrendArrow") or 3),
             timestamp_utc=latest.at,
             history=history,
+            graph_newest_utc=graph[-1].at if graph else None,
         )

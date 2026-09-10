@@ -639,7 +639,9 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
         detail = f"local trend off, using the API arrow {reading.arrow}"
     else:
         detail = f"too little history, falling back to the API arrow {reading.arrow}"
-    print(f"history: {len(reading.history)} points; {detail}")
+    lag = reading.history_lag_minutes()
+    behind = "" if lag is None else f", the newest {lag:.1f} min behind the reading"
+    print(f"history: {len(reading.history)} points{behind}; {detail}")
     renderer.render(reading, stale_after_min=cfg.display.stale_after_min).save(out)
     print(f"preview image: {out}")
     return 0

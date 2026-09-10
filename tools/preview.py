@@ -97,7 +97,7 @@ def history(taken_at: datetime, values, step_min: float = GRAPH_RESOLUTION_MIN):
 
     `values` is oldest first and its last entry is the measurement
     itself, the way the API's own history is folded together in
-    `cgm.core.librelink._parse_graph_data`.
+    `cgm.core.librelink._with_latest`.
     """
     last = len(values) - 1
     return tuple(

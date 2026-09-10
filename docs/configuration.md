@@ -252,7 +252,9 @@ would otherwise read as calm glucose.
 
 The middle row is not theoretical: the history the API publishes lags
 the current measurement, often by 20 to 30 minutes, and past 45 the
-three most recent points stop being the last half hour.
+three most recent points stop being the last half hour. The fetch log
+says how far behind it is, as `history N min behind`, so a `(fit)` can
+be read against its likeliest cause on the same line.
 
 `[trend]` is re-read while running like `[display]` is, so `local` can be
 flipped with the headset on to see both arrows against the same reading.

@@ -50,7 +50,7 @@ Nothing has exercised these yet. Each says how to check it.
   hours at a median gap of 15.05 minutes, which is what
   `GRAPH_RESOLUTION_MIN` records. What decides whether the arrow bends
   is not that spacing but the lag: the current reading is folded into
-  the series (see `_parse_graph_data`) so it always holds the right edge,
+  the series (see `_with_latest`) so it always holds the right edge,
   and every other point has to come from `graphData`, so the further
   that lags the further back the third point sits. Past
   `BEND_MAX_SPAN_MIN` the arrow gives up the bend and fits a line
@@ -61,9 +61,10 @@ Nothing has exercised these yet. Each says how to check it.
   26 minutes and growing a minute a minute, which puts the third point
   at 41 and the bend just inside its 45. So a day with a lag much past
   30 draws the old straight arrow for most of it, and the log is the
-  only place that shows it. Neither `(fit)` nor `(API)` while the sensor
-  is scanning normally means the resolution has changed -- check the lag
-  first.
+  only place that shows it. Every `fetched:` line ends on the lag as
+  `history N min behind`, so neither `(fit)` nor `(API)` while the
+  sensor is scanning normally means the resolution has changed until
+  that number has been read.
 
   What no session has watched is how the arrow behaves as the lag
   crosses that line: the shape it draws changes under you, and whether
@@ -85,13 +86,20 @@ Nothing has exercised these yet. Each says how to check it.
   measured on 2026-09-07, 30 in the entry above -- and nothing has ever
   watched the lag long enough to say how far it really goes.
 
+  It is not bounded by the 15 minute spacing, which is the tempting
+  assumption: every lag measured so far has sat between 18 and 30, and
+  on 2026-09-10 it climbed from 18 to 25 over eight minutes without a
+  new point being published. Every `fetched:` line now carries it as
+  `history N min behind`, so a `--window` left open for an evening
+  bounds it with no tooling.
+
   It can be wrong in both directions, and each shows differently:
 
   - **Too low**: the trace breaks in front of the newest point again,
     the way it did at 30. That means a lag over an hour, which would be
-    news. Measure it before raising the constant -- compare the last
-    `FactoryTimestamp` in `graphData` against the one on
-    `glucoseMeasurement`, both in the same response.
+    news. Measure it before raising the constant: `history N min
+    behind` on the `fetched:` line is exactly that measurement, taken
+    within one response.
   - **Too high**: a stretch where the phone genuinely was not scanning
     gets joined up, and the graph draws a straight line across hours
     nobody measured. That is the failure worth catching, because unlike

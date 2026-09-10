@@ -69,12 +69,19 @@ class Poller:
             # is publishing on time -- and this is where it shows. A
             # bend that quietly stopped appearing would otherwise read
             # as calm glucose.
+            #
+            # And say how far behind the history is, because that is
+            # what decides it: past BEND_MAX_SPAN_MIN of lag the third
+            # point is too old to bend through, and a `(fit)` with no
+            # number beside it cannot say whether that is the reason.
             shape = self._trend.shape_for(self.reading)
+            lag = self.reading.history_lag_minutes()
             log.info(
-                "fetched: %.0f mg/dL %s (%.1f min old)",
+                "fetched: %.0f mg/dL %s (%.1f min old, %s)",
                 self.reading.value_mgdl,
                 shape.describe(self.reading.arrow),
                 self.reading.age_minutes(),
+                "no history" if lag is None else f"history {lag:.1f} min behind",
             )
         except AuthError as exc:
             # Bad credentials or an unaccepted agreement. Retrying will not

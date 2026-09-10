@@ -33,6 +33,7 @@ from cgm.core.librelink import (
     Reading,
     _parse_factory_timestamp,
     _parse_graph_data,
+    _with_latest,
     fit_slope,
     read_segments,
 )
@@ -447,30 +448,19 @@ class ReadingTrend(unittest.TestCase):
 class ParseGraphData(unittest.TestCase):
     """Turning the discarded half of the response into a series."""
 
-    def test_the_current_measurement_is_folded_in(self):
-        # graphData stops short of it, and the trend has to be anchored
-        # on the newest value there is.
-        latest = GlucosePoint(BASE, 140.0)
-        got = _parse_graph_data(
-            [graph_entry(BASE - timedelta(minutes=5), 120.0)], latest
-        )
-        self.assertEqual(got[-1], latest)
-
     def test_points_come_out_oldest_first(self):
-        latest = GlucosePoint(BASE, 100.0)
         entries = [
             graph_entry(BASE - timedelta(minutes=5), 120.0),
             graph_entry(BASE - timedelta(minutes=15), 110.0),
             graph_entry(BASE - timedelta(minutes=10), 115.0),
         ]
-        got = _parse_graph_data(entries, latest)
+        got = _parse_graph_data(entries)
         self.assertEqual(list(got), sorted(got))
 
     def test_unparseable_entries_are_dropped_not_fatal(self):
         # The number is what the request was made for; the series is
         # supplementary. If Abbott changes the shape of graphData this
         # has to degrade to the API arrow, not to no reading at all.
-        latest = GlucosePoint(BASE, 100.0)
         entries = [
             graph_entry(BASE - timedelta(minutes=5), 120.0),
             {"FactoryTimestamp": "yesterday", "ValueInMgPerDl": 90.0},
@@ -479,20 +469,33 @@ class ParseGraphData(unittest.TestCase):
             {"FactoryTimestamp": "9/4/2026 11:51:00 AM", "ValueInMgPerDl": "n/a"},
             None,
         ]
-        got = _parse_graph_data(entries, latest)
-        self.assertEqual(len(got), 2)
+        self.assertEqual(len(_parse_graph_data(entries)), 1)
+
+    def test_an_absent_series_is_empty(self):
+        self.assertEqual(_parse_graph_data(None), ())
+        self.assertEqual(_parse_graph_data([]), ())
+
+
+class WithLatest(unittest.TestCase):
+    """Folding the current measurement onto the end of the series."""
+
+    def test_the_current_measurement_is_folded_in(self):
+        # graphData stops short of it, and the trend has to be anchored
+        # on the newest value there is.
+        latest = GlucosePoint(BASE, 140.0)
+        graph = _parse_graph_data([graph_entry(BASE - timedelta(minutes=5), 120.0)])
+        self.assertEqual(_with_latest(graph, latest)[-1], latest)
 
     def test_an_absent_series_still_yields_the_reading(self):
         latest = GlucosePoint(BASE, 100.0)
-        self.assertEqual(_parse_graph_data(None, latest), (latest,))
-        self.assertEqual(_parse_graph_data([], latest), (latest,))
+        self.assertEqual(_with_latest((), latest), (latest,))
 
     def test_the_current_measurement_wins_a_shared_timestamp(self):
         # The same sample can appear in both halves of the response. It
         # is one measurement, so it has to become one point.
         latest = GlucosePoint(BASE, 140.0)
-        got = _parse_graph_data([graph_entry(BASE, 120.0)], latest)
-        self.assertEqual(got, (latest,))
+        graph = _parse_graph_data([graph_entry(BASE, 120.0)])
+        self.assertEqual(_with_latest(graph, latest), (latest,))
 
     def test_a_parsed_series_fits(self):
         # End to end: what the API sends comes back as something the
@@ -501,8 +504,32 @@ class ParseGraphData(unittest.TestCase):
         entries = [
             graph_entry(BASE - timedelta(minutes=m), 100.0 - m) for m in range(1, 16)
         ]
-        got = _parse_graph_data(entries, latest)
+        got = _with_latest(_parse_graph_data(entries), latest)
         self.assertAlmostEqual(fit_slope(got, 15.0), 1.0, places=6)
+
+
+class HistoryLag(unittest.TestCase):
+    """How far graphData's newest point trails the measurement."""
+
+    def test_measured_against_the_reading_not_the_clock(self):
+        # A stalled upload ages the measurement and the history together.
+        # That is age_minutes' number; this one has to stay put through
+        # it, or the two delays cannot be told apart in the log.
+        entry = Reading(
+            100.0, 3, BASE, graph_newest_utc=BASE - timedelta(minutes=25)
+        )
+        self.assertAlmostEqual(entry.history_lag_minutes(), 25.0)
+
+    def test_a_graph_point_on_the_measurement_itself_is_no_lag(self):
+        # The case the timestamp is kept apart for: folded into the
+        # series, this point would be indistinguishable from the
+        # measurement, and the lag would be read off the point before.
+        entry = Reading(100.0, 3, BASE, graph_newest_utc=BASE)
+        self.assertEqual(entry.history_lag_minutes(), 0.0)
+
+    def test_no_graph_data_is_no_lag_at_all(self):
+        # Not zero: zero would claim a history that is up to date.
+        self.assertIsNone(Reading(100.0, 3, BASE).history_lag_minutes())
 
 
 class ReadingAge(unittest.TestCase):

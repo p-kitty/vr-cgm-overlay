@@ -103,4 +103,4 @@ have actually been reported against existing clients.
 | Tokens expire with no refresh endpoint and no warning | A 401 triggers one automatic re-login |
 | `TrendArrow` is five buckets on undocumented thresholds | The trend is fitted from `graphData`; `TrendArrow` is the fallback |
 | `graphData` is downsampled to a point every 15 min | Three points are half an hour, which is the stretch the arrow bends through |
-| `graphData` lags the current measurement, by 20-30 min | Past a 45 minute span the arrow gives up the bend and falls back to a fit |
+| `graphData` lags the current measurement, by 20-30 min | Past a 45 minute span the arrow gives up the bend and falls back to a fit; every fetch logs the lag |
