@@ -45,6 +45,7 @@ from cgm.face.graph import (
     grid_levels,
     grid_step_mgdl,
     label_stride,
+    low_stretches,
     recent,
     segments,
     time_ticks,
@@ -505,6 +506,55 @@ class PublicationLag(unittest.TestCase):
         self.assertEqual(len(segments(points, last_gap_min=0)), 2)
 
 
+class LowStretches(unittest.TestCase):
+    """Which parts of a run are drawn red, and where each one is cut."""
+
+    LOW = THEME.low_mgdl
+
+    def stretches(self, *offsets_and_values):
+        return low_stretches(series(*offsets_and_values), self.LOW)
+
+    def test_a_run_that_stays_in_range_has_none(self):
+        self.assertEqual(self.stretches((30, 100), (15, 90), (0, 80)), [])
+
+    def test_the_level_itself_is_not_low(self):
+        # The same rule as the status: under low_mgdl, not on it. A line
+        # that touches the dashed line and turns back never went under.
+        self.assertEqual(self.stretches((30, 100), (15, self.LOW), (0, 100)), [])
+
+    def test_a_dip_is_cut_where_it_crosses_the_level(self):
+        (stretch,) = self.stretches((45, 100), (30, 60), (15, 100))
+        self.assertEqual([p.mgdl for p in stretch], [self.LOW, 60, self.LOW])
+        # Three quarters of the way from 100 down to 60 is where 70 is,
+        # so the red starts three quarters of the way along that segment
+        # rather than at either sample, and ends a quarter of the way back
+        # up the next.
+        self.assertEqual(stretch[0].at, NOW - timedelta(minutes=33.75))
+        self.assertEqual(stretch[-1].at, NOW - timedelta(minutes=26.25))
+
+    def test_a_run_that_starts_low_starts_red(self):
+        # Nothing before the first sample to cross from.
+        (stretch,) = self.stretches((30, 60), (15, 65), (0, 90))
+        self.assertEqual([p.mgdl for p in stretch], [60, 65, self.LOW])
+
+    def test_a_run_that_ends_low_is_red_to_the_end(self):
+        (stretch,) = self.stretches((30, 90), (15, 65), (0, 55))
+        self.assertEqual([p.mgdl for p in stretch], [self.LOW, 65, 55])
+        self.assertEqual(stretch[-1].at, NOW)
+
+    def test_each_dip_is_its_own_stretch(self):
+        found = self.stretches((60, 60), (45, 90), (30, 60), (15, 90), (0, 60))
+        self.assertEqual(len(found), 3)
+
+    def test_a_lone_low_point_is_a_stretch_of_one(self):
+        # A run of one is drawn as a dot, and so is its stretch.
+        (stretch,) = self.stretches((0, 55))
+        self.assertEqual([p.mgdl for p in stretch], [55])
+
+    def test_nothing_has_nothing_low_in_it(self):
+        self.assertEqual(low_stretches([], self.LOW), [])
+
+
 class CanvasSize(unittest.TestCase):
     def test_no_graph_is_the_face_that_always_shipped(self):
         # The overlay's default. This is a regression guard as much as a
@@ -678,6 +728,40 @@ class Drawing(unittest.TestCase):
             any(b - a > 1 for a, b in zip(xs, xs[1:])),
             "the threshold line came out solid",
         )
+
+    def test_a_stretch_that_went_low_is_drawn_red(self):
+        # The dashed low line is the same red, so it is taken away first:
+        # what is left is the trace, and it has to be under that line.
+        self.sparkline(())
+        dashed = set(self.coloured(THEME.color_low))
+        self.sparkline(series((240, 100), (180, 60), (120, 55), (60, 100), (0, 110)))
+        red = set(self.coloured(THEME.color_low)) - dashed
+        self.assertTrue(red, "the low stretch was not drawn red")
+        self.assertGreaterEqual(min(y for _, y in red), max(y for _, y in dashed) - 2)
+        # And only that stretch: the newest point is back in range, so
+        # the right of the plot is the ordinary trace.
+        self.assertLess(max(x for x, _ in red), self.box[2] - 20)
+        self.assertTrue(self.coloured(TRACE_COLOR))
+
+    def test_a_trace_that_never_went_low_has_no_red_in_it(self):
+        self.sparkline(())
+        dashed = set(self.coloured(THEME.color_low))
+        self.sparkline(series((30, 100), (15, 90), (0, 80)))
+        self.assertLessEqual(set(self.coloured(THEME.color_low)), dashed)
+
+    def test_the_high_end_is_not_coloured(self):
+        # The phone app colours nothing over the range, so a hyper is
+        # drawn in the ordinary trace colour however far over it goes.
+        self.sparkline(())
+        before = {
+            color: set(self.coloured(color))
+            for color in (THEME.color_high, THEME.color_very_high, THEME.color_low)
+        }
+        self.sparkline(series((45, 200), (30, 280), (15, 290), (0, 250)))
+        for color, pixels in before.items():
+            with self.subTest(color=color):
+                self.assertLessEqual(set(self.coloured(color)), pixels)
+        self.assertTrue(self.coloured(TRACE_COLOR))
 
     def test_a_single_point_still_leaves_a_mark(self):
         # A run of one cannot be a line. It has to be drawn as a dot or

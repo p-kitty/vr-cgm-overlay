@@ -6,7 +6,7 @@ hours of measurements -- and hands it over on `Reading.history`, where
 until now only the trend fit read it. So this costs no request, no
 cache and no storage; it is a second reading of data already in hand.
 
-Five rules decide what gets drawn, and each one is there because the
+Six rules decide what gets drawn, and each one is there because the
 obvious alternative lies:
 
   - **The Y axis does not shrink to the data.** Its bottom never moves
@@ -29,6 +29,11 @@ obvious alternative lies:
     about nothing else. The thresholds are the part the reader's own
     numbers put on the chart, which is why they are lines and not
     labels: a level worth a colour is not a level the scale counts in.
+  - **The line is red where it was low, and only there.** Not the
+    colour of the present reading -- that would repaint the past every
+    time the newest point changed band -- but of each stretch that
+    actually went under `low_mgdl`, as the phone app draws it. The high
+    end stays uncoloured, as the app's does. See TRACE_COLOR.
   - **The line breaks across gaps** rather than spanning them. A joined
     line over a stretch the sensor was not scanning draws data that was
     never measured. The newest point is the exception, because the gap
@@ -94,6 +99,24 @@ LAST_GAP_MIN = 60.0
 # instant the last point dipped. It is drawn as data instead, and only
 # the newest point takes the status colour, which is what ties it to the
 # number above it.
+#
+# The stretches that really were low are the exception, and the opposite
+# of that mistake: not the line painted by the present, but the line
+# saying what happened. Each is `color_low` from where the trace went
+# under `low_mgdl` to where it came back, cut at the crossing rather
+# than at whichever sample was nearer -- see `low_stretches`. That is
+# what the phone app draws, and the phone is the other place these
+# numbers are read.
+#
+# The high end stays this colour, however far over it goes, because the
+# app's does: watched through a high, it colours nothing there. The top
+# is not left unmarked for it -- the dashed very_high line and an axis
+# grown to hold the peak both say so -- and a second colour language
+# for the same trace would be the thing to avoid.
+#
+# The red never has to carry that alone. A low stretch is under the
+# dashed low line by definition, so where it sits says it as well, for
+# a reader who cannot tell this red from the grey around it.
 TRACE_COLOR = (226, 228, 235)
 TRACE_WIDTH = 3
 HEAD_RADIUS = 5
@@ -401,6 +424,56 @@ def segments(
     return runs
 
 
+def low_stretches(run, low_mgdl: float) -> list[list]:
+    """The parts of one run that were below `low_mgdl`, oldest first.
+
+    `run` is one of the stretches `segments` returns, so it is joined
+    throughout and the only question left is where it was low. A sample
+    exactly on the level is not low, the same as `Theme.status` says.
+
+    A stretch that starts or ends between two samples starts or ends
+    where the line between them crosses the level, worked out rather
+    than rounded to whichever sample was nearer. Rounded, the red would
+    begin a whole sample early or late -- up to fifteen minutes of line
+    drawn as low that was not, or the other way round -- and would stop
+    short of, or run past, the dashed line it is meant to meet.
+
+    A run of one below the level comes back as a stretch of one, which
+    is drawn as a dot the same way the run itself is.
+    """
+    stretches: list[list] = []
+    current: list | None = None
+    previous = None
+    for point in run:
+        low = point.mgdl < low_mgdl
+        if previous is not None and low != (previous.mgdl < low_mgdl):
+            crossing = _crossing(previous, point, low_mgdl)
+            if low:
+                current = [crossing]
+                stretches.append(current)
+            else:
+                current.append(crossing)
+                current = None
+        if low:
+            if current is None:
+                # The run itself starts low: nothing before it to cross.
+                current = []
+                stretches.append(current)
+            current.append(point)
+        previous = point
+    return stretches
+
+
+def _crossing(a, b, level: float) -> Point:
+    """Where the straight line from `a` to `b` passes `level`.
+
+    Only called with one on each side of it, so the two never share a
+    value and the division is safe.
+    """
+    fraction = (level - a.mgdl) / (b.mgdl - a.mgdl)
+    return Point(a.at + (b.at - a.at) * fraction, level)
+
+
 def time_ticks(
     start: datetime, end: datetime, step_min: float = TICK_MINOR_MIN
 ) -> list[datetime]:
@@ -468,7 +541,8 @@ def draw_sparkline(
 
     `accent` is the status colour the rest of the face is drawn in, used
     for the newest point alone. `theme` supplies the target range, the
-    two threshold levels and the card colour the band is mixed into.
+    two threshold levels, the card colour the band is mixed into, and
+    the red the stretches of trace below `low_mgdl` are drawn in.
     """
     left, top, right, bottom = box
     # The axis is inset by the head's radius at both ends, so a reading
@@ -614,18 +688,31 @@ def draw_sparkline(
                 anchor="mt",
             )
 
+    def plot(points) -> list[tuple[float, float]]:
+        return [(x_for(p.at), y_for(p.mgdl)) for p in points]
+
+    # Each run whole first, and its low stretches over the top of it,
+    # rather than the run cut into pieces of alternating colour: laid
+    # over, the red starts and stops on a line that is already there,
+    # so the joins cannot open a gap or lose the curve at a bend.
     for run in segments(shown):
-        plotted = [(x_for(p.at), y_for(p.mgdl)) for p in run]
-        if len(plotted) == 1:
-            _dot(draw, plotted[0], TRACE_WIDTH / 2, TRACE_COLOR)
-        else:
-            draw.line(plotted, fill=TRACE_COLOR, width=TRACE_WIDTH, joint="curve")
+        _trace(draw, plot(run), TRACE_COLOR)
+        for stretch in low_stretches(run, theme.low_mgdl):
+            _trace(draw, plot(stretch), theme.color_low)
 
     # The right-hand end is the measurement the digits above are showing,
     # so it is marked in their colour. It is the one place the graph and
     # the number are the same fact, and it says which end is now.
     newest = shown[-1]
     _dot(draw, (x_for(newest.at), y_for(newest.mgdl)), HEAD_RADIUS, accent)
+
+
+def _trace(draw, plotted: list[tuple[float, float]], color) -> None:
+    """A piece of the trace. One point cannot be a line, so it is a dot."""
+    if len(plotted) == 1:
+        _dot(draw, plotted[0], TRACE_WIDTH / 2, color)
+    else:
+        draw.line(plotted, fill=color, width=TRACE_WIDTH, joint="curve")
 
 
 def _grid_line(draw, y: float, left: float, right: float) -> None:
