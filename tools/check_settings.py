@@ -35,12 +35,26 @@ import tempfile
 import tkinter as tk
 from pathlib import Path
 
+from PIL import Image
+
 from cgm.core import config as config_mod
 from cgm.desk import settings as settings_mod
-from cgm.desk.window import FaceWindow
+from cgm.desk.window import FaceWindow, compose
+from cgm.face.renderer import STATUS_MARKERS
 from cgm.main import build_renderer
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# The window.scale values the corner marks are checked at. Not the
+# bottom of the allowed range: below about half size the column they
+# stand in is narrower than the blur resampling puts on the stale
+# frame's edge, and a face that small has no room to spare anywhere.
+MARK_SCALES = (0.5, 1.0, 2.0)
+
+# How far a pixel under a mark may be from the bare card and still count
+# as card. Resampling leaves the column a unit or two off flat; a lit
+# marker, drawn white here, is well over a hundred away.
+MARK_TOLERANCE = 8
 
 # The example is the file everybody starts from and it holds every
 # setting. The only thing wrong with it is the blank password, which
@@ -68,11 +82,47 @@ def say(what: str, detail) -> None:
     print(f"  {what:32} {detail}")
 
 
+def marks_cover(face: FaceWindow, cfg) -> list[str]:
+    """Every place the gear or the VR mark hides part of a status marker.
+
+    The marks are opaque labels, so over a lit edge they cut a dark box
+    out of it -- which is how a high used to look, with the VR mark in
+    the middle of the top bar and the gear against its end. Each card is
+    drawn from its marker alone, one per entry in STATUS_MARKERS, so a
+    marker added later is checked without being listed here, and in
+    white, so there is no accent a covered pixel could pass for card in.
+    """
+    renderer = build_renderer(cfg, with_graph=True, rounded=False)
+    ground = compose(Image.new("RGBA", (1, 1), renderer.theme.color_bg), 1.0)
+    ground = ground.getpixel((0, 0))
+    before = face._scale
+    found = []
+    for scale in MARK_SCALES:
+        face.set_scale(scale)
+        for status, marker in STATUS_MARKERS.items():
+            card, _draw = renderer._new_canvas((255, 255, 255), marker)
+            face.set_image(card)
+            face._root.update()
+            shown = compose(card, scale)
+            for mark in (face._gear, face._badge):
+                x, y = mark.winfo_x(), mark.winfo_y()
+                under = shown.crop((x, y, x + mark.winfo_width(), y + mark.winfo_height()))
+                worst = max(
+                    max(abs(a - b) for a, b in zip(colour, ground))
+                    for _count, colour in under.getcolors(under.width * under.height)
+                )
+                if worst > MARK_TOLERANCE:
+                    found.append(f"{mark.cget('text')!a} on {status} at {scale}")
+    face.set_scale(before)
+    return found
+
+
 def check(path: Path, face: FaceWindow, show: bool) -> None:
     cfg = config_mod.load(path)
-    face.set_image(
-        build_renderer(cfg, with_graph=False, rounded=False).render_message("SETTINGS")
+    message = build_renderer(cfg, with_graph=False, rounded=False).render_message(
+        "SETTINGS"
     )
+    face.set_image(message)
 
     # The two gestures. `cgm.main` binds them to opening the settings;
     # here they are bound to a list, so what is asserted is that the
@@ -101,6 +151,13 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     face._root.update()
     assert not face._badge.winfo_ismapped(), "the VR mark stayed up"
     say("the VR mark comes and goes", "shown while a controller has the face")
+
+    face.set_vr(True)
+    covered = marks_cover(face, cfg)
+    assert not covered, "a corner mark sits on a marker: " + "; ".join(covered)
+    face.set_vr(False)
+    face.set_image(message)
+    say("the marks cover no marker", f"every status, at scales {MARK_SCALES}")
 
     window = settings_mod.SettingsWindow(opened[0], path)
     face._root.update()
