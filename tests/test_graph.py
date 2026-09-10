@@ -176,8 +176,6 @@ class Formatting(unittest.TestCase):
                         value_mgdl=mgdl,
                         trend=3,
                         timestamp_utc=NOW,
-                        is_high=False,
-                        is_low=False,
                     )
                     self.assertEqual(
                         format_value(mgdl, unit), same.display_value(unit)
@@ -694,8 +692,6 @@ def _reading(mgdl: float = 110.0, history=None) -> Reading:
         value_mgdl=mgdl,
         trend=3,
         timestamp_utc=NOW,
-        is_high=False,
-        is_low=False,
         history=history or series((30, 100), (15, 105), (0, mgdl)),
     )
 

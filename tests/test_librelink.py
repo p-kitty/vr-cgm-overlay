@@ -52,8 +52,6 @@ def reading(mgdl=100.0, trend=3, age_min=0.0, slope=None) -> Reading:
         value_mgdl=mgdl,
         trend=trend,
         timestamp_utc=taken_at,
-        is_high=False,
-        is_low=False,
         history=() if slope is None else series(slope, ends_at=taken_at),
     )
 
@@ -417,8 +415,6 @@ class ReadingTrend(unittest.TestCase):
             value_mgdl=100.0,
             trend=3,
             timestamp_utc=taken_at,
-            is_high=False,
-            is_low=False,
             history=series(1.7, ends_at=taken_at),
         )
         for rate in entry.segment_rates():
@@ -443,8 +439,6 @@ class ReadingTrend(unittest.TestCase):
             value_mgdl=100.0,
             trend=3,
             timestamp_utc=taken_at,
-            is_high=False,
-            is_low=False,
             history=series(1.7, ends_at=taken_at),
         )
         self.assertAlmostEqual(entry.slope_mgdl_per_min(15.0), 1.7, places=6)
@@ -514,7 +508,7 @@ class ParseGraphData(unittest.TestCase):
 class ReadingAge(unittest.TestCase):
     def test_age_against_a_given_now(self):
         stamp = datetime(2026, 9, 4, 12, 0, 0, tzinfo=timezone.utc)
-        entry = Reading(100.0, 3, stamp, False, False)
+        entry = Reading(100.0, 3, stamp)
         now = stamp + timedelta(minutes=7, seconds=30)
         self.assertAlmostEqual(entry.age_minutes(now), 7.5)
 

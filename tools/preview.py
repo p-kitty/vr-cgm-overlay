@@ -108,8 +108,6 @@ def reading(mgdl: float, trend: int, age_min: float, values=None) -> Reading:
         value_mgdl=mgdl,
         trend=trend,
         timestamp_utc=taken_at,
-        is_high=mgdl > 180,
-        is_low=mgdl < 70,
         history=history(taken_at, values) if values else (),
     )
 
@@ -147,8 +145,6 @@ def bent(values: tuple[float, float, float]) -> Reading:
         value_mgdl=values[-1],
         trend=3,
         timestamp_utc=ANCHOR,
-        is_high=False,
-        is_low=False,
         history=history(ANCHOR, list(values)),
     )
 
@@ -168,8 +164,6 @@ def gapped(mgdl: float, trend: int) -> Reading:
         value_mgdl=mgdl,
         trend=trend,
         timestamp_utc=taken_at,
-        is_high=False,
-        is_low=False,
         history=before + after,
     )
 

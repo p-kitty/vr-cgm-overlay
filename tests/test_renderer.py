@@ -73,8 +73,6 @@ def reading(trend: int = 3, slope: float | None = None, history=None) -> Reading
         value_mgdl=100.0,
         trend=trend,
         timestamp_utc=taken_at,
-        is_high=False,
-        is_low=False,
         history=history,
     )
 

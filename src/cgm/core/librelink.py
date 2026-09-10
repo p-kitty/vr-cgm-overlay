@@ -152,8 +152,11 @@ class Reading:
     value_mgdl: float
     trend: int
     timestamp_utc: datetime
-    is_high: bool
-    is_low: bool
+    # The measurement also carries `isHigh` and `isLow`. They are not
+    # read: they are judged against the thresholds set in the phone app,
+    # and every range check here is against `[thresholds]` instead, so
+    # holding them would only be a second verdict that can disagree with
+    # the colour on the face.
     history: tuple[GlucosePoint, ...] = ()
 
     @property
@@ -536,7 +539,5 @@ class LibreLinkUp:
             value_mgdl=latest.mgdl,
             trend=int(measurement.get("TrendArrow") or 3),
             timestamp_utc=latest.at,
-            is_high=bool(measurement.get("isHigh")),
-            is_low=bool(measurement.get("isLow")),
             history=history,
         )
