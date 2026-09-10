@@ -321,6 +321,180 @@ def _drive(tick) -> None:
             next_tick = time.monotonic()  # fell behind; do not chase it
 
 
+def settings_opener(config_path: Path):
+    """What the gear on the window calls: one settings window at a time.
+
+    The settings window writes config.toml and stops there, so nothing
+    else has to know it exists: the edit comes back round through the
+    watcher like any other. One at a time -- a second copy of the same
+    file, opened over the first, would be two answers to the same
+    question.
+    """
+    # Lazy for the same reason `cgm.desk.window` is: tkinter.
+    from cgm.desk.settings import SettingsWindow
+
+    settings = None
+
+    def open_settings(master) -> None:
+        nonlocal settings
+        if settings is not None and settings.alive():
+            settings.lift()
+            return
+        try:
+            settings = SettingsWindow(master, config_path)
+        except (OSError, ValueError) as exc:
+            # The file is unreadable, which the running process has
+            # survived by keeping what it already loaded. Say so rather
+            # than taking the window down with it.
+            log.error("cannot open the settings: %s", exc)
+
+    return open_settings
+
+
+class Tick:
+    """The work done once a second: take an edit, draw, announce a low.
+
+    `run` builds the poller, the frontends and the rest, and hands one of
+    these to whichever loop owns the process. Everything that ties them
+    together happens in here -- which frontend gets which face, what a
+    reload reaches, when the one alert fires -- and nothing in here
+    touches Tk or OpenVR directly, so tests/test_tick.py drives it with
+    stand-ins for all of them.
+
+    `window` and `session` are None for the half that is not running.
+    """
+
+    def __init__(
+        self,
+        cfg: config_mod.Config,
+        config_path: Path,
+        *,
+        poller,
+        watcher,
+        alert: LowAlert,
+        window=None,
+        session=None,
+    ) -> None:
+        self.cfg = cfg
+        self._path = config_path
+        self._poller = poller
+        self._watcher = watcher
+        self._alert = alert
+        self._window = window
+        self._session = session
+        self._window_face: WatchFaceRenderer | None = None
+        self._vr_face: WatchFaceRenderer | None = None
+        self._build_faces(cfg)
+
+    def _build_faces(self, cfg: config_mod.Config) -> None:
+        """One renderer per frontend that is up, built from `cfg`.
+
+        Rebuilt on every reload rather than retuned. A graph turned on or
+        off changes the card's height: the window takes its size from the
+        image and resizes on the next frame, and the overlay's set_image
+        rebuilds its buffer -- it is sized by width, so the card keeps
+        its width in metres and grows downwards.
+        """
+        if self._session is not None:
+            self._vr_face = build_renderer(cfg, with_graph=cfg.graph.in_vr)
+        if self._window is not None:
+            self._window_face = build_renderer(
+                cfg, with_graph=cfg.graph.in_window, rounded=False
+            )
+
+    def show_message(self, message: str) -> None:
+        """Put a message card on every frontend, before there is a reading."""
+        if self._session is not None:
+            self._session.frame = (self._vr_face.render_message(message), False)
+        if self._window is not None:
+            self._window.set_image(self._window_face.render_message(message))
+
+    def __call__(self) -> None:
+        edited = self._watcher.poll()
+        if edited is not None:
+            self.reload(edited)
+
+        # One read each. The fetch thread replaces both with a single
+        # assignment, and `error` is only consulted when there is no
+        # reading, so a pair caught mid-swap still describes a state the
+        # poller was really in.
+        reading = self._poller.reading
+        error = self._poller.error
+        self._draw(reading, error)
+        self._announce(reading)
+
+    def reload(self, edited: config_mod.Config) -> None:
+        """Hand an edited config to everything that can take it live."""
+        cfg = self.cfg
+        warn_restart_only(edited, cfg)
+        self._poller.set_interval(edited.polling.interval_sec)
+        self._poller.set_trend(build_trend(edited))
+        self._alert.set_tuning(**alert_tuning(edited))
+        if self._session is not None:
+            # The whole config in one assignment; the thread applies it
+            # on its next pass. Handed over before the reopen below, so
+            # the session that opens next reads the edit rather than what
+            # it replaced.
+            self._session.settings = edited
+            if edited.vr.hand != cfg.vr.hand:
+                log.info("following the %s controller", edited.vr.hand)
+                self._session.restart()
+        if self._window is not None:
+            self._window.set_scale(edited.window.scale)
+            self._window.set_always_on_top(edited.window.always_on_top)
+        self._build_faces(edited)
+        self.cfg = edited
+        log.info("reloaded %s", self._path)
+
+    def _draw(self, reading, error: str | None) -> None:
+        cfg = self.cfg
+        if self._window is not None:
+            self._window.set_image(
+                face_image(
+                    self._window_face,
+                    reading,
+                    error,
+                    stale_after_min=cfg.display.stale_after_min,
+                )
+            )
+            self._window.set_title(_window_title(reading, error, cfg.display.unit))
+            # The one thing that travels back from the VR half. The window
+            # is otherwise identical whether SteamVR is running or not, so
+            # without this the only way to know the face is on a
+            # controller is the log.
+            self._window.set_vr(self._session is not None and self._session.attached)
+
+        if self._session is not None:
+            # No reading has ever arrived: there is no low on the face to
+            # protect from the gaze fade. A failed fetch does not land
+            # here, because the last reading stays up.
+            is_low = (
+                reading is not None and reading.value_mgdl < cfg.thresholds.low_mgdl
+            )
+            self._session.frame = (
+                face_image(
+                    self._vr_face,
+                    reading,
+                    error,
+                    stale_after_min=cfg.display.stale_after_min,
+                ),
+                is_low,
+            )
+
+    def _announce(self, reading) -> None:
+        """Once for the process, not once per frontend.
+
+        When to announce is LowAlert's decision -- once on the way in,
+        and not again until the reading has climbed clear of the
+        threshold.
+        """
+        if not self.cfg.polling.alert_on_low:
+            return
+        value = reading.value_mgdl if reading is not None else None
+        if self._alert.update(value, time.monotonic()):
+            fire_alert(self.cfg, self._session)
+
+
 def run(
     cfg: config_mod.Config,
     config_path: Path,
@@ -371,13 +545,6 @@ def run(
             overlay_class, session_class = WristOverlay, VrSession
 
     poller = Poller(build_client(cfg), cfg.polling.interval_sec, build_trend(cfg))
-    watcher = ConfigWatcher(config_path)
-    alert = LowAlert(**alert_tuning(cfg))
-
-    session = None
-    window = None
-    vr_face = None
-    window_face = None
 
     # An ExitStack rather than a nest of `with`: which of these there are
     # is decided at runtime, and the alternative is the same body written
@@ -389,9 +556,9 @@ def run(
         # Windows retitles "Not Responding".
         stack.enter_context(Fetcher(poller))
 
+        session = None
         if with_vr:
             stack.enter_context(fine_timer())
-            vr_face = build_renderer(cfg, with_graph=cfg.graph.in_vr)
             # `session.settings` is the config the VR half is running on,
             # so the overlay is rebuilt from it and there is no second
             # copy to keep in step.
@@ -399,134 +566,36 @@ def run(
                 lambda: build_overlay(overlay_class, session.settings), apply_vr
             )
             session.settings = cfg
-            session.frame = (vr_face.render_message("CONNECTING"), False)
-            # Started last, so the first thing the thread finds is the
-            # config and the frame above rather than None.
-            stack.enter_context(session)
 
+        window = None
         if with_window:
             # tkinter is a stdlib module some builds of Python leave out,
             # and PIL.ImageTk needs it in turn, so this import is lazy
             # for the same reason the overlay's is.
-            from cgm.desk.settings import SettingsWindow
             from cgm.desk.window import FaceWindow
 
-            window_face = build_renderer(
-                cfg, with_graph=cfg.graph.in_window, rounded=False
-            )
             window = stack.enter_context(
                 FaceWindow(
                     scale=cfg.window.scale, always_on_top=cfg.window.always_on_top
                 )
             )
-            window.set_image(window_face.render_message("CONNECTING"))
-
-            # The settings window writes config.toml and stops there, so
-            # nothing below has to know it exists: the edit comes back
-            # round through the watcher like any other. One at a time --
-            # a second copy of the same file, opened over the first,
-            # would be two answers to the same question.
-            settings = None
-
-            def open_settings(master) -> None:
-                nonlocal settings
-                if settings is not None and settings.alive():
-                    settings.lift()
-                    return
-                try:
-                    settings = SettingsWindow(master, config_path)
-                except (OSError, ValueError) as exc:
-                    # The file is unreadable, which the running process
-                    # has survived by keeping what it already loaded.
-                    # Say so rather than taking the window down with it.
-                    log.error("cannot open the settings: %s", exc)
-
-            window.on_menu(open_settings)
+            window.on_menu(settings_opener(config_path))
             log.info("click the gear on the face for settings")
 
-        def tick() -> None:
-            nonlocal cfg, vr_face, window_face
-
-            edited = watcher.poll()
-            if edited is not None:
-                warn_restart_only(edited, cfg)
-                poller.set_interval(edited.polling.interval_sec)
-                poller.set_trend(build_trend(edited))
-                alert.set_tuning(**alert_tuning(edited))
-                if session is not None:
-                    # The whole config in one assignment; the thread
-                    # applies it on its next pass. Handed over before the
-                    # reopen below, so the session that opens next reads
-                    # the edit rather than what it replaced.
-                    session.settings = edited
-                    if edited.vr.hand != cfg.vr.hand:
-                        log.info("following the %s controller", edited.vr.hand)
-                        session.restart()
-                    # A graph turned on or off changes the texture's
-                    # height, which set_image handles by rebuilding its
-                    # buffer. The overlay is sized by width, so the card
-                    # keeps its width in metres and grows downwards.
-                    vr_face = build_renderer(edited, with_graph=edited.graph.in_vr)
-                if window is not None:
-                    window.set_scale(edited.window.scale)
-                    window.set_always_on_top(edited.window.always_on_top)
-                    # The window takes its size from the image, so
-                    # turning the graph on here resizes it on the next
-                    # frame the same way a scale change does.
-                    window_face = build_renderer(
-                        edited, with_graph=edited.graph.in_window, rounded=False
-                    )
-                cfg = edited
-                log.info("reloaded %s", config_path)
-
-            # One read each. The fetch thread replaces both with a single
-            # assignment, and `error` is only consulted when there is no
-            # reading, so a pair caught mid-swap still describes a state
-            # the poller was really in.
-            reading = poller.reading
-            error = poller.error
-
-            if window is not None:
-                window.set_image(
-                    face_image(
-                        window_face,
-                        reading,
-                        error,
-                        stale_after_min=cfg.display.stale_after_min,
-                    )
-                )
-                window.set_title(_window_title(reading, error, cfg.display.unit))
-                # The one thing that travels back from the VR half. The
-                # window is otherwise identical whether SteamVR is
-                # running or not, so without this the only way to know
-                # the face is on a controller is the log.
-                window.set_vr(session is not None and session.attached)
-
-            if session is not None:
-                # No reading has ever arrived: there is no low on the
-                # face to protect from the gaze fade. A failed fetch does
-                # not land here, because the last reading stays up.
-                is_low = (
-                    reading is not None
-                    and reading.value_mgdl < cfg.thresholds.low_mgdl
-                )
-                session.frame = (
-                    face_image(
-                        vr_face,
-                        reading,
-                        error,
-                        stale_after_min=cfg.display.stale_after_min,
-                    ),
-                    is_low,
-                )
-
-            # Once for the process, not once per frontend. When to
-            # announce is LowAlert's decision -- once on the way in, and
-            # not again until the reading has climbed clear of the
-            # threshold.
-            value = reading.value_mgdl if reading is not None else None
-            if cfg.polling.alert_on_low and alert.update(value, time.monotonic()):
-                fire_alert(cfg, session)
+        tick = Tick(
+            cfg,
+            config_path,
+            poller=poller,
+            watcher=ConfigWatcher(config_path),
+            alert=LowAlert(**alert_tuning(cfg)),
+            window=window,
+            session=session,
+        )
+        tick.show_message("CONNECTING")
+        if session is not None:
+            # Started last, so the first thing the thread finds is the
+            # config and the frame above rather than None.
+            stack.enter_context(session)
 
         if window is not None:
             # Tk owns the loop, so the work is handed to it rather than
