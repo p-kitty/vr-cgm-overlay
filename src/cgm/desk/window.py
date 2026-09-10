@@ -13,11 +13,12 @@ a second monitor this is the whole application minus the headset.
 
 The other is verification. Several things about this app can only be
 judged over hours -- whether the fetch schedule holds across a long
-session, whether a token expiry recovers on its own, whether an hour is
-the right trend window against a real day. All of those are `cgm.core`
-and `cgm.face` behaviour with no VR in them, and every one of them used
-to be gated behind wearing a headset for as long as it took to find out.
-They can be watched at a desk now. `NOTES.md` says which.
+session, whether a token expiry recovers on its own, whether
+`trend.fast_mgdl_min` reads right against a real day. All of those are
+`cgm.core` and `cgm.face` behaviour with no VR in them, and every one
+of them used to be gated behind wearing a headset for as long as it
+took to find out. They can be watched at a desk now. `NOTES.md` says
+which.
 
 tkinter is imported at module scope, which is why `cgm.main` imports
 this module lazily: a Python without tkinter should still be able to run

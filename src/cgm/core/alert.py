@@ -132,9 +132,9 @@ def play(sound_path: str = "") -> None:
     """Sound the alert once, without waiting for it to finish.
 
     SND_ASYNC is not optional. Without it PlaySound blocks until the
-    clip ends, which stalls the VR draw loop and freezes the window's
-    event loop -- for an alert whose entire purpose is to arrive while
-    something else is going on.
+    clip ends, which stalls the draw tick that called it and freezes the
+    window's event loop -- for an alert whose entire purpose is to
+    arrive while something else is going on.
 
     An empty path means the user's own configured Exclamation sound via
     MessageBeep, which is why nothing ships a WAV: a bundled tone is a

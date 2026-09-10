@@ -1,19 +1,15 @@
 """Running the fetch schedule on a thread of its own.
 
 `Poller.poll` makes a blocking HTTPS request, and the client gives it
-fifteen seconds before it gives up. Whether that matters depends
-entirely on what else the calling loop owes somebody.
+fifteen seconds before it gives up. Fifteen seconds of Tk not returning
+to its event loop is fifteen seconds of a window that does not repaint
+and that Windows retitles "Not Responding".
 
-The VR loop can afford to call it inline: SteamVR's compositor keeps
-drawing the last frame at the live controller pose whatever this process
-is doing, so a stalled loop looks like a face that is not updating, and
-it was only going to update once a minute anyway. A GUI has nobody doing
-that for it. Fifteen seconds of not returning to the event loop is
-fifteen seconds of a window that does not repaint and that Windows
-retitles "Not Responding".
-
-So the schedule can be handed to this instead, and the loop that owns
-the screen never blocks on the network.
+So the schedule always runs here, whichever frontends are up, and the
+loop that owns the screen never blocks on the network. The overlay
+could have survived without it -- SteamVR's compositor keeps drawing
+the last frame at the live controller pose whatever this process is
+doing -- but one schedule in one place is simpler than two.
 
 It lives in `cgm.core` rather than beside the window because it needs
 nothing but a poller and a clock. Nothing here knows what the readings

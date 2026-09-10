@@ -1,8 +1,8 @@
 """Picking up edits to config.toml without restarting.
 
 Frontend-neutral: it only compares a file stamp and re-reads the file,
-so a desktop window can poll it on a timer the same way the VR draw
-loop does.
+so whichever loop owns the screen polls it once a tick -- Tk's timer
+with a window up, `cgm.main._drive` without one.
 """
 
 from __future__ import annotations

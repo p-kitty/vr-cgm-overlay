@@ -106,8 +106,8 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     face._root.update()
     rows = window._vars
 
-    # One widget per offered setting, and none for the section that is
-    # deliberately missing.
+    # One widget per offered setting, and none for anything that is not
+    # a setting.
     expected = {
         (section, key)
         for section in settings_mod.sections()

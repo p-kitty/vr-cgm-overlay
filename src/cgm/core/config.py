@@ -316,13 +316,14 @@ def _listed(names) -> str:
 def _check_keys(raw: dict) -> None:
     """Refuse a file that contains anything nothing reads.
 
-    Every setting below is read with `.get(key, default)`, which cannot
-    tell a key that is absent from one that is misspelled or filed under
-    the wrong section. Both then do nothing, silently, and the only
-    evidence is a setting that appears not to work -- which reads as a
-    broken feature rather than a typo. `[thresholds]` is why this is an
-    error and not a warning: someone raising `low_mgdl` to match their
-    own low would otherwise find out when an alert did not fire.
+    `load` reads only the keys a dataclass declares, so a key that is
+    misspelled or filed under the wrong section is never looked for, and
+    looks exactly like one that is absent. It then does nothing,
+    silently, and the only evidence is a setting that appears not to
+    work -- which reads as a broken feature rather than a typo.
+    `[thresholds]` is why this is an error and not a warning: someone
+    raising `low_mgdl` to match their own low would otherwise find out
+    when an alert did not fire.
 
     Every rejection carries something to act on. A near miss is named, a
     misfiled key is sent to its section, and a key that resembles nothing

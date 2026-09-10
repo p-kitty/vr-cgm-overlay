@@ -1,8 +1,8 @@
 """The fetch schedule and its backoff.
 
 Frontend-neutral: it takes `now` as an argument and its client as a
-constructor argument, so it runs the same under a VR draw loop, a GUI
-event loop, or a test with no clock at all.
+constructor argument, so it runs the same on the fetch thread
+(`cgm.core.fetcher`) or in a test with no clock at all.
 """
 
 from __future__ import annotations
