@@ -82,10 +82,14 @@ HYPER = DAY[:21] + [178, 192, 221, 258, 288, 321, 356, 372, 361, 340, 318, 297]
 # And ending under the floor, which does not move.
 UNDER = DAY[:23] + [131, 122, 110, 96, 84, 73, 64, 55, 48, 44]
 
+# The same day with a low in the night it has since come out of. One
+# sample sits exactly on low_mgdl on the way down, which is not low.
+NIGHT_LOW = [103, 94, 85, 77, 70, 64, 59, 57, 61, 68, 82, 105] + DAY[12:]
+
 # The bug this guards against has already happened once: at 32 the trace
 # stopped short of the left of the plot and it looked like a drawing
 # fault rather than fifteen minutes of missing sample.
-assert len(DAY) == len(HIGH) == len(HYPER) == len(UNDER) == POINTS
+assert len(DAY) == len(HIGH) == len(HYPER) == len(UNDER) == len(NIGHT_LOW) == POINTS
 
 
 def history(taken_at: datetime, values, step_min: float = GRAPH_RESOLUTION_MIN):
@@ -236,6 +240,12 @@ def debug(
         # the bottom of the scale and not as the line being clipped, now
         # that the floor is one rule among six rather than the only one.
         face(graphed, reading(44, 1, 1, UNDER)),
+        # A low that is over. The face is green because now is fine, and
+        # the stretch under the dashed line is red because then was not:
+        # check the red starts and stops on that line rather than at a
+        # sample either side of it, and that it reads as history rather
+        # than as the face disagreeing with itself.
+        face(graphed, reading(110, 3, 1, NIGHT_LOW)),
         # And in mmol/L, where the level labels convert and nothing
         # behind them does.
         face(mmol, reading(110, 3, 1, DAY)),
