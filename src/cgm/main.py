@@ -146,11 +146,27 @@ def build_trend(cfg: config_mod.Config) -> TrendTuning:
     )
 
 
-def build_alert(cfg: config_mod.Config) -> LowAlert:
-    return LowAlert(
-        cfg.thresholds.low_mgdl,
-        rearm_mgdl=cfg.polling.rearm_margin_mgdl,
-        repeat_min=cfg.polling.repeat_every_min,
+def alert_tuning(cfg: config_mod.Config) -> dict[str, float]:
+    """What `LowAlert` is tuned with: once to build it, again on a reload.
+
+    A reload retunes the one alert rather than building another, because
+    whether it is armed has to survive the edit -- see
+    `LowAlert.set_tuning`.
+    """
+    return {
+        "low_mgdl": cfg.thresholds.low_mgdl,
+        "rearm_mgdl": cfg.polling.rearm_margin_mgdl,
+        "repeat_min": cfg.polling.repeat_every_min,
+    }
+
+
+def build_client(cfg: config_mod.Config) -> LibreLinkUp:
+    return LibreLinkUp(
+        cfg.account.email,
+        cfg.account.password,
+        patient_id=cfg.account.patient_id,
+        region=cfg.account.region,
+        version=cfg.account.api_version,
     )
 
 
@@ -354,16 +370,9 @@ def run(
         else:
             overlay_class, session_class = WristOverlay, VrSession
 
-    client = LibreLinkUp(
-        cfg.account.email,
-        cfg.account.password,
-        patient_id=cfg.account.patient_id,
-        region=cfg.account.region,
-        version=cfg.account.api_version,
-    )
-    poller = Poller(client, cfg.polling.interval_sec, build_trend(cfg))
+    poller = Poller(build_client(cfg), cfg.polling.interval_sec, build_trend(cfg))
     watcher = ConfigWatcher(config_path)
-    alert = build_alert(cfg)
+    alert = LowAlert(**alert_tuning(cfg))
 
     session = None
     window = None
@@ -443,11 +452,7 @@ def run(
                 warn_restart_only(edited, cfg)
                 poller.set_interval(edited.polling.interval_sec)
                 poller.set_trend(build_trend(edited))
-                alert.set_tuning(
-                    edited.thresholds.low_mgdl,
-                    edited.polling.rearm_margin_mgdl,
-                    edited.polling.repeat_every_min,
-                )
+                alert.set_tuning(**alert_tuning(edited))
                 if session is not None:
                     # The whole config in one assignment; the thread
                     # applies it on its next pass. Handed over before the
@@ -540,13 +545,7 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
 
     Lets credentials and rendering be checked before SteamVR is involved.
     """
-    client = LibreLinkUp(
-        cfg.account.email,
-        cfg.account.password,
-        patient_id=cfg.account.patient_id,
-        region=cfg.account.region,
-        version=cfg.account.api_version,
-    )
+    client = build_client(cfg)
     # `in_window`, because this is the desktop face written to a file
     # rather than anything on a controller -- and because the line it
     # prints below is about the history, which the graph is a picture of.
