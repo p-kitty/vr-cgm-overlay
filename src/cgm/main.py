@@ -84,23 +84,19 @@ log = logging.getLogger("vrcgm")
 
 DRAW_INTERVAL_SEC = 1.0
 
-# Settings a reload cannot apply, keyed by the name in config.toml,
+# Settings a reload cannot apply, named as config.toml spells them,
 # because that is the file the message sends you to.
 #
 # The account and nothing else: the API client is built from it once, at
-# startup, whichever frontends are running.
+# startup, whichever frontends are running. Read off the section rather
+# than listed, so a key added to `[account]` is restart-only without
+# anybody remembering to say so, and no name here can be misspelled.
 #
 # `hand` used to be here too, because the overlay picked its controller
 # role when the process started. It picks it when the *session* starts
 # now, and a session can be reopened, so editing it costs a second rather
 # than a restart. See `cgm.vr.session.VrSession.restart`.
-RESTART_ONLY = {
-    "account.email": "account.email",
-    "account.password": "account.password",
-    "account.patient_id": "account.patient_id",
-    "account.region": "account.region",
-    "account.api_version": "account.api_version",
-}
+RESTART_ONLY = tuple(f"account.{key}" for key in config_mod.FIELD_TYPES["account"])
 
 
 @contextlib.contextmanager
@@ -129,12 +125,10 @@ def fine_timer():
         winmm.timeEndPeriod(1)
 
 
-def _setting(cfg: config_mod.Config, path: str):
-    """Read a dotted path like `vr.hand` off the sectioned config."""
-    value = cfg
-    for part in path.split("."):
-        value = getattr(value, part)
-    return value
+def _setting(cfg: config_mod.Config, name: str):
+    """Read a `section.key` name like `vr.hand` off the sectioned config."""
+    section, key = name.split(".")
+    return getattr(getattr(cfg, section), key)
 
 
 def build_theme(cfg: config_mod.Config) -> Theme:
@@ -213,18 +207,18 @@ def build_renderer(
 
 
 def warn_restart_only(
-    cfg: config_mod.Config, previous: config_mod.Config, settings: dict[str, str]
+    cfg: config_mod.Config,
+    previous: config_mod.Config,
+    settings: tuple[str, ...] = RESTART_ONLY,
 ) -> list[str]:
-    """Name the edited settings this frontend cannot pick up, and say so.
+    """Name the edited settings a reload cannot pick up, and say so.
 
     Silently doing nothing is the worst of the three possible
     behaviours: the file says one thing, the screen shows another, and
     nothing connects them.
     """
     changed = [
-        name
-        for name, path in settings.items()
-        if _setting(cfg, path) != _setting(previous, path)
+        name for name in settings if _setting(cfg, name) != _setting(previous, name)
     ]
     if changed:
         log.warning("restart to apply: %s", ", ".join(changed))
@@ -446,7 +440,7 @@ def run(
 
             edited = watcher.poll()
             if edited is not None:
-                warn_restart_only(edited, cfg, RESTART_ONLY)
+                warn_restart_only(edited, cfg)
                 poller.set_interval(edited.polling.interval_sec)
                 poller.set_trend(build_trend(edited))
                 alert.set_tuning(
