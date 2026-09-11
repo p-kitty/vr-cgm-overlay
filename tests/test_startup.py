@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import io
 import logging
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -22,9 +24,15 @@ from cgm.main import main, report
 
 CONFIG = '[account]\nemail = "a@b.c"\npassword = "secret"\n'
 
+# Read back through Shell.Application rather than through the module's
+# own code, so a mistake made the same way on both sides cannot pass --
+# and not through WScript.Shell, which loses the same characters on the
+# way out that it used to lose on the way in. The paths go across in
+# environment variables so none of them has to survive being quoted.
 _READ = (
-    "$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:CGM_LINK);"
-    "$s.TargetPath; $s.Arguments; $s.WorkingDirectory"
+    "[Console]::OutputEncoding = [Text.Encoding]::UTF8;"
+    "$f = (New-Object -ComObject Shell.Application).NameSpace($env:CGM_DIR).ParseName($env:CGM_NAME);"
+    "$s = $f.GetLink; $s.Path; $s.Arguments; $s.WorkingDirectory"
 )
 
 
@@ -33,15 +41,26 @@ class Installing(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        # Japanese in both paths, as in the checkout this was written in:
-        # neither may be mangled on its way through PowerShell.
+        # Japanese, as in the checkout this was written in, beside Hangul
+        # and Polish. The shortcut once went through the ANSI code page,
+        # and no single code page holds all three, so this fails on every
+        # machine if it ever does again -- not only on the ones whose
+        # code page happens not to be Japanese.
         root = Path(tmp.name)
-        self.folder = root / "スタートアップ"
-        self.config = root / "設定" / "config.toml"
+        self.folder = root / "スタートアップ-시작"
+        self.config = root / "設定-설정-ąę" / "config.toml"
 
     def read(self, link: Path) -> list[str]:
         """Target, arguments and working directory, as the shell has them."""
-        return startup.powershell(_READ, CGM_LINK=str(link)).splitlines()
+        done = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _READ],
+            env={**os.environ, "CGM_DIR": str(link.parent), "CGM_NAME": link.name},
+            capture_output=True,
+            encoding="utf-8",
+            timeout=60,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        return done.stdout.splitlines()
 
     def test_nothing_is_there_to_begin_with(self):
         self.assertIsNone(startup.registered(folder=self.folder))
@@ -70,6 +89,17 @@ class Installing(unittest.TestCase):
 
     def test_uninstalling_what_is_not_there_says_so(self):
         self.assertFalse(startup.uninstall(folder=self.folder))
+
+    def test_a_shortcut_the_shell_refuses_is_an_oserror(self):
+        # OSError is what --install-startup reports as a sentence;
+        # anything else would reach the user as a traceback.
+        with self.assertRaises(OSError):
+            startup.save_link(
+                self.folder / "missing" / startup.LINK_NAME,
+                startup.pythonw(),
+                "",
+                self.folder,
+            )
 
 
 class Arguments(unittest.TestCase):
