@@ -22,7 +22,9 @@ cut off by Abbott. The age readout and controller tracking, though, need
 to refresh every second.
 
 **The last reading stays up when the network drops**, but its age keeps
-climbing and it greys out past ten minutes. A display that silently
+climbing and it greys out past two and a half minutes — about one
+missed update, which is as soon as the poll cycle allows without the
+face blinking grey during ordinary fetching. A display that silently
 freezes mid-session is the dangerous failure, so stale has to look stale.
 
 **Range checks are always mg/dL**, even in mmol/L mode, so switching the
@@ -78,7 +80,7 @@ glucose.
 **The same history is read twice.** The response the current value
 arrives in carries about twelve hours of it, so once the trend was being
 fitted from it, drawing it was free — no extra request, no cache,
-nothing stored. The desktop window shows the last three hours as a
+nothing stored. The desktop window shows the last eight hours as a
 sparkline under the number; the overlay does not by default, because a
 face glanced at mid-game is there to be read in half a second. What it
 draws, and the rules behind each part of it, is in

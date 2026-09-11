@@ -362,6 +362,15 @@ class Tick:
     stand-ins for all of them.
 
     `window` and `session` are None for the half that is not running.
+
+    **A call never raises.** Whichever loop owns the process calls this
+    once a second and would stop at the first exception: Tk's `after`
+    chain is only rescheduled once `tick` returns, so the window would
+    freeze on its last frame -- number, colour and age readout all
+    stuck -- and `_drive` would take the overlay down with the process.
+    A face that stops updating while still showing a number is the
+    failure everything here exists to avoid, so a pass that fails is
+    logged and the next one runs as usual.
     """
 
     def __init__(
@@ -384,6 +393,9 @@ class Tick:
         self._session = session
         self._window_face: WatchFaceRenderer | None = None
         self._vr_face: WatchFaceRenderer | None = None
+        # Whether the last pass raised, so a fault that repeats every
+        # second logs its traceback once rather than 3600 times an hour.
+        self._failing = False
         self._build_faces(cfg)
 
     def _build_faces(self, cfg: config_mod.Config) -> None:
@@ -410,6 +422,20 @@ class Tick:
             self._window.set_image(self._window_face.render_message(message))
 
     def __call__(self) -> None:
+        # Exception, not BaseException: Ctrl-C has to reach the loop, which
+        # is how both of them are stopped.
+        try:
+            self._step()
+        except Exception:
+            if not self._failing:
+                log.exception("the draw loop failed; carrying on")
+            self._failing = True
+        else:
+            if self._failing:
+                log.info("the draw loop has recovered")
+            self._failing = False
+
+    def _step(self) -> None:
         edited = self._watcher.poll()
         if edited is not None:
             self.reload(edited)

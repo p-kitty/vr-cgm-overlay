@@ -132,7 +132,7 @@ display unit cannot quietly change what counts as a low.
 | `low_mgdl` to `high_mgdl` (70-180) | green | left edge |
 | above `high_mgdl` to `very_high_mgdl` (181-240) | yellow | top edge |
 | above `very_high_mgdl` (240) | deep orange | top edge, heavier |
-| older than `stale_after_min` | grey | full outline |
+| older than `stale_after_min` (2.5 min) | grey | full outline |
 
 Status is carried twice over. The colour gives severity, and a marker on
 one edge of the card gives direction — above range lights the top, below

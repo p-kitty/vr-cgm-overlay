@@ -208,7 +208,7 @@ def debug(
     return [
         # Every marker edge, to be told apart at a glance: top for high,
         # a heavier top for very high, bottom for low.
-        face(plain, reading(214, 5, 3)),
+        face(plain, reading(214, 5, 1)),
         face(plain, reading(268, 4, 2)),
         face(plain, reading(64, 1, 1)),
         # Stale, on a low reading, because that is where two rules meet:

@@ -163,6 +163,63 @@ class FailedFetch(PollerTestCase):
         self.assertIsNone(poller.error)
 
 
+class UnreadableResponse(PollerTestCase):
+    """Whatever the client raises that it was not written to raise.
+
+    The unofficial API changing shape arrives as exactly this -- a
+    KeyError on a renamed field -- and it must not end the fetch thread,
+    or the face greys and never comes back even once the API does.
+    """
+
+    def poll(self, poller: Poller, now: float) -> bool:
+        with self.assertLogs("vrcgm", level="ERROR") as logged:
+            got_new = poller.poll(now)
+        # The traceback is the only record of what the response was.
+        self.assertIsNotNone(logged.records[-1].exc_info)
+        return got_new
+
+    def test_is_a_failed_fetch_rather_than_an_exception(self):
+        poller = Poller(FakeClient(KeyError("FactoryTimestamp")), INTERVAL)
+        self.assertFalse(self.poll(poller, 1000.0))
+        self.assertEqual(poller.error, "API ERROR")
+
+    def test_keeps_the_last_reading(self):
+        poller = Poller(FakeClient(reading(112.0), KeyError("x")), INTERVAL)
+        poller.poll(1000.0)
+        self.poll(poller, 1100.0)
+        self.assertEqual(poller.reading.value_mgdl, 112.0)
+
+    def test_backs_off_like_any_other_failure(self):
+        # Retried every quarter second, a response that will not parse
+        # is the account being hammered.
+        poller = Poller(FakeClient(TypeError("x")), INTERVAL)
+        for attempt, expected in enumerate([120.0, 240.0], start=1):
+            with self.subTest(attempt=attempt):
+                self.poll(poller, 1000.0)
+                self.assertWaits(poller, 1000.0, expected)
+
+    def test_recovers_when_the_api_does(self):
+        poller = Poller(FakeClient(KeyError("x"), reading(112.0)), INTERVAL)
+        self.poll(poller, 1000.0)
+        self.assertTrue(poller.poll(2000.0))
+        self.assertIsNone(poller.error)
+        self.assertWaits(poller, 2000.0, INTERVAL)
+
+    def test_a_reading_the_trend_cannot_describe_is_not_taken(self):
+        # The face draws the same shape, so a reading this cannot work it
+        # out for is one the draw loop would fail on every second. The
+        # last good reading stays up to grey instead.
+        class Broken(TrendTuning):
+            def shape_for(self, reading):
+                raise ValueError("no shape")
+
+        poller = Poller(FakeClient(reading(112.0), reading(90.0)), INTERVAL)
+        poller.poll(1000.0)
+        poller.set_trend(Broken())
+        self.assertFalse(self.poll(poller, 2000.0))
+        self.assertEqual(poller.reading.value_mgdl, 112.0)
+
+
 class AuthFailure(PollerTestCase):
     def setUp(self):
         self.poller = Poller(FakeClient(AuthError("bad password")), INTERVAL)

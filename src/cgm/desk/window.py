@@ -316,6 +316,10 @@ class FaceWindow:
         KeyboardInterrupt landing in `tick` would print a traceback and
         leave the window up. It is caught here, closes the window, and
         is raised again once the loop is properly unwound.
+
+        Anything else `tick` raises ends the loop just the same, because
+        the next call is only scheduled once this one returns. So `tick`
+        must not raise, and `cgm.main.Tick` is written not to.
         """
 
         def wrapped() -> None:
