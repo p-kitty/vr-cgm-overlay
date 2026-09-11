@@ -1,0 +1,65 @@
+# The headless half of the verification list in CLAUDE.md, on a machine
+# that has never seen this checkout.
+#
+# Running it locally already covers the code. What it cannot cover is the
+# install: the local venv is an editable install that has collected
+# packages over time, so a dependency missing from pyproject.toml still
+# imports there. Here every run starts from an empty interpreter and a
+# regular (non-editable) install, so it only has what the package asks for.
+#
+# Left out on purpose: tools/check_settings.py opens a real window and
+# drives it, and anything under cgm.vr needs a headset. Both stay manual.
+
+name: test
+
+on:
+  push:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the older run's answer useless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Windows, not Ubuntu: the one-copy lock and the startup shortcut are
+    # Windows-only and their tests skip anywhere else, and it is the only
+    # platform the app runs on.
+    runs-on: windows-latest
+    env:
+      # The runner's console is not UTF-8, and the trend arrows are not
+      # in its code page.
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # With the vr extra, so the openvr floor is proved to install on
+      # 3.14 as well; the lazy imports test then resolves it too.
+      - name: Install
+        run: python -m pip install ".[vr]"
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests
+
+      - name: Watch face states
+        run: python tools/preview.py --debug
+
+      - name: Orbit geometry
+        run: python tools/check_orbit.py
+
+      - name: Gaze fade
+        run: python tools/check_gaze.py
+
+      - name: Palette under colour blindness
+        run: python tools/check_palette.py
+
+      - name: Compile
+        run: python -m compileall -q src tools tests
