@@ -132,6 +132,11 @@ actually on a controller, and goes away when it is not — SteamVR down, a
 controller asleep, or nothing paired yet all look the same from a desk,
 and none of them are faults.
 
+Everything the console prints is also kept in **`logs/`**, beside
+`config.toml`: a file a day, the last two weeks of them, tracebacks
+included. It holds every reading, so it is excluded by `.gitignore` for
+the same reason `config.toml` is. `--dry-run` keeps none.
+
 Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning: see
 [Placing the face in VR](docs/placement.md).

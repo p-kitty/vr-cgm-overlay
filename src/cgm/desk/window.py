@@ -119,6 +119,11 @@ class FaceWindow:
         # letterbox the face inside a bigger frame.
         self._root.resizable(False, False)
         self._root.protocol("WM_DELETE_WINDOW", self.close)
+        # Tk prints a failing callback's traceback straight to stderr and
+        # carries on, past every logging handler. Through the log instead,
+        # so it reaches the log file with everything else. It covers the
+        # settings window too: every widget reports to its root.
+        self._root.report_callback_exception = _log_callback_error
         self.set_always_on_top(always_on_top)
 
         self._label = tk.Label(
@@ -365,3 +370,8 @@ class FaceWindow:
 def _hex(rgb: tuple[int, int, int]) -> str:
     """Tk wants colours as #rrggbb, and Pillow hands them over as tuples."""
     return "#%02x%02x%02x" % rgb
+
+
+def _log_callback_error(exc_type, exc, tb) -> None:
+    """What Tk calls when a callback raises, in place of printing it."""
+    log.error("a window callback failed", exc_info=(exc_type, exc, tb))

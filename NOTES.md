@@ -13,7 +13,10 @@ on it.
 
 ## Unverified paths
 
-Nothing has exercised these yet. Each says how to check it.
+Nothing has exercised these yet. Each says how to check it. Where that
+is "read the log", it means `logs/vr-cgm-overlay.log` and the dated
+ones beside it: a session can be left running and read afterwards, with
+no console kept open for it.
 
 - **Controller sleep and wake.** With the process running, power the
   controller off, wait, and power it back on. The log should show `lost
