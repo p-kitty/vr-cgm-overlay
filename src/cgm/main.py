@@ -71,6 +71,7 @@ from cgm.core.librelink import (  # noqa: E402
 from cgm.core.fetcher import Fetcher  # noqa: E402
 from cgm.core.logfile import LOG_FORMAT, log_to_file, log_uncaught  # noqa: E402
 from cgm.core.poller import Poller  # noqa: E402
+from cgm.core.state import STATE_NAME, load_position, save_position  # noqa: E402
 from cgm.core.watcher import ConfigWatcher  # noqa: E402
 from cgm.face.graph import GraphTuning  # noqa: E402
 from cgm.face.renderer import (  # noqa: E402
@@ -601,11 +602,17 @@ def run(
             # for the same reason the overlay's is.
             from cgm.desk.window import FaceWindow
 
+            # Beside the config, like the log: one checkout, one place
+            # to look for everything it keeps.
+            state_path = config_path.parent / STATE_NAME
             window = stack.enter_context(
                 FaceWindow(
-                    scale=cfg.window.scale, always_on_top=cfg.window.always_on_top
+                    scale=cfg.window.scale,
+                    always_on_top=cfg.window.always_on_top,
+                    position=load_position(state_path),
                 )
             )
+            window.on_moved(lambda position: save_position(state_path, position))
             window.on_menu(settings_opener(config_path))
             log.info("click the gear on the face for settings")
 

@@ -27,7 +27,9 @@ this module lazily: a Python without tkinter should still be able to run
 
 from __future__ import annotations
 
+import ctypes
 import logging
+import re
 import tkinter as tk
 
 from PIL import Image, ImageTk
@@ -60,6 +62,53 @@ CORNER_LIT = "#c8ccd4"
 GEAR_FONT = ("Segoe UI Symbol", 17, "normal")
 BADGE_FONT = ("Segoe UI", 11, "bold")
 
+# How long the window has to sit still before where it is gets handed
+# on to be written down. A drag is a Configure event per pixel, and one
+# write at the end of it is the one that matters.
+MOVE_SETTLE_MS = 1000
+
+# A remembered position is only used if this point -- this far in from
+# the window's top-left corner, on its title bar -- is on a monitor.
+# The monitor it was left on may have been unplugged since, and a
+# glucose readout that opens where nothing can show it has gone missing
+# without saying so. The title bar, because that is what a window is
+# dragged back by.
+GRAB_INSET = (40, 12)
+
+# What `wm geometry` reports: WxH+X+Y, with a coordinate left of or
+# above the primary monitor written "+-50". A bare "-" would mean
+# measured from the far edge instead, which Tk never reports back.
+_GEOMETRY = re.compile(r"^\d+x\d+\+(-?\d+)\+(-?\d+)$")
+
+
+def position_of(geometry: str) -> tuple[int, int] | None:
+    """The top-left corner in a `wm geometry` string, or None."""
+    match = _GEOMETRY.match(geometry)
+    if match is None:
+        return None
+    return int(match.group(1)), int(match.group(2))
+
+
+def on_a_monitor(x: int, y: int) -> bool:
+    """Whether a point on the desktop is on any monitor that is attached.
+
+    Tk only knows the primary monitor's size, so this asks Windows.
+    Neither this process nor Tk declares DPI awareness, so both see the
+    same scaled coordinates and the question is asked in the units the
+    position was written in. Anywhere but Windows there is nobody to
+    ask, and the position is trusted.
+    """
+    try:
+        user32 = ctypes.WinDLL("user32")
+    except (AttributeError, OSError):
+        return True
+    from ctypes import wintypes
+
+    user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+    user32.MonitorFromPoint.restype = wintypes.HANDLE
+    MONITOR_DEFAULTTONULL = 0
+    return bool(user32.MonitorFromPoint(wintypes.POINT(x, y), MONITOR_DEFAULTTONULL))
+
 
 def compose(face: Image.Image, scale: float) -> Image.Image:
     """Flatten the face onto the window backdrop at the asked-for size.
@@ -90,9 +139,19 @@ class FaceWindow:
         with FaceWindow(scale=1.0, always_on_top=True) as win:
             win.set_image(image)
             win.run(tick, interval_ms=1000)
+
+    `position` is where it was last left, and `on_moved` is told each
+    time it is left somewhere new. Neither knows where that is kept:
+    `cgm.core.state` remembers it and `cgm.main` wires the two together.
     """
 
-    def __init__(self, *, scale: float = 1.0, always_on_top: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        scale: float = 1.0,
+        always_on_top: bool = True,
+        position: tuple[int, int] | None = None,
+    ) -> None:
         self._scale = scale
         self._closed = False
         self._interrupted = False
@@ -130,6 +189,32 @@ class FaceWindow:
             self._root, bg=_hex(BACKDROP), bd=0, highlightthickness=0
         )
         self._label.pack()
+
+        # Where the window is, as last seen; who to tell when it has been
+        # left somewhere new; and the pending tell, while a drag is still
+        # going on.
+        self._position: tuple[int, int] | None = None
+        self._moved = None
+        self._pending_move: str | None = None
+        if position is not None:
+            x, y = position
+            if on_a_monitor(x + GRAB_INSET[0], y + GRAB_INSET[1]):
+                # Only the corner. The size is the image's, and set_image
+                # forgetting the geometry keeps the position -- measured
+                # rather than assumed: Tk moves nothing on `geometry("")`.
+                self._root.geometry(f"+{x}+{y}")
+                self._position = position
+            else:
+                log.info(
+                    "the window was last left at %d,%d, which is on no "
+                    "monitor now; opening where Windows puts it",
+                    x,
+                    y,
+                )
+        # add="+" so nothing else bound here is replaced. Bound on the
+        # root, so every child's Configure arrives here too, and is
+        # filtered out in _configured.
+        self._root.bind("<Configure>", self._configured, add="+")
 
     # -- presentation -------------------------------------------------------
 
@@ -300,6 +385,40 @@ class FaceWindow:
             highlightthickness=0,
         )
 
+    def on_moved(self, callback) -> None:
+        """Have `callback((x, y))` called when the window is left somewhere.
+
+        Once per move, a second after it stops, rather than once per
+        pixel of the drag -- and once more on close if a move is still
+        waiting, so quitting straight after a drag keeps it.
+        """
+        self._moved = callback
+
+    def _configured(self, event) -> None:
+        if event.widget is not self._root or self._closed:
+            return
+        # Minimised, Windows parks the window at -32000,-32000. That is
+        # not a place it was left, and it is on no monitor.
+        if self._root.state() != "normal":
+            return
+        position = position_of(self._root.geometry())
+        if position is None or position == self._position:
+            return
+        first = self._position is None
+        self._position = position
+        # The first sighting of a window with nothing remembered is where
+        # Windows chose to put it. Nothing has moved yet.
+        if first or self._moved is None:
+            return
+        if self._pending_move is not None:
+            self._root.after_cancel(self._pending_move)
+        self._pending_move = self._root.after(MOVE_SETTLE_MS, self._settled)
+
+    def _settled(self) -> None:
+        self._pending_move = None
+        if self._moved is not None and self._position is not None:
+            self._moved(self._position)
+
     # No `pulse` here. The overlay has one because it has a controller
     # to buzz, and a window does not; the channel a window can use is
     # sound, which `cgm.core.alert` owns and plays for both frontends.
@@ -352,6 +471,13 @@ class FaceWindow:
     def close(self) -> None:
         if self._closed:
             return
+        if self._pending_move is not None:
+            # Quit before the move settled. It is still where it was left.
+            try:
+                self._root.after_cancel(self._pending_move)
+            except tk.TclError:
+                pass
+            self._settled()
         self._closed = True
         self._photo = None
         try:

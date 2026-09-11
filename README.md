@@ -180,6 +180,12 @@ The other way round, `--vr` runs the overlay with no window at all —
 worth having when the window is one more thing on a taskbar you are not
 looking at.
 
+The window opens **where you last left it**, on whichever monitor that
+was. The spot is kept in `state.json` beside `config.toml`, which git
+ignores; delete it to start over. If that monitor is no longer
+attached, the window opens where Windows puts it rather than somewhere
+nothing can show it.
+
 ## Settings
 
 **Click the gear** in the top corner of the face — or right-click

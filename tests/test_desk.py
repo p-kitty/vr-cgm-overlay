@@ -15,9 +15,10 @@ difference seen from the other side.
 
 from __future__ import annotations
 
+import sys
 import unittest
 
-from cgm.desk.window import BACKDROP, compose
+from cgm.desk.window import BACKDROP, compose, on_a_monitor, position_of
 from cgm.face.renderer import HEIGHT, WIDTH, Theme, WatchFaceRenderer
 from cgm.main import _window_title
 
@@ -133,6 +134,39 @@ class Title(unittest.TestCase):
         ):
             with self.subTest(error=error):
                 self.assertIn("vr-cgm-overlay", _window_title(reading, error, "mgdl"))
+
+
+class Position(unittest.TestCase):
+    """Reading where the window is, and whether a remembered spot is real."""
+
+    def test_the_corner_is_read_out_of_the_geometry(self):
+        self.assertEqual(position_of("512x440+300+200"), (300, 200))
+
+    def test_left_of_the_primary_monitor_is_negative(self):
+        # How Tk reports a window on a second monitor to the left,
+        # measured on this machine.
+        self.assertEqual(position_of("246x156+-50+120"), (-50, 120))
+
+    def test_anything_else_is_not_a_position(self):
+        # A bare minus measures from the far edge, which is not the
+        # corner, and Tk never reports it back; nor is a size alone.
+        for geometry in ("512x440-10+20", "512x440", "", "1x1+a+b"):
+            with self.subTest(geometry=geometry):
+                self.assertIsNone(position_of(geometry))
+
+    @unittest.skipUnless(sys.platform == "win32", "asks Windows about monitors")
+    def test_the_middle_of_the_primary_monitor_is_on_one(self):
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        middle = user32.GetSystemMetrics(0) // 2, user32.GetSystemMetrics(1) // 2
+        self.assertTrue(on_a_monitor(*middle))
+
+    @unittest.skipUnless(sys.platform == "win32", "asks Windows about monitors")
+    def test_an_unplugged_monitor_is_not(self):
+        # Where a window left on a monitor that has gone would come back.
+        self.assertFalse(on_a_monitor(-100_000, -100_000))
+        self.assertFalse(on_a_monitor(-32_000, -32_000))
 
 
 class Layers(unittest.TestCase):
