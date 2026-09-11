@@ -22,16 +22,14 @@ no console kept open for it.
   through `setOverlayFromFile` now (see `cgm.vr.texture`), because
   `setOverlayRaw` ran out of memory blocks about 105 minutes into every
   session. A file blanks the overlay while it loads, so the face is two
-  overlays that swap once the hidden one has loaded. The file alone was
-  seen in a headset to update and to blink; the swap has not been
-  seen. Three things to check: nothing blinks when the face changes; the
-  face follows each new reading, rather than flicking between the last
-  two; and a session runs past two hours with no `the VR session has
-  stopped` in the log. Two log lines mean something to look into:
-  `SteamVR did not say the face had loaded` means a hidden overlay gets
-  no load event, so the swap is running on its timeout and the blink is
-  back. `SteamVR could not load the face from ...` means the compositor
-  refused the file.
+  overlays that swap once the hidden one has loaded. Seen in a headset:
+  it follows each new reading and does not blink. Not seen yet: a
+  session past two hours with no `the VR session has stopped` in the
+  log, which is the point of the change. Two log lines mean something
+  to look into: `SteamVR did not say the face had loaded` means a
+  hidden overlay got no load event, so the swap ran on its timeout and
+  can blink. `SteamVR could not load the face from ...` means the
+  compositor refused the file.
 - **Controller sleep and wake.** With the process running, power the
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and
