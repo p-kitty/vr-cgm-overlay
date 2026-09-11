@@ -59,10 +59,7 @@ class Poller:
         """Attempt one fetch. True when a new reading arrived."""
         got_new = False
         try:
-            self.reading = self._client.get_latest()
-            self.error = None
-            self._failures = 0
-            got_new = True
+            latest = self._client.get_latest()
             # Say which of the three sources the arrow came from, not
             # just where it points. Which one a poll reaches can only be
             # seen against live data -- the bend needs history the API
@@ -74,15 +71,25 @@ class Poller:
             # what decides it: past BEND_MAX_SPAN_MIN of lag the third
             # point is too old to bend through, and a `(fit)` with no
             # number beside it cannot say whether that is the reason.
-            shape = self._trend.shape_for(self.reading)
-            lag = self.reading.history_lag_minutes()
+            #
+            # Worked out before the reading is taken, because the face
+            # draws the same shape: a reading this cannot describe is one
+            # the draw loop would fail on every second, and it is better
+            # refused here as a failed fetch, with the last good reading
+            # left up to grey.
+            shape = self._trend.shape_for(latest)
+            lag = latest.history_lag_minutes()
             log.info(
                 "fetched: %.0f mg/dL %s (%.1f min old, %s)",
-                self.reading.value_mgdl,
-                shape.describe(self.reading.arrow),
-                self.reading.age_minutes(),
+                latest.value_mgdl,
+                shape.describe(latest.arrow),
+                latest.age_minutes(),
                 "no history" if lag is None else f"history {lag:.1f} min behind",
             )
+            self.reading = latest
+            self.error = None
+            self._failures = 0
+            got_new = True
         except AuthError as exc:
             # Bad credentials or an unaccepted agreement. Retrying will not
             # fix either, so wait a long time.
@@ -93,6 +100,18 @@ class Poller:
             self.error = "NO CONNECTION"
             self._failures += 1
             log.warning("fetch failed (attempt %d): %s", self._failures, exc)
+        except Exception:
+            # Anything else is a response the client cannot read -- the
+            # unofficial API changing shape is the likeliest cause, as a
+            # KeyError on a renamed field -- or a bug on the way through
+            # it. Raised, it would end the fetch thread for good: the face
+            # would grey and stay grey even once the API came back. So it
+            # is a failed fetch like any other, backed off like one, and
+            # logged with its traceback, since that is the only record of
+            # what the response looked like.
+            self.error = "API ERROR"
+            self._failures += 1
+            log.exception("fetch failed (attempt %d)", self._failures)
 
         # Jitter keeps many clients from landing on the same instant.
         if self._failures:
