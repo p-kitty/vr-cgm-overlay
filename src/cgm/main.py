@@ -61,6 +61,7 @@ if sys.version_info < (3, 14):
 
 from cgm.core import alert as alert_mod  # noqa: E402
 from cgm.core import config as config_mod  # noqa: E402
+from cgm.core import startup  # noqa: E402
 from cgm.core.alert import LowAlert  # noqa: E402
 from cgm.core.console import force_utf8_output  # noqa: E402
 from cgm.core.librelink import (  # noqa: E402
@@ -69,6 +70,7 @@ from cgm.core.librelink import (  # noqa: E402
     LibreLinkUp,
 )
 from cgm.core.fetcher import Fetcher  # noqa: E402
+from cgm.core.instance import claim  # noqa: E402
 from cgm.core.logfile import LOG_FORMAT, log_to_file, log_uncaught  # noqa: E402
 from cgm.core.poller import Poller  # noqa: E402
 from cgm.core.watcher import ConfigWatcher  # noqa: E402
@@ -556,10 +558,9 @@ def run(
             # Asked for the overlay and nothing else, so there is no
             # half left to carry on with.
             if not with_window:
-                print(
+                report(
                     f"--vr needs the SteamVR bindings ({exc}); "
-                    'pip install -e ".[vr]"',
-                    file=sys.stderr,
+                    'pip install -e ".[vr]"'
                 )
                 return 2
             # Now that the default is both frontends, a desktop-only
@@ -674,6 +675,55 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
     return 0
 
 
+def report(message: str) -> None:
+    """Say why the process is stopping, where somebody will see it.
+
+    Printed, as it always was. Started with Windows this runs under
+    pythonw, where stderr is None and the print goes nowhere, so it is
+    shown in a dialog as well -- otherwise a config error at sign-in is
+    a window that never appears and nothing to say why.
+    """
+    print(message, file=sys.stderr)
+    if sys.stderr is not None:
+        return
+    try:
+        # Lazy for the same reason `cgm.desk.window` is: tkinter.
+        from cgm.desk.dialog import show_error
+    except ImportError:
+        return
+    show_error(message)
+
+
+def install_startup(config_path: Path) -> int:
+    """Register this config to start at sign-in, and say what was set."""
+    try:
+        link = startup.install(config_path)
+    except OSError as exc:
+        report(f"cannot start with Windows: {exc}")
+        return 1
+    print(f"starts when you sign in to Windows, with {config_path.resolve()}")
+    print(f"shortcut: {link}")
+    print(
+        "turn it off with --uninstall-startup, by deleting the shortcut, "
+        "or under Startup apps in Task Manager"
+    )
+    return 0
+
+
+def uninstall_startup() -> int:
+    """Take the registration away, if there is one."""
+    try:
+        removed = startup.uninstall()
+    except OSError as exc:
+        report(f"cannot change starting with Windows: {exc}")
+        return 1
+    if removed:
+        print("no longer starts when you sign in to Windows")
+    else:
+        print("was not set to start when you sign in to Windows")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     # Before argparse, before the first print: everything below this
     # line can put a trend arrow on stdout or in the log, and a
@@ -712,34 +762,64 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="overlay only; no desktop window",
     )
+    mode.add_argument(
+        "--install-startup",
+        action="store_true",
+        help="start the window when you sign in to Windows, with no console",
+    )
+    mode.add_argument(
+        "--uninstall-startup",
+        action="store_true",
+        help="stop starting when you sign in to Windows",
+    )
     parser.add_argument(
         "--out", type=Path, default=Path("preview.png"), help="output path for --dry-run"
     )
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format=LOG_FORMAT,
-        datefmt="%H:%M:%S",
-    )
+    level = logging.DEBUG if args.verbose else logging.INFO
+    if sys.stderr is None:
+        # pythonw, which is how a sign-in starts this: there is no console
+        # to write to, and a handler on None fails on every line. The log
+        # file a run adds below is the only place the log goes.
+        logging.getLogger().setLevel(level)
+    else:
+        logging.basicConfig(level=level, format=LOG_FORMAT, datefmt="%H:%M:%S")
+
+    # Before the config is read: taking a registration away should not
+    # depend on the file it was registered with still being valid.
+    if args.uninstall_startup:
+        return uninstall_startup()
 
     try:
         cfg = config_mod.load(args.config)
     except (FileNotFoundError, ValueError) as exc:
-        print(f"config error: {exc}", file=sys.stderr)
+        report(f"config error: {exc}")
         return 2
 
     try:
         if args.dry_run:
             return dry_run(cfg, args.out)
+        if args.install_startup:
+            # After the load, so a config the app would refuse is never
+            # what a sign-in starts from.
+            return install_startup(args.config)
+
+        # Held until main returns, which is when the process ends.
+        lock = claim(args.config)
+        if lock is None:
+            report("vr-cgm-overlay is already running with this config.")
+            return 1
+
         # Both unless one of them was ruled out. The window is the half
         # that is meant to stay up and the overlay is the one you want as
         # well, when the headset goes on, so wanting only one of them is
         # the case that has to be asked for.
         #
         # The log file goes beside the config it is a run of, and only
-        # here: see `cgm.core.logfile` for why --dry-run keeps none.
+        # here: see `cgm.core.logfile` for why --dry-run keeps none. After
+        # the lock, so a second copy never opens the same file.
         log_to_file(args.config.parent / "logs")
         log_uncaught()
         return run(
@@ -752,10 +832,17 @@ def main(argv: list[str] | None = None) -> int:
         log.info("shutting down")
         return 0
     except AuthError as exc:
-        print(f"authentication error: {exc}", file=sys.stderr)
+        report(f"authentication error: {exc}")
         return 1
     except LibreLinkError as exc:
-        print(f"LibreLinkUp error: {exc}", file=sys.stderr)
+        report(f"LibreLinkUp error: {exc}")
+        return 1
+    except Exception as exc:
+        # Anything else that ends the run. The traceback goes through
+        # the log, and so into the file; the reason goes wherever it will
+        # be seen, which with no console is a dialog.
+        log.critical("stopped", exc_info=True)
+        report(f"vr-cgm-overlay stopped: {exc}")
         return 1
 
 

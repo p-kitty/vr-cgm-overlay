@@ -141,6 +141,33 @@ Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning: see
 [Placing the face in VR](docs/placement.md).
 
+### Starting with Windows
+
+Once `--dry-run` works, this saves starting it by hand:
+
+```bash
+vr-cgm-overlay --install-startup
+```
+
+From the next sign-in on, the window opens by itself with no console
+beside it. What that adds is **one shortcut in your Startup folder** —
+type `shell:startup` into Win+R to see it — and nothing else: no
+registry entry, no service. It runs this checkout's `pythonw.exe` on
+the `config.toml` you installed it with, which is checked before
+anything is written.
+
+To stop it, any of these:
+
+- `vr-cgm-overlay --uninstall-startup`
+- delete the shortcut
+- switch it off under **Startup apps** in Task Manager
+
+With no console, anything that stops it at startup — a mistake in
+`config.toml`, say — is shown in a dialog instead of printed, and the
+rest goes to `logs/`. Starting a second copy on the same config is
+refused with a message rather than polling the account twice; close the
+window to quit the one that is running.
+
 ## Without a headset
 
 The desktop window is up by default, so there is nothing to do but look
