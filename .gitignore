@@ -2,6 +2,9 @@ config.toml
 # The run log: every reading, and the patient id. Health data, so it
 # stays out of git for the same reason config.toml does.
 logs/
+# Where the window was last left. Per machine, and rewritten on every move.
+state.json
+state.json.tmp
 preview.png
 # The working sheet from `tools/preview.py --debug`. Rendered when the
 # face changes and looked at; the committed one is preview-states.png,
