@@ -18,7 +18,6 @@ set_alert.
 
 from __future__ import annotations
 
-import ctypes
 import logging
 import math
 import time
@@ -27,6 +26,7 @@ import openvr
 from PIL import Image
 
 from cgm.vr.armguide import MARKER_COUNT, ArmGuide
+from cgm.vr.texture import DoubleBuffer, texture_dir
 
 log = logging.getLogger(__name__)
 
@@ -384,26 +384,35 @@ class WristOverlay:
 
         self._system = _connect()
         self._overlay = openvr.VROverlay()
-        self._handle = self._overlay.createOverlay(OVERLAY_KEY, OVERLAY_NAME)
-        self._overlay.setOverlayWidthInMeters(self._handle, width_m)
+        # Two overlays for the one face, only ever one of them shown: the
+        # next frame loads into the hidden one. See cgm.vr.texture for
+        # why. Everything but the texture and visibility -- width,
+        # alpha, where it sits -- goes to both, so a swap changes
+        # nothing but the picture.
+        self._handles = tuple(
+            self._overlay.createOverlay(key, OVERLAY_NAME)
+            for key in (OVERLAY_KEY, f"{OVERLAY_KEY}.b")
+        )
+        for handle in self._handles:
+            self._overlay.setOverlayWidthInMeters(handle, width_m)
         self._apply_alpha()
-        self._overlay.showOverlay(self._handle)
 
         # Index we last attached to, kept to detect changes.
         self._attached_index: int | None = None
-        # The compositor reads this buffer after setOverlayRaw returns, so
-        # it is allocated once and overwritten in place. Handing over a
-        # fresh one each frame let the old one be freed mid-upload, which
-        # showed up in the headset as a flicker once a second.
-        self._buffer = None
-        self._buffer_size: tuple[int, int] | None = None
+        self._texture_dir = texture_dir()
+        self._face = DoubleBuffer(self._overlay, self._handles, self._texture_dir)
         # The tuning guides, or None. See armguide.
         self._guide: ArmGuide | None = None
         # Reused for every pose read: orbit mode reads poses on every pass
         # of the loop, and a fresh array each time is pure churn.
         self._poses = (openvr.TrackedDevicePose_t * openvr.k_unMaxTrackedDeviceCount)()
 
-        log.info("created overlay (hand=%s, width=%.3fm)", hand, width_m)
+        log.info(
+            "created overlay (hand=%s, width=%.3fm, textures in %s)",
+            hand,
+            width_m,
+            self._texture_dir,
+        )
         self.set_arm_guide(arm_guide)
 
     def display_hz(self, fallback: float) -> float:
@@ -516,9 +525,14 @@ class WristOverlay:
             self._orbit_angle,
             elapsed,
         )
-        self._overlay.setOverlayTransformTrackedDeviceRelative(
-            self._handle, index, transform
-        )
+        self._place(index, transform)
+
+    def _place(self, index: int, transform: openvr.HmdMatrix34_t) -> None:
+        """Put both face overlays at `transform` on controller `index`."""
+        for handle in self._handles:
+            self._overlay.setOverlayTransformTrackedDeviceRelative(
+                handle, index, transform
+            )
 
     def _face_position(self) -> tuple[float, float, float]:
         """Where the face is sitting in controller space.
@@ -611,10 +625,7 @@ class WristOverlay:
         if index != self._attached_index:
             # The fixed transform goes on either way. In orbit mode it is
             # what shows until a head pose can be read.
-            transform = _make_transform(self._offset, self._rotation)
-            self._overlay.setOverlayTransformTrackedDeviceRelative(
-                self._handle, index, transform
-            )
+            self._place(index, _make_transform(self._offset, self._rotation))
             self._attached_index = index
             self._orbit_angle = None
             self._orbit_at = None
@@ -731,7 +742,7 @@ class WristOverlay:
         if enabled == (self._guide is not None):
             return
         if enabled:
-            self._guide = ArmGuide(self._overlay, OVERLAY_KEY)
+            self._guide = ArmGuide(self._overlay, OVERLAY_KEY, self._texture_dir)
             if not self._orbit:
                 log.info("the guides describe orbit mode, which is off")
         else:
@@ -739,7 +750,8 @@ class WristOverlay:
             self._guide = None
 
     def set_width(self, width_m: float) -> None:
-        self._overlay.setOverlayWidthInMeters(self._handle, width_m)
+        for handle in self._handles:
+            self._overlay.setOverlayWidthInMeters(handle, width_m)
 
     def set_flip_vertical(self, flip: bool) -> None:
         """Flip the texture from here on.
@@ -756,33 +768,14 @@ class WristOverlay:
 
         Does nothing when the pixels match what is already on screen. The
         draw loop runs every second so the age readout stays current, but
-        the face itself only changes about once a minute, and every upload
-        is a chance for the compositor to show a torn frame.
+        the face itself only changes about twice a minute, and every
+        upload is a chance for the compositor to show a torn frame.
         """
         if image.mode != "RGBA":
             image = image.convert("RGBA")
         if self._flip_vertical:
             image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-
-        data = image.tobytes()
-        size = (image.width, image.height)
-
-        if self._buffer_size != size:
-            self._buffer = (ctypes.c_char * len(data))()
-            self._buffer_size = size
-        elif self._buffer.raw == data:
-            return
-
-        self._buffer.raw = data  # in place: the pointer must not move
-        # pyopenvr applies byref() to this itself, so hand it the ctypes
-        # array as-is; wrapping it here raises a TypeError on the way in.
-        self._overlay.setOverlayRaw(
-            self._handle,
-            self._buffer,
-            image.width,
-            image.height,
-            4,  # RGBA
-        )
+        self._face.set(image)
 
     def _apply_alpha(self) -> None:
         """Push the configured opacity, less whatever the fade is taking.
@@ -796,7 +789,8 @@ class WristOverlay:
         if self._applied_alpha is not None and abs(alpha - self._applied_alpha) < 1e-3:
             return
         self._applied_alpha = alpha
-        self._overlay.setOverlayAlpha(self._handle, alpha)
+        for handle in self._handles:
+            self._overlay.setOverlayAlpha(handle, alpha)
 
     def set_opacity(self, opacity: float) -> None:
         self._opacity = max(0.0, min(1.0, opacity))
@@ -824,8 +818,10 @@ class WristOverlay:
         """True when SteamVR is shutting down.
 
         Ignoring this blocks SteamVR from exiting, so the main loop checks
-        it on every pass.
+        it on every pass. The face's own queue is emptied on the same
+        pass: see _drain_face_events.
         """
+        self._drain_face_events()
         event = openvr.VREvent_t()
         while self._system.pollNextEvent(event):
             if event.eventType in (
@@ -837,6 +833,23 @@ class WristOverlay:
                 return True
         return False
 
+    def _drain_face_events(self) -> None:
+        """Pass the face overlays' texture events on to the double buffer.
+
+        The compositor loads a texture file on its own time and answers
+        with an event on the overlay's queue, not an error from the call.
+        The loaded one is what swaps the new frame in; the failed one is
+        the only word there is of a file it could not open.
+        """
+        event = openvr.VREvent_t()
+        for handle in self._handles:
+            while self._overlay.pollNextOverlayEvent(handle, event)[0]:
+                if event.eventType == openvr.VREvent_ImageLoaded:
+                    self._face.loaded(handle)
+                elif event.eventType == openvr.VREvent_ImageFailed:
+                    self._face.failed(handle)
+        self._face.poll()
+
     # -- teardown -----------------------------------------------------------
 
     def close(self) -> None:
@@ -844,9 +857,9 @@ class WristOverlay:
             if self._guide is not None:
                 self._guide.close()
                 self._guide = None
-            if self._handle is not None:
-                self._overlay.destroyOverlay(self._handle)
-                self._handle = None
+            for handle in self._handles:
+                self._overlay.destroyOverlay(handle)
+            self._handles = ()
         finally:
             openvr.shutdown()
             log.info("destroyed the overlay and disconnected from SteamVR")

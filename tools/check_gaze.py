@@ -109,7 +109,7 @@ def face(**overrides):
     }
     state.update(overrides)
     overlay._overlay = _Recorder()
-    overlay._handle = 0
+    overlay._handles = (0, 1)  # the face is two overlays; see cgm.vr.texture
     for name, value in state.items():
         setattr(overlay, f"_{name}", value)
     return overlay
