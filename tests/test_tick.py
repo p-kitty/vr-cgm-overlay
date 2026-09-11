@@ -109,7 +109,8 @@ class TickTestCase(unittest.TestCase):
         cfg = cfg or config()
         self.poller = FakePoller()
         self.watcher = FakeWatcher()
-        self.window = FakeWindow() if window else None
+        # True for a plain stand-in, or a stand-in of the test's own.
+        self.window = (FakeWindow() if window is True else window) or None
         self.session = FakeSession() if session else None
         return Tick(
             cfg,
@@ -207,6 +208,64 @@ class Announcing(TickTestCase):
         tick = self.build(session=False)
         self.poller.reading = reading(60)
         tick()
+
+
+class BrokenWindow(FakeWindow):
+    """A window whose drawing raises until it is told to stop."""
+
+    def __init__(self, error: BaseException) -> None:
+        super().__init__()
+        self.error = error
+
+    def set_image(self, image) -> None:
+        if self.error is not None:
+            raise self.error
+        super().set_image(image)
+
+
+class Failing(TickTestCase):
+    """A pass that raises must not be the last pass.
+
+    Both loops only call again once a call returns, so an exception out
+    of here would leave the window frozen on its last frame, age readout
+    and all.
+    """
+
+    def build_broken(self, error: BaseException) -> Tick:
+        tick = self.build(window=BrokenWindow(error))
+        self.poller.reading = reading(112)
+        return tick
+
+    def test_a_pass_that_raises_does_not_raise_out(self):
+        tick = self.build_broken(RuntimeError("drawing broke"))
+        with self.assertLogs("vrcgm", level="ERROR"):
+            tick()
+
+    def test_a_repeating_fault_logs_its_traceback_once(self):
+        tick = self.build_broken(RuntimeError("drawing broke"))
+        with self.assertLogs("vrcgm", level="ERROR") as logged:
+            tick()
+            tick()
+            tick()
+        self.assertEqual(len(logged.records), 1)
+        self.assertIsNotNone(logged.records[0].exc_info)
+
+    def test_the_next_pass_draws_once_the_fault_clears(self):
+        tick = self.build_broken(RuntimeError("drawing broke"))
+        with self.assertLogs("vrcgm", level="ERROR"):
+            tick()
+        self.window.error = None
+        with self.assertLogs("vrcgm", level="INFO") as logged:
+            tick()
+        self.assertIsNotNone(self.window.image)
+        self.assertIn("recovered", "\n".join(logged.output))
+
+    def test_ctrl_c_still_gets_out(self):
+        # It is how both loops are stopped, so it is the one thing that
+        # has to pass straight through.
+        tick = self.build_broken(KeyboardInterrupt())
+        with self.assertRaises(KeyboardInterrupt):
+            tick()
 
 
 class Reloading(TickTestCase):
