@@ -18,7 +18,6 @@ set_alert.
 
 from __future__ import annotations
 
-import ctypes
 import logging
 import math
 import time
@@ -27,6 +26,7 @@ import openvr
 from PIL import Image
 
 from cgm.vr.armguide import MARKER_COUNT, ArmGuide
+from cgm.vr.texture import TextureFiles, texture_dir
 
 log = logging.getLogger(__name__)
 
@@ -391,19 +391,24 @@ class WristOverlay:
 
         # Index we last attached to, kept to detect changes.
         self._attached_index: int | None = None
-        # The compositor reads this buffer after setOverlayRaw returns, so
-        # it is allocated once and overwritten in place. Handing over a
-        # fresh one each frame let the old one be freed mid-upload, which
-        # showed up in the headset as a flicker once a second.
-        self._buffer = None
-        self._buffer_size: tuple[int, int] | None = None
+        # The face goes to the compositor as a file. See cgm.vr.texture
+        # for why not as raw bytes.
+        self._texture_dir = texture_dir()
+        self._texture = TextureFiles(
+            self._overlay, self._handle, self._texture_dir, "face"
+        )
         # The tuning guides, or None. See armguide.
         self._guide: ArmGuide | None = None
         # Reused for every pose read: orbit mode reads poses on every pass
         # of the loop, and a fresh array each time is pure churn.
         self._poses = (openvr.TrackedDevicePose_t * openvr.k_unMaxTrackedDeviceCount)()
 
-        log.info("created overlay (hand=%s, width=%.3fm)", hand, width_m)
+        log.info(
+            "created overlay (hand=%s, width=%.3fm, textures in %s)",
+            hand,
+            width_m,
+            self._texture_dir,
+        )
         self.set_arm_guide(arm_guide)
 
     def display_hz(self, fallback: float) -> float:
@@ -731,7 +736,7 @@ class WristOverlay:
         if enabled == (self._guide is not None):
             return
         if enabled:
-            self._guide = ArmGuide(self._overlay, OVERLAY_KEY)
+            self._guide = ArmGuide(self._overlay, OVERLAY_KEY, self._texture_dir)
             if not self._orbit:
                 log.info("the guides describe orbit mode, which is off")
         else:
@@ -756,33 +761,14 @@ class WristOverlay:
 
         Does nothing when the pixels match what is already on screen. The
         draw loop runs every second so the age readout stays current, but
-        the face itself only changes about once a minute, and every upload
-        is a chance for the compositor to show a torn frame.
+        the face itself only changes about twice a minute, and every
+        upload is a chance for the compositor to show a torn frame.
         """
         if image.mode != "RGBA":
             image = image.convert("RGBA")
         if self._flip_vertical:
             image = image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-
-        data = image.tobytes()
-        size = (image.width, image.height)
-
-        if self._buffer_size != size:
-            self._buffer = (ctypes.c_char * len(data))()
-            self._buffer_size = size
-        elif self._buffer.raw == data:
-            return
-
-        self._buffer.raw = data  # in place: the pointer must not move
-        # pyopenvr applies byref() to this itself, so hand it the ctypes
-        # array as-is; wrapping it here raises a TypeError on the way in.
-        self._overlay.setOverlayRaw(
-            self._handle,
-            self._buffer,
-            image.width,
-            image.height,
-            4,  # RGBA
-        )
+        self._texture.set(image)
 
     def _apply_alpha(self) -> None:
         """Push the configured opacity, less whatever the fade is taking.
@@ -824,8 +810,10 @@ class WristOverlay:
         """True when SteamVR is shutting down.
 
         Ignoring this blocks SteamVR from exiting, so the main loop checks
-        it on every pass.
+        it on every pass. The face's own queue is emptied on the same
+        pass: see _drain_face_events.
         """
+        self._drain_face_events()
         event = openvr.VREvent_t()
         while self._system.pollNextEvent(event):
             if event.eventType in (
@@ -836,6 +824,22 @@ class WristOverlay:
                 self._system.acknowledgeQuit_Exiting()
                 return True
         return False
+
+    def _drain_face_events(self) -> None:
+        """Empty the face's event queue, and say so if a texture failed.
+
+        The compositor loads a texture file on its own time and answers
+        with an event on the overlay's queue, not an error from the call.
+        Unread, a file it could not open would leave the old face up with
+        nothing in the log to say why.
+        """
+        event = openvr.VREvent_t()
+        while self._overlay.pollNextOverlayEvent(self._handle, event)[0]:
+            if event.eventType == openvr.VREvent_ImageFailed:
+                log.warning(
+                    "SteamVR could not load the face from %s",
+                    self._texture.last_path,
+                )
 
     # -- teardown -----------------------------------------------------------
 

@@ -18,6 +18,15 @@ is "read the log", it means `logs/vr-cgm-overlay.log` and the dated
 ones beside it: a session can be left running and read afterwards, with
 no console kept open for it.
 
+- **The face as a texture file.** The face reaches the compositor
+  through `setOverlayFromFile` now (see `cgm.vr.texture`), because
+  `setOverlayRaw` ran out of memory blocks about 105 minutes into every
+  session. No headset has shown the replacement yet. Three things to
+  see: the face appears and follows each new reading, rather than
+  flicking between the last two; nothing blinks when it changes; and a
+  session runs past two hours with no `the VR session has stopped` in
+  the log. `SteamVR could not load the face from ...` in the log means
+  the compositor refused the file.
 - **Controller sleep and wake.** With the process running, power the
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and

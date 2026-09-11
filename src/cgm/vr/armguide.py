@@ -26,10 +26,12 @@ is on, and it is meant to be deleted once the placement is settled.
 
 from __future__ import annotations
 
-import ctypes
 import logging
+from pathlib import Path
 
 from PIL import Image, ImageDraw
+
+from cgm.vr.texture import hand_over
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +77,7 @@ class ArmGuide:
     only the transforms and the ring's width change while tuning.
     """
 
-    def __init__(self, overlay, key_prefix: str) -> None:
+    def __init__(self, overlay, key_prefix: str, directory: Path) -> None:
         self._overlay = overlay
         self._axis = overlay.createOverlay(f"{key_prefix}.armaxis", "Arm axis guide")
         self._markers = [
@@ -83,29 +85,22 @@ class ArmGuide:
             for i in range(MARKER_COUNT)
         ]
 
-        # Kept alive for the life of the overlays: the compositor reads these
-        # buffers after the call returns, as it does for the watch face.
+        # As files, like the watch face, and for the same reason: see
+        # cgm.vr.texture. Each file is written once and never rewritten
+        # while the guide is up, so one name apiece is enough.
         overlay.setOverlayWidthInMeters(self._axis, AXIS_WIDTH_M)
-        self._axis_buffer = self._upload(self._axis, axis_texture())
+        hand_over(overlay, self._axis, axis_texture(), directory / "guide-axis.png")
         overlay.showOverlay(self._axis)
 
         dot = marker_texture()
-        self._marker_buffers = []
         middle = MARKER_COUNT // 2
         for i, handle in enumerate(self._markers):
             scale = TOP_MARKER_SCALE if i == middle else 1.0
             overlay.setOverlayWidthInMeters(handle, MARKER_WIDTH_M * scale)
-            self._marker_buffers.append(self._upload(handle, dot))
+            hand_over(overlay, handle, dot, directory / f"guide-dot{i}.png")
             overlay.showOverlay(handle)
 
         log.info("arm guide on: cyan line is the modelled arm, magenta dots the orbit")
-
-    def _upload(self, handle, image: Image.Image):
-        data = image.tobytes()
-        buffer = (ctypes.c_char * len(data))()
-        buffer.raw = data
-        self._overlay.setOverlayRaw(handle, buffer, image.width, image.height, 4)
-        return buffer
 
     def update(self, index: int, axis_transform, marker_transforms) -> None:
         """Point the guides at the arm the overlay is currently modelling.
