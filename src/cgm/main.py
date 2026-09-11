@@ -69,6 +69,7 @@ from cgm.core.librelink import (  # noqa: E402
     LibreLinkUp,
 )
 from cgm.core.fetcher import Fetcher  # noqa: E402
+from cgm.core.logfile import LOG_FORMAT, log_to_file, log_uncaught  # noqa: E402
 from cgm.core.poller import Poller  # noqa: E402
 from cgm.core.watcher import ConfigWatcher  # noqa: E402
 from cgm.face.graph import GraphTuning  # noqa: E402
@@ -719,7 +720,7 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+        format=LOG_FORMAT,
         datefmt="%H:%M:%S",
     )
 
@@ -736,6 +737,11 @@ def main(argv: list[str] | None = None) -> int:
         # that is meant to stay up and the overlay is the one you want as
         # well, when the headset goes on, so wanting only one of them is
         # the case that has to be asked for.
+        #
+        # The log file goes beside the config it is a run of, and only
+        # here: see `cgm.core.logfile` for why --dry-run keeps none.
+        log_to_file(args.config.parent / "logs")
+        log_uncaught()
         return run(
             cfg,
             args.config,
