@@ -149,6 +149,13 @@ python tools/check_settings.py        # the settings window, from the right-clic
 python -m compileall -q src tools tests
 ```
 
+`.github/workflows/test.yml` runs the same list, minus
+`check_settings.py`, on every push -- on Windows, from a clean,
+non-editable install. It is a second look, not a gate: merges happen
+here, so it reports after the push. Its point is the install itself,
+which the local venv cannot check: a dependency missing from
+`pyproject.toml` still imports here. Keep the two lists in step.
+
 `tests/` covers what can be asserted without a device: timestamp
 parsing, the trend fit and the arrow angle it maps to, the fetch
 schedule and its backoff and the thread that drives it, config
