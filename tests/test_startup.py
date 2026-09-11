@@ -72,7 +72,9 @@ class Installing(unittest.TestCase):
         target, args, workdir = self.read(link)
         self.assertEqual(Path(target), startup.pythonw())
         self.assertEqual(args, startup.arguments(self.config))
-        self.assertEqual(Path(workdir), self.config.parent)
+        # Resolved, as install() resolves it: a TEMP given as an 8.3
+        # short name (C:\Users\RUNNER~1 on a CI runner) comes back long.
+        self.assertEqual(Path(workdir), self.config.resolve().parent)
 
     def test_installing_again_replaces_rather_than_adds(self):
         # It is how a moved checkout or another config gets pointed at.
