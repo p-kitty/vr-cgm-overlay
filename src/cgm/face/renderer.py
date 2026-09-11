@@ -89,7 +89,13 @@ GRAPH_BOTTOM_MARGIN = 60
 # How old a reading gets before the face goes grey, when nobody says.
 # `display.stale_after_min` takes its default from here, so the preview
 # sheets and the running face agree about when grey starts.
-STALE_AFTER_MIN = 10.0
+#
+# A floor set by the poll cycle, not a preference: with a 60 second
+# interval a healthy reading's age sawtooths up to about 122 seconds, so
+# anything under 2.1 blinks grey during ordinary fetching. 2.5 clears
+# that and still greys about a minute after an update goes missing. The
+# measurement behind it is beside the key in config.example.toml.
+STALE_AFTER_MIN = 2.5
 
 # Tried in order; all ship with Windows.
 FONT_CANDIDATES = [
