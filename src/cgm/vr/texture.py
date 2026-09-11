@@ -30,6 +30,11 @@ per path, that would grow without bound and quietly, which is exactly
 the failure this module exists to get away from. Two names that turned
 out wrong would be wrong at once, where it can be seen.
 
+A file costs one thing raw bytes did not: the overlay goes blank while
+the compositor loads it, and in the headset that was a blink at every
+change. So the face is two overlays in one place (`DoubleBuffer`): the
+next frame loads into the hidden one, and they swap once it has.
+
 Imports nothing from SteamVR: it is handed the overlay interface, so it
 can be driven by a stand-in with no headset in the room.
 """
@@ -38,6 +43,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+import time
 from pathlib import Path
 
 from PIL import Image
@@ -52,6 +58,12 @@ TEXTURE_DIR_NAME = "vr-cgm-overlay"
 # zlib's fastest. The file lives for one load and is read from the same
 # disk it was written to, so size buys nothing and time is the VR thread's.
 PNG_COMPRESS_LEVEL = 1
+
+# How long to wait for the compositor to say a texture has loaded before
+# showing it regardless. A 12 KB PNG off a local disk takes milliseconds;
+# this is only for an answer that never comes, which would otherwise
+# leave the face stuck on the frame before.
+LOAD_TIMEOUT_SEC = 1.0
 
 
 def texture_dir(root: Path | None = None) -> Path:
@@ -111,3 +123,130 @@ class TextureFiles:
         self._shown = shown
         self.last_path = path
         return True
+
+    def forget(self) -> None:
+        """Take the last frame as not shown, so the next `set` hands it over.
+
+        For a load the compositor reported failing: what it holds is not
+        what was handed over, and matching against that would skip the
+        retry.
+        """
+        self._shown = None
+
+
+class DoubleBuffer:
+    """The face as two overlays in one place, so a change never blinks.
+
+    Handing the compositor a file blanks the overlay until the load is
+    done. So the next frame goes into the hidden overlay, and the two
+    swap only once the compositor says it has loaded -- the new one
+    shown before the old one is hidden, so no frame has neither.
+
+    The caller owns the event queues: it reads both overlays' and passes
+    on what they say through `loaded` and `failed`, and calls `poll` on
+    every pass so a load nobody answers still ends. That keeps the
+    SteamVR event types on the far side of this module.
+
+    Each overlay alternates between two files of its own, so neither is
+    handed the path it holds, and a file is only rewritten while its
+    overlay is hidden.
+    """
+
+    def __init__(
+        self,
+        overlay,
+        handles: tuple,
+        directory: Path,
+        *,
+        timeout_sec: float = LOAD_TIMEOUT_SEC,
+        clock=time.monotonic,
+    ) -> None:
+        self._overlay = overlay
+        self._front, self._back = handles
+        self._files = {
+            handle: TextureFiles(overlay, handle, directory, f"face-{name}")
+            for handle, name in zip(handles, "ab")
+        }
+        self._timeout = timeout_sec
+        self._clock = clock
+        # Size and pixels of the front overlay's frame, and of the one
+        # loading into the back, if any.
+        self._shown: tuple[tuple[int, int], bytes] | None = None
+        self._loading: tuple[tuple[int, int], bytes] | None = None
+        self._loading_since: float | None = None
+        # The newest frame that arrived while another was loading. Only
+        # the newest: one that was replaced before it could be shown has
+        # nothing left to say.
+        self._pending: Image.Image | None = None
+        self._said_timeout = False
+        overlay.showOverlay(self._front)
+
+    @property
+    def handles(self) -> tuple:
+        """Both overlays, shown one first."""
+        return (self._front, self._back)
+
+    def set(self, image: Image.Image) -> None:
+        """Show `image` as soon as it has loaded. Unchanged pixels do nothing."""
+        if self._loading_since is not None:
+            self._pending = image
+            return
+        frame = (image.size, image.tobytes())
+        if frame == self._shown:
+            return
+        self._loading = frame
+        if self._files[self._back].set(image):
+            self._loading_since = self._clock()
+        else:
+            # The hidden overlay already holds exactly this, from two
+            # frames ago. Nothing to wait for.
+            self._swap()
+
+    def loaded(self, handle) -> None:
+        """The compositor has finished loading a texture into `handle`."""
+        if handle == self._back and self._loading_since is not None:
+            self._swap()
+
+    def failed(self, handle) -> None:
+        """The compositor could not load the texture handed to `handle`."""
+        if handle != self._back or self._loading_since is None:
+            return
+        files = self._files[handle]
+        log.warning("SteamVR could not load the face from %s", files.last_path)
+        files.forget()
+        self._loading = None
+        self._loading_since = None
+        # Keep the face that is up, and move on to whatever came next.
+        self._next()
+
+    def poll(self) -> None:
+        """Show a load that has gone unanswered too long regardless."""
+        if self._loading_since is None:
+            return
+        if self._clock() - self._loading_since < self._timeout:
+            return
+        if not self._said_timeout:
+            # Once: if the compositor never answers, it never will, and
+            # the face blinking again is the whole of the damage.
+            log.warning(
+                "SteamVR did not say the face had loaded within %.1fs; "
+                "showing it regardless",
+                self._timeout,
+            )
+            self._said_timeout = True
+        self._swap()
+
+    def _swap(self) -> None:
+        # Show, then hide. The other way round leaves a frame with nothing.
+        self._overlay.showOverlay(self._back)
+        self._overlay.hideOverlay(self._front)
+        self._front, self._back = self._back, self._front
+        self._shown = self._loading
+        self._loading = None
+        self._loading_since = None
+        self._next()
+
+    def _next(self) -> None:
+        pending, self._pending = self._pending, None
+        if pending is not None:
+            self.set(pending)
