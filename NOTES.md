@@ -22,10 +22,6 @@ no console kept open for it.
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and
   the face should come back.
-- **A long session.** Leave it running for an hour or two, then check
-  the log still shows `fetched:` about once a minute, with no `fetch
-  failed` streak stretching the interval out. `--window` counts — this
-  is the fetch schedule, which the two frontends share.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
