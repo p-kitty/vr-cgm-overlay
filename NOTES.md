@@ -18,26 +18,10 @@ is "read the log", it means `logs/vr-cgm-overlay.log` and the dated
 ones beside it: a session can be left running and read afterwards, with
 no console kept open for it.
 
-- **The face as a texture file.** The face reaches the compositor
-  through `setOverlayFromFile` now (see `cgm.vr.texture`), because
-  `setOverlayRaw` ran out of memory blocks about 105 minutes into every
-  session. A file blanks the overlay while it loads, so the face is two
-  overlays that swap once the hidden one has loaded. Seen in a headset:
-  it follows each new reading and does not blink. Not seen yet: a
-  session past two hours with no `the VR session has stopped` in the
-  log, which is the point of the change. Two log lines mean something
-  to look into: `SteamVR did not say the face had loaded` means a
-  hidden overlay got no load event, so the swap ran on its timeout and
-  can blink. `SteamVR could not load the face from ...` means the
-  compositor refused the file.
 - **Controller sleep and wake.** With the process running, power the
   controller off, wait, and power it back on. The log should show `lost
   the left controller` and then `attached to the left controller`, and
   the face should come back.
-- **A long session.** Leave it running for an hour or two, then check
-  the log still shows `fetched:` about once a minute, with no `fetch
-  failed` streak stretching the interval out. `--window` counts — this
-  is the fetch schedule, which the two frontends share.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
