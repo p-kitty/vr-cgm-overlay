@@ -19,7 +19,7 @@ import sys
 import unittest
 
 from cgm.desk.window import BACKDROP, compose, on_a_monitor, position_of
-from cgm.face.renderer import HEIGHT, WIDTH, Theme, WatchFaceRenderer
+from cgm.face.renderer import HEIGHT, Theme, WatchFaceRenderer
 from cgm.main import _window_title
 
 
@@ -76,19 +76,22 @@ class Compose(unittest.TestCase):
         self.assertEqual(rounded.getpixel((0, 0))[3], 0)
 
     def test_native_scale_keeps_the_size(self):
-        self.assertEqual(compose(self.face, 1.0).size, (WIDTH, HEIGHT))
+        self.assertEqual(compose(self.face, 1.0).size, self.face.size)
 
     def test_scaling_changes_the_size_in_proportion(self):
         for scale in (0.25, 0.5, 1.5, 4.0):
             with self.subTest(scale=scale):
                 out = compose(self.face, scale)
                 self.assertEqual(
-                    out.size, (round(WIDTH * scale), round(HEIGHT * scale))
+                    out.size,
+                    (round(self.face.width * scale), round(HEIGHT * scale)),
                 )
 
     def test_the_aspect_ratio_is_kept(self):
         out = compose(self.face, 0.75)
-        self.assertAlmostEqual(out.width / out.height, WIDTH / HEIGHT, places=2)
+        self.assertAlmostEqual(
+            out.width / out.height, self.face.width / HEIGHT, places=2
+        )
 
     def test_a_scaled_face_is_still_opaque(self):
         self.assertEqual(compose(self.face, 0.5).mode, "RGB")

@@ -29,11 +29,11 @@ from datetime import datetime, timedelta, timezone
 from cgm.core.librelink import GlucosePoint, Reading
 
 from cgm.face.renderer import (
+    ARROW_LENGTH,
     HEIGHT,
     MAX_BEND_DEG,
     STATUS_MARKERS,
     TREND_ANGLES,
-    WIDTH,
     Theme,
     TrendShape,
     TrendTuning,
@@ -185,7 +185,7 @@ class CardCorners(unittest.TestCase):
             reading(), stale_after_min=0.0
         )
         self.assertEqual(
-            stale.getpixel((WIDTH // 2, 2)), (*THEME.color_stale, 255)
+            stale.getpixel((stale.width // 2, 2)), (*THEME.color_stale, 255)
         )
 
     def test_the_marker_keeps_its_inset_either_way(self):
@@ -443,8 +443,10 @@ class ArrowDrawing(unittest.TestCase):
     def drawn(angles: tuple[float, ...]):
         from PIL import Image, ImageDraw
 
-        image = Image.new("RGBA", (WIDTH, HEIGHT), (0, 0, 0, 0))
-        _draw_arrow(ImageDraw.Draw(image), (256.0, 128.0), angles, 84, (255, 0, 0))
+        image = Image.new("RGBA", (512, HEIGHT), (0, 0, 0, 0))
+        _draw_arrow(
+            ImageDraw.Draw(image), (256.0, 128.0), angles, ARROW_LENGTH, (255, 0, 0)
+        )
         return image
 
     def test_a_bend_of_nothing_is_the_straight_arrow(self):
@@ -470,6 +472,22 @@ class ArrowDrawing(unittest.TestCase):
         straight = self.drawn((0.0,)).getbbox()
         bent = self.drawn((60.0, -60.0)).getbbox()
         self.assertLessEqual(bent[2] - bent[0], straight[2] - straight[0])
+
+    def test_no_shape_reaches_past_half_its_length_to_the_right(self):
+        # The card's width gives the arrow exactly this much room right
+        # of its middle, and not a pixel more, so a shape that reached
+        # further would run into the margin. getbbox's right is
+        # exclusive, hence the one.
+        angles = range(-90, 91, 15)
+        shapes = [(a,) for a in angles] + [
+            TREND._folded((TREND.fast_mgdl_min * a / 90, TREND.fast_mgdl_min * b / 90))
+            for a in angles
+            for b in angles
+        ]
+        for shape in shapes:
+            with self.subTest(shape=shape):
+                right = self.drawn(shape).getbbox()[2]
+                self.assertLessEqual(right, 256 + ARROW_LENGTH / 2 + 1)
 
 
 class UnitLabel(unittest.TestCase):
@@ -499,7 +517,7 @@ class FaceForState(unittest.TestCase):
 
     def test_a_reading_is_drawn(self):
         image = self.face(reading(), None)
-        self.assertEqual(image.size, (WIDTH, HEIGHT))
+        self.assertEqual(image.size, (self.renderer.width, HEIGHT))
 
     def test_a_reading_survives_a_failed_fetch(self):
         # The last value stays up while the network is down. It keeps

@@ -183,7 +183,10 @@ one of them: it was considered and is not wanted.
 **The legibility question is settled and the dismissal one is not.**
 Run on a Quest 3 on 2026-09-07: eight hours of trace across a 378px plot
 reads as a shape at arm's length rather than as texture under the
-number, and it has been left on since. Growing the card from 7cm to 12cm
+number, and it has been left on since. The plot is 320px of a narrower
+card now, which at the same `width_m` is about as wide in the headset
+(10.6cm against 11.1) -- close enough to expect the verdict to hold, but
+not yet looked at. Growing the card from 7cm to 12cm
 around its centre wanted `offset` Y moved 0.02m, which is the whole
 retune. So nothing above is blocked on whether the graph is worth
 showing -- it is.

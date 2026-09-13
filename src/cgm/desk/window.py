@@ -34,7 +34,7 @@ import tkinter as tk
 
 from PIL import Image, ImageTk
 
-from cgm.face.renderer import CLEAR_COLUMN, WIDTH
+from cgm.face.renderer import CLEAR_COLUMN
 
 log = logging.getLogger("vrcgm")
 
@@ -114,7 +114,7 @@ def compose(face: Image.Image, scale: float) -> Image.Image:
     """Flatten the face onto the window backdrop at the asked-for size.
 
     Scaling happens here, once per frame, rather than by rendering the
-    face at a different size: the layout is tuned at 512x256 -- font
+    face at a different size: the layout is tuned at one size -- font
     sizes, the marker thickness, where the arrow sits next to the digits
     -- and re-deriving all of that per scale would be a second layout to
     keep in step with the first.
@@ -159,8 +159,11 @@ class FaceWindow:
         # to it, and then draws nothing. The reference has to be held
         # here, on the Python side, for as long as it is on screen.
         self._photo: ImageTk.PhotoImage | None = None
-        # What size is currently on screen, so a change can be noticed.
+        # What size is currently on screen, so a change can be noticed,
+        # and how wide the face behind it is: the unit decides that, so
+        # it is taken off the image like the height is.
         self._shown: tuple[int, int] | None = None
+        self._face_width = 1
         # The corner marks: a gear to open the settings, and a badge
         # saying the overlay is up. Both are None until asked for, and
         # both sit on the card, so they carry its colour -- taken off
@@ -233,6 +236,7 @@ class FaceWindow:
         shown = compose(image, self._scale)
         if shown.size != self._shown:
             self._shown = shown.size
+            self._face_width = image.width
             self._root.geometry("")
             self._place_marks()
         self._match_corner(shown)
@@ -345,10 +349,15 @@ class FaceWindow:
         goes -- with the badge in the gear's place when there is no gear.
         Everything is multiplied by the scale of the picture on screen,
         the type included, so they fit the column at every window.scale
-        rather than only at 1.0. Called again whenever that size changes.
+        rather than only at 1.0. Called again whenever that size changes,
+        and not before there is a face to stand them on: the column is
+        counted in from its right edge, which is not there yet.
         """
-        scale = self._shown[0] / WIDTH if self._shown else self._scale
-        left, right = (edge * scale for edge in CLEAR_COLUMN)
+        if self._shown is None:
+            return
+        scale = self._shown[0] / self._face_width
+        outer, inner = CLEAR_COLUMN
+        left, right = ((self._face_width - edge) * scale for edge in (outer, inner))
         y = None
         for mark, (family, size, weight) in (
             (self._gear, GEAR_FONT),
@@ -366,7 +375,7 @@ class FaceWindow:
                 # stops, so it clears the frame the way it clears the
                 # bars -- by more than resampling blurs their edges.
                 air = max(0, right - left - mark.winfo_reqwidth()) / 2
-                y = scale * WIDTH - right + air
+                y = scale * inner + air
             mark.place(x=round((left + right) / 2), y=round(y), anchor="n")
             y += mark.winfo_reqheight()
 

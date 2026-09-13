@@ -62,7 +62,7 @@ log = logging.getLogger(__name__)
 GAZE_ALPHA_FLOOR = 0.1
 
 # What `window.scale` may be set to. The watch face is rendered once at
-# 512x256 and resampled to the window, so scaling down loses detail and
+# its own size and resampled to the window, so scaling down loses detail and
 # scaling up cannot invent it.
 WINDOW_SCALE_MIN = 0.25
 WINDOW_SCALE_MAX = 4.0
@@ -634,7 +634,7 @@ def _validate(cfg: Config) -> None:
     # The face is drawn at one fixed size and scaled on the way to the
     # window, so this is a resampling factor rather than a layout knob.
     # Below the floor the digits stop being glanceable, which is the
-    # entire point of them; above the ceiling it is upscaling a 512px
+    # entire point of them; above the ceiling it is upscaling a 454px
     # image and going soft. Both are checked even without --window, so a
     # typo is caught at startup rather than by the frontend that happens
     # to read it.

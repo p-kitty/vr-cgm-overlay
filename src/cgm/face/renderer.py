@@ -13,10 +13,10 @@ corner of your eye:
 All text is ASCII, so it survives fonts without CJK glyphs.
 
 The card grows a history sparkline below all that when one is asked
-for, and stays 512x256 when it is not -- so the frontend that wants a
+for, and stays 256 tall when it is not -- so the frontend that wants a
 glanceable number only still gets exactly the face it always had. See
-`cgm.face.graph`, and `WatchFaceRenderer.height`, which is the size to
-build a texture or a window from now that there are two of them.
+`cgm.face.graph`, and `WatchFaceRenderer.width` and `.height`, which are
+the size to build a texture or a window from: neither is one number.
 
 Status is carried on two independent channels. Colour gives severity;
 the marker's *position* gives direction -- above range lights the top
@@ -38,12 +38,34 @@ from cgm.face.graph import GraphTuning, draw_sparkline
 
 log = logging.getLogger(__name__)
 
-# The face itself. The layout below is tuned to these -- font sizes,
+# The face itself. The layout below is tuned to this -- font sizes,
 # where the arrow sits next to the digits, how thick a marker reads --
-# so they are constants rather than arguments: a second size would be a
+# so it is a constant rather than an argument: a second size would be a
 # second layout to keep in step with the first. Scaling to a window is
 # done by resampling the finished image (see cgm.desk.window.compose).
-WIDTH, HEIGHT = 512, 256
+HEIGHT = 256
+
+# The width is not a constant, because it is not a choice. The card is
+# exactly as wide as the widest reading it can show, with its arrow, and
+# TEXT_MARGIN either side -- see WatchFaceRenderer._card_width. It used
+# to be a flat 512, which left a column of nothing right of the arrow,
+# and under the sparkline that column was not nothing: it stretched the
+# time axis, so a rise drawn there looked gentler than the same rise on
+# the phone. Sizing the card by what it holds narrows the graph without
+# leaving any empty space to show for it.
+#
+# The margin the text keeps from both side edges of the card.
+TEXT_MARGIN = 44
+# The arrow: how long it is, and how far its middle sits right of the
+# digits. Nothing it can be bent into reaches further right than half
+# its length, so that is all the width the card gives it.
+ARROW_LENGTH = 84
+ARROW_GAP = 66
+# The widest text each unit can put in the digits, with 8 standing for
+# the widest figure the font has. Three figures in mg/dL, since
+# LibreLink tops out at 500; two and a decimal in mmol/L, which is what
+# makes that card the wider of the two.
+WIDEST_VALUE = {"mgdl": "888", "mmol": "88.8"}
 
 # What the card grows by when the sparkline is on. The face above it
 # does not move at all: every element keeps the coordinates it had, and
@@ -72,8 +94,8 @@ GRAPH_HEIGHT = 184
 
 # Where the trace lives inside that strip.
 #
-# The right edge lines up with the text above -- the age ends at
-# WIDTH - 44 -- so the graph reads as the same column of information
+# The right edge lines up with the text above -- the age ends
+# TEXT_MARGIN in from the edge -- so the graph reads as the same column of information
 # rather than a panel bolted on. The left does not: it gives up a
 # gutter for the level labels, which are right-aligned into it and so
 # still start inside the 44 the rest of the face keeps.
@@ -187,14 +209,15 @@ MARKER_INSET = 32
 FRAME_INSET = 2
 FRAME_WIDTH = 6
 
-# The one strip of the card no marker ever lights, as the x range it
-# covers: down the right-hand edge, from where the top and bottom bars
-# stop to where the stale frame starts, the whole height of the card.
+# The one strip of the card no marker ever lights, as how far in from
+# the right-hand edge it starts and stops -- counted from that edge,
+# since the card's width depends on the unit: from where the top and
+# bottom bars stop to where the stale frame starts, the whole height.
 # Nothing lights it because there is no right-hand marker, and the
 # desktop window counts on that -- it stands its gear and its VR mark
 # here, where an opaque label cannot cut a hole in a lit edge. A marker
 # on the right would leave them nowhere to go.
-CLEAR_COLUMN = (WIDTH - MARKER_INSET, WIDTH - FRAME_INSET - FRAME_WIDTH)
+CLEAR_COLUMN = (MARKER_INSET, FRAME_INSET + FRAME_WIDTH)
 
 # Status -> which edge of the card lights up. Position is the half of the
 # signal that does not depend on colour vision: above range lights the
@@ -483,11 +506,13 @@ class WatchFaceRenderer:
         # picture. Which frontend gets which is `cgm.main`'s decision,
         # like the graph above it.
         self.corner_radius = CARD_RADIUS if rounded else 0
-        self.width = WIDTH
-        self.height = HEIGHT + (GRAPH_HEIGHT if graph is not None else 0)
         self._font_value = _load_font(150)
         self._font_small = _load_font(38)
         self._font_message = _load_font(52)
+        # Messages too long for the card at that size, at the size they fit.
+        self._fitted_fonts: dict[str, ImageFont.FreeTypeFont] = {}
+        self.width = self._card_width()
+        self.height = HEIGHT + (GRAPH_HEIGHT if graph is not None else 0)
         # Smaller than anything else on the card on purpose: the axis
         # labels are there to be read when you go looking for them, not
         # to compete with the number for the half-second glance. Small
@@ -530,14 +555,22 @@ class WatchFaceRenderer:
         unit_text = unit_label(self.unit)
 
         # Left-aligned, leaving the right side for the arrow and the age.
-        draw.text((44, 118), value_text, font=self._font_value, fill=color, anchor="lm")
+        draw.text(
+            (TEXT_MARGIN, 118),
+            value_text,
+            font=self._font_value,
+            fill=color,
+            anchor="lm",
+        )
 
-        value_right = 44 + draw.textlength(value_text, font=self._font_value)
+        value_right = TEXT_MARGIN + draw.textlength(value_text, font=self._font_value)
 
         # The arrow sits right next to the number to minimise eye travel.
         shape = self.trend.shape_for(reading)
         if shape.angles:
-            _draw_arrow(draw, (value_right + 66, 116), shape.angles, 84, color)
+            _draw_arrow(
+                draw, (value_right + ARROW_GAP, 116), shape.angles, ARROW_LENGTH, color
+            )
 
         draw.text(
             (46, 206), unit_text, font=self._font_small, fill=(160, 165, 178), anchor="lm"
@@ -546,7 +579,7 @@ class WatchFaceRenderer:
         # The age is only coloured when stale, to draw attention then.
         age_text = self._format_age(age)
         draw.text(
-            (WIDTH - 44, 206),
+            (self.width - TEXT_MARGIN, 206),
             age_text,
             font=self._font_small,
             fill=color if is_stale else (160, 165, 178),
@@ -578,8 +611,8 @@ class WatchFaceRenderer:
         Keeps "no reading at all" visually distinct from a real value.
         """
         img, draw = self._new_canvas(self.theme.color_stale, STATUS_MARKERS["stale"])
-        # Centred on the card rather than at the coordinates the 512x256
-        # face used, so the message sits in the middle of a card that has
+        # Centred on the card rather than at the coordinates the graphless
+        # face uses, so the message sits in the middle of a card that has
         # grown a sparkline strip too. No graph is drawn here: a message
         # card has no history behind it, and an empty band under "NO
         # CONNECTION" would be one more thing to read for nothing.
@@ -587,7 +620,7 @@ class WatchFaceRenderer:
         draw.text(
             (self.width // 2, middle - 24 if detail else middle),
             message,
-            font=self._font_message,
+            font=self._message_font(message, draw),
             fill=(226, 228, 235),
             anchor="mm",
         )
@@ -602,6 +635,36 @@ class WatchFaceRenderer:
         return img
 
     # -- internals ----------------------------------------------------------
+
+    def _card_width(self) -> int:
+        """How wide the card is: its widest reading, the arrow, and margins.
+
+        Measured off the font that actually loaded rather than written
+        down, so a machine that falls back to another face still gets a
+        card that holds its digits.
+        """
+        measure = ImageDraw.Draw(Image.new("L", (1, 1)))
+        widest = max(
+            "0123456789", key=lambda d: measure.textlength(d, font=self._font_value)
+        )
+        template = WIDEST_VALUE["mmol" if self.unit == "mmol" else "mgdl"]
+        digits = measure.textlength(template.replace("8", widest), font=self._font_value)
+        return math.ceil(TEXT_MARGIN + digits + ARROW_GAP + ARROW_LENGTH / 2 + TEXT_MARGIN)
+
+    def _message_font(self, message: str, draw: ImageDraw.ImageDraw):
+        """The message size, or smaller if that would run past the margins.
+
+        The card is only as wide as a reading needs, and "NO CONNECTION"
+        at full size is wider than that.
+        """
+        room = self.width - 2 * TEXT_MARGIN
+        length = draw.textlength(message, font=self._font_message)
+        if length <= room:
+            return self._font_message
+        if message not in self._fitted_fonts:
+            size = int(self._font_message.size * room / length)
+            self._fitted_fonts[message] = _load_font(size)
+        return self._fitted_fonts[message]
 
     def _graph_box(self) -> tuple[float, float, float, float]:
         """The plot rectangle, in canvas coordinates.

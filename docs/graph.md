@@ -37,12 +37,19 @@ at a desk, where a few hours of history is worth the room it takes. The
 overlay is glanced at mid-game, where the number in half a second is the
 whole design goal, so it stays off there unless you ask for it.
 
-Turning it on grows the card from 512x256 to 512x440. The window resizes
-itself on the next frame; in VR the face keeps the width `width_m` gives
-it and gets taller — 12cm rather than 7 at the default `width_m` — and
-grows around its centre, so about 2.5cm arrives above the number and the
-same below. Expect to revisit `offset` if you switch it on there: on a
+Turning it on grows the card from 454x256 to 454x440 (495 wide in
+mmol/L). The window resizes itself on the next frame; in VR the face
+keeps the width `width_m` gives it and gets taller — 13.6cm rather than
+7.9 at the default `width_m` — and grows around its centre, so about
+2.8cm arrives above the number and the same below. Expect to revisit `offset` if you switch it on there: on a
 Quest 3 the whole correction was moving Y by 0.02m.
+
+**The card is no wider than the number and its arrow.** The width is
+not a setting: it is the widest reading the unit can show, the arrow
+beside it, and the same margin either side. Under the graph that is what
+sets the time axis — a card with room to spare to the right of the arrow
+stretched eight hours wide enough that a rise looked gentler than the
+same rise on the phone.
 
 ## What it draws
 
