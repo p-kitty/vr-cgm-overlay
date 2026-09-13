@@ -18,10 +18,6 @@ is "read the log", it means `logs/vr-cgm-overlay.log` and the dated
 ones beside it: a session can be left running and read afterwards, with
 no console kept open for it.
 
-- **Controller sleep and wake.** With the process running, power the
-  controller off, wait, and power it back on. The log should show `lost
-  the left controller` and then `attached to the left controller`, and
-  the face should come back.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
@@ -56,14 +52,15 @@ no console kept open for it.
   instead, which the log calls `(fit)` rather than `(bend)`.
 
   A dry run on 2026-09-07 drew a bend from 48 points, so the path is
-  reachable and not theoretical. But the lag has also been measured at
-  26 minutes and growing a minute a minute, which puts the third point
-  at 41 and the bend just inside its 45. So a day with a lag much past
-  30 draws the old straight arrow for most of it, and the log is the
-  only place that shows it. Every `fetched:` line ends on the lag as
-  `history N min behind`, so neither `(fit)` nor `(API)` while the
-  sensor is scanning normally means the resolution has changed until
-  that number has been read.
+  reachable and not theoretical. How often is now measured too: the
+  logs from 2026-09-11 11:16 to 2026-09-13 09:21 hold 1575 fetches, and
+  1369 of them bent while 206 -- 13% -- fell back to `(fit)`. Every
+  `(fit)` came with a lag of 30 minutes or more, which is where the
+  third point crosses `BEND_MAX_SPAN_MIN`, so the fallback is the lag
+  and nothing else. Every `fetched:` line ends on the lag as `history N
+  min behind`, so a `(fit)` or `(API)` while the sensor is scanning
+  normally does not mean the resolution has changed until that number
+  has been read.
 
   What no session has watched is how the arrow behaves as the lag
   crosses that line: the shape it draws changes under you, and whether
@@ -75,24 +72,21 @@ no console kept open for it.
   it exceeded `MAX_GAP_MIN` and the trace broke in front of the newest
   point, which looked like a fault and was not one; `LAST_GAP_MIN` now
   joins that one gap up to an hour. So a break there again means a lag
-  over an hour, which nothing has yet seen, and is worth measuring
-  rather than assuming.
-- **`LAST_GAP_MIN` is a guess, and the number it is guarding against
-  has never been bounded.** The sparkline joins its newest point across
-  a gap of up to an hour, because that gap is `graphData` being
-  published late rather than the sensor not reading. An hour was picked
-  as comfortably past the largest lag anyone has seen -- 18 minutes
-  measured on 2026-09-07, 30 in the entry above -- and nothing has ever
-  watched the lag long enough to say how far it really goes.
+  over an hour, twice anything the logs have shown.
+- **`LAST_GAP_MIN` is sized from three days of lag, not from its
+  failure modes.** The sparkline joins its newest point across a gap of
+  up to an hour, because that gap is `graphData` being published late
+  rather than the sensor not reading.
 
-  It is not bounded by the 15 minute spacing, which is the tempting
-  assumption: every lag measured so far has sat between 18 and 30, and
-  on 2026-09-10 it climbed from 18 to 25 over eight minutes without a
-  new point being published. Every `fetched:` line now carries it as
-  `history N min behind`, so a `--window` left open for an evening
-  bounds it with no tooling.
+  The lag it guards against is now bounded by measurement. Across the
+  1575 fetches in the entry above it never went under 17.0 minutes or
+  over 31.1, with a median of 24, and 31.1 was the ceiling on each of
+  the three days separately. It climbs a minute a minute and drops back
+  when a point is published, so it is a sawtooth with a steady top
+  rather than a number that wanders. An hour is about twice that top.
 
-  It can be wrong in both directions, and each shows differently:
+  What has not been seen is either way the hour could be wrong, and
+  each shows differently:
 
   - **Too low**: the trace breaks in front of the newest point again,
     the way it did at 30. That means a lag over an hour, which would be
@@ -104,9 +98,8 @@ no console kept open for it.
     nobody measured. That is the failure worth catching, because unlike
     a visible break it does not look wrong.
 
-  **Neither case is being hunted.** No session is scheduled to bound the
-  lag; the constant stays where it is and gets corrected if ordinary use
-  turns one of the two up. Both are visible from the face itself -- a
+  **Neither case is being hunted.** The constant stays where it is and
+  gets corrected if ordinary use turns one of the two up. Both are visible from the face itself -- a
   break in front of the newest point, or a flat run under an age that
   kept climbing -- so waiting for one costs nothing.
 
@@ -171,18 +164,10 @@ as being able to call the graph up when you want it and have it gone
 again the rest of the time. That is what was actually asked for, and it
 is not built.
 
-Three ways to reach it, cheapest first:
+Two ways to reach it, cheapest first. Showing the graph only while the
+face is looked at, off the gaze angle the fade already measures, is not
+one of them: it was considered and is not wanted.
 
-- **The gaze angle is already computed.** `cgm.vr.overlay` measures how
-  far the face is from the centre of view every frame, for the fade.
-  Showing the graph only while you are actually looking at your wrist
-  needs no new input API, works on every stack, and is the only one of
-  these that cannot be broken by a driver. What it costs is that the
-  card changes size as you glance at it, which moves the number: the
-  overlay grows around its centre, so the digits would shift by half the
-  strip's height every time. Compensating means moving `offset` in step
-  with the size, which is a small piece of arithmetic and the reason
-  this is not free.
 - **A controller button, through `getControllerState`.** The obvious
   answer, and the one with a known risk: that is the legacy input API,
   and the legacy haptic call on the same API does nothing on this stack
@@ -205,8 +190,8 @@ showing -- it is.
 
 What is still missing is the being-gone-again half. `in_vr = false`
 stays the shipped default, because that verdict came from one stack with
-`gaze_fade` on, which is doing the dismissing that none of the three
-options above are built to do. Somebody running without the fade has a
+`gaze_fade` on, which is doing the dismissing that neither option above
+is built to do. Somebody running without the fade has a
 graph that is always in the way and no way to put it down.
 
 ## The modelled arm drifts from the real one towards the elbow
