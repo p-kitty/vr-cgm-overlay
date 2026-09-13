@@ -99,7 +99,8 @@ flip_vertical = false   # set true if the face renders upside down
 # ignores it, the same way the overlay's own [vr] means nothing to a
 # window. Both are re-read while running.
 [window]
-# Size, as a multiple of the face's own 512x256. Between 0.25 and 4.0.
+# Size, as a multiple of the face's own 454x256 (495 wide in mmol/L).
+# Between 0.25 and 4.0.
 scale = 1.0
 
 # Keep the window above whatever else you are using. It is a glucose
@@ -117,7 +118,7 @@ always_on_top = true
 # read at a desk, where a few hours of history is worth the space it
 # takes, and the overlay is glanced at mid-game, where the whole point
 # is the number in half a second. Turning it on grows the card from
-# 512x256 to 512x440 -- the window resizes, and in VR the face keeps its
+# 454x256 to 454x440 -- the window resizes, and in VR the face keeps its
 # width in metres and gets taller.
 in_window = true
 in_vr = false

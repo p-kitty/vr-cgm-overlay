@@ -12,7 +12,7 @@ own log says so in as many words: "Refusing to create memory block
 because 201 blocks are already outstanding".
 
 `setOverlayFromFile` has the compositor read the image itself, so there
-is no block on this side to count. Writing a 512x440 PNG at the fastest
+is no block on this side to count. Writing a 454x440 PNG at the fastest
 compression takes a few milliseconds, and happens when the face changes,
 not every frame.
 

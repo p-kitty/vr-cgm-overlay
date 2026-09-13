@@ -130,7 +130,7 @@ class Loading(ConfigTestCase):
         self.assertEqual(cfg.vr.gaze_min_alpha, 0.4)
 
     def test_the_window_defaults_to_native_size_and_on_top(self):
-        # Native size because the face was laid out at 512x256 and
+        # Native size because the face was laid out at one size and
         # anything else is resampling it; on top because a readout you
         # have to go and find is not a readout.
         cfg = self.load()

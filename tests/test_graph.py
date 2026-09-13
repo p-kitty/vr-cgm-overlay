@@ -37,8 +37,11 @@ from cgm.face.graph import (
     TICK_MINOR_MIN,
     TICK_MINOR_PX,
     TRACE_COLOR,
+    DASH_OFF,
+    DASH_ON,
     GraphTuning,
     axis_top,
+    dash_spans,
     draw_sparkline,
     edge_point,
     format_value,
@@ -57,7 +60,7 @@ from cgm.face.renderer import (
     GRAPH_MARGIN_X,
     GRAPH_TOP,
     HEIGHT,
-    WIDTH,
+    TEXT_MARGIN,
     Theme,
     WatchFaceRenderer,
 )
@@ -553,14 +556,97 @@ class LowStretches(unittest.TestCase):
         self.assertEqual(low_stretches([], self.LOW), [])
 
 
+class DashSpans(unittest.TestCase):
+    """How a dashed rule is cut up, at any width the plot might be."""
+
+    WIDTHS = range(DASH_ON, 600)
+
+    def test_both_ends_are_a_dash(self):
+        for width in self.WIDTHS:
+            with self.subTest(width=width):
+                spans = dash_spans(90, 90 + width - 1)
+                self.assertEqual(spans[0][0], 90)
+                self.assertEqual(spans[-1][1], 90 + width - 1)
+
+    def test_every_dash_is_the_same_length(self):
+        for width in self.WIDTHS:
+            spans = dash_spans(0, width - 1)
+            if len(spans) < 2:
+                continue
+            with self.subTest(width=width):
+                self.assertEqual({end - start + 1 for start, end in spans}, {DASH_ON})
+
+    def test_the_gaps_only_ever_widen_and_by_little(self):
+        # The leftover is shared out, so a gap is never under the
+        # configured one and never grows into something that reads as a
+        # different dashing. One pixel of slack is the rounding.
+        for width in self.WIDTHS:
+            spans = dash_spans(0, width - 1)
+            gaps = [b[0] - a[1] - 1 for a, b in zip(spans, spans[1:])]
+            if len(gaps) < 8:
+                continue
+            with self.subTest(width=width):
+                self.assertGreaterEqual(min(gaps), DASH_OFF)
+                self.assertLessEqual(max(gaps), DASH_OFF + 3)
+                self.assertLessEqual(max(gaps) - min(gaps), 1)
+
+    def test_a_rule_too_short_for_two_dashes_is_one(self):
+        self.assertEqual(dash_spans(5, 5 + DASH_ON), [(5, 5 + DASH_ON)])
+
+
 class CanvasSize(unittest.TestCase):
     def test_no_graph_is_the_face_that_always_shipped(self):
         # The overlay's default. This is a regression guard as much as a
         # test: the graph was added by growing the card, and the frontend
         # that did not ask for one must be untouched by that.
         renderer = WatchFaceRenderer()
-        self.assertEqual((renderer.width, renderer.height), (WIDTH, HEIGHT))
-        self.assertEqual(renderer.render(_reading()).size, (WIDTH, HEIGHT))
+        self.assertEqual(renderer.height, HEIGHT)
+        self.assertEqual(renderer.render(_reading()).size, (renderer.width, HEIGHT))
+
+    def test_a_graph_does_not_change_the_width(self):
+        # The width is the top row's, which the graph sits under.
+        self.assertEqual(
+            WatchFaceRenderer(graph=TUNING).width, WatchFaceRenderer().width
+        )
+
+    def test_the_widest_reading_ends_at_the_margin(self):
+        # The card is as wide as its widest reading and arrow, and no
+        # wider: that is the whole of what sizes it. Level, so the arrow
+        # reaches as far right as any shape of it does.
+        for unit, mgdl in (("mgdl", 488.0), ("mmol", 498.0)):
+            with self.subTest(unit=unit):
+                renderer = WatchFaceRenderer(unit=unit)
+                flat = series((30, mgdl), (15, mgdl), (0, mgdl))
+                face = renderer.render(_reading(mgdl, flat), now=NOW)
+                accent = THEME.status_color(mgdl)
+                top_row = [
+                    x
+                    for x in range(face.width)
+                    for y in range(40, 190)
+                    if face.getpixel((x, y))[:3] == accent
+                ]
+                self.assertLessEqual(max(top_row), renderer.width - TEXT_MARGIN)
+                self.assertGreaterEqual(max(top_row), renderer.width - TEXT_MARGIN - 1)
+
+    def test_mmol_is_the_wider_card(self):
+        # A decimal point and a second figure before it.
+        self.assertGreater(
+            WatchFaceRenderer(unit="mmol").width, WatchFaceRenderer().width
+        )
+
+    def test_a_long_message_stays_inside_the_margins(self):
+        # The card is sized for digits, and NO CONNECTION at full size
+        # is wider than three of them and an arrow.
+        renderer = WatchFaceRenderer()
+        card = renderer.render_message("NO CONNECTION", detail="no reading yet")
+        light = [
+            x
+            for x in range(card.width)
+            for y in range(card.height)
+            if card.getpixel((x, y))[:3] == (226, 228, 235)
+        ]
+        self.assertGreaterEqual(min(light), TEXT_MARGIN)
+        self.assertLessEqual(max(light), renderer.width - TEXT_MARGIN)
 
     def test_a_graph_grows_the_card_downwards(self):
         renderer = WatchFaceRenderer(graph=TUNING)
@@ -726,6 +812,26 @@ class Drawing(unittest.TestCase):
             any(b - a > 1 for a, b in zip(xs, xs[1:])),
             "the threshold line came out solid",
         )
+
+    def test_the_threshold_lines_reach_both_edges_of_the_plot(self):
+        # The same width as the ruling under them, so neither one looks
+        # as if it stopped short. On the face's own plot rather than the
+        # test box: a fixed dash period ended in a gap on exactly the
+        # widths that are a whole number of periods, and the card's plot
+        # was one of them.
+        for unit in ("mgdl", "mmol"):
+            renderer = WatchFaceRenderer(unit=unit, graph=TUNING)
+            left, top, right, bottom = renderer._graph_box()
+            face = renderer.render(_reading(110.0, ()), now=NOW)
+            for color in (THEME.color_low, THEME.color_very_high):
+                with self.subTest(unit=unit, color=color):
+                    xs = [
+                        x
+                        for y in range(top, bottom)
+                        for x in range(face.width)
+                        if face.getpixel((x, y))[:3] == color
+                    ]
+                    self.assertEqual((min(xs), max(xs)), (left, right))
 
     def test_a_stretch_that_went_low_is_drawn_red(self):
         # The dashed low line is the same red, so it is taken away first:
