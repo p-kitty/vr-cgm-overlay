@@ -164,18 +164,10 @@ as being able to call the graph up when you want it and have it gone
 again the rest of the time. That is what was actually asked for, and it
 is not built.
 
-Three ways to reach it, cheapest first:
+Two ways to reach it, cheapest first. Showing the graph only while the
+face is looked at, off the gaze angle the fade already measures, is not
+one of them: it was considered and is not wanted.
 
-- **The gaze angle is already computed.** `cgm.vr.overlay` measures how
-  far the face is from the centre of view every frame, for the fade.
-  Showing the graph only while you are actually looking at your wrist
-  needs no new input API, works on every stack, and is the only one of
-  these that cannot be broken by a driver. What it costs is that the
-  card changes size as you glance at it, which moves the number: the
-  overlay grows around its centre, so the digits would shift by half the
-  strip's height every time. Compensating means moving `offset` in step
-  with the size, which is a small piece of arithmetic and the reason
-  this is not free.
 - **A controller button, through `getControllerState`.** The obvious
   answer, and the one with a known risk: that is the legacy input API,
   and the legacy haptic call on the same API does nothing on this stack
@@ -198,8 +190,8 @@ showing -- it is.
 
 What is still missing is the being-gone-again half. `in_vr = false`
 stays the shipped default, because that verdict came from one stack with
-`gaze_fade` on, which is doing the dismissing that none of the three
-options above are built to do. Somebody running without the fade has a
+`gaze_fade` on, which is doing the dismissing that neither option above
+is built to do. Somebody running without the fade has a
 graph that is always in the way and no way to put it down.
 
 ## The modelled arm drifts from the real one towards the elbow
