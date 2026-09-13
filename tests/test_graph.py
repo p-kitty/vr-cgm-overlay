@@ -37,8 +37,11 @@ from cgm.face.graph import (
     TICK_MINOR_MIN,
     TICK_MINOR_PX,
     TRACE_COLOR,
+    DASH_OFF,
+    DASH_ON,
     GraphTuning,
     axis_top,
+    dash_spans,
     draw_sparkline,
     edge_point,
     format_value,
@@ -553,6 +556,44 @@ class LowStretches(unittest.TestCase):
         self.assertEqual(low_stretches([], self.LOW), [])
 
 
+class DashSpans(unittest.TestCase):
+    """How a dashed rule is cut up, at any width the plot might be."""
+
+    WIDTHS = range(DASH_ON, 600)
+
+    def test_both_ends_are_a_dash(self):
+        for width in self.WIDTHS:
+            with self.subTest(width=width):
+                spans = dash_spans(90, 90 + width - 1)
+                self.assertEqual(spans[0][0], 90)
+                self.assertEqual(spans[-1][1], 90 + width - 1)
+
+    def test_every_dash_is_the_same_length(self):
+        for width in self.WIDTHS:
+            spans = dash_spans(0, width - 1)
+            if len(spans) < 2:
+                continue
+            with self.subTest(width=width):
+                self.assertEqual({end - start + 1 for start, end in spans}, {DASH_ON})
+
+    def test_the_gaps_only_ever_widen_and_by_little(self):
+        # The leftover is shared out, so a gap is never under the
+        # configured one and never grows into something that reads as a
+        # different dashing. One pixel of slack is the rounding.
+        for width in self.WIDTHS:
+            spans = dash_spans(0, width - 1)
+            gaps = [b[0] - a[1] - 1 for a, b in zip(spans, spans[1:])]
+            if len(gaps) < 8:
+                continue
+            with self.subTest(width=width):
+                self.assertGreaterEqual(min(gaps), DASH_OFF)
+                self.assertLessEqual(max(gaps), DASH_OFF + 3)
+                self.assertLessEqual(max(gaps) - min(gaps), 1)
+
+    def test_a_rule_too_short_for_two_dashes_is_one(self):
+        self.assertEqual(dash_spans(5, 5 + DASH_ON), [(5, 5 + DASH_ON)])
+
+
 class CanvasSize(unittest.TestCase):
     def test_no_graph_is_the_face_that_always_shipped(self):
         # The overlay's default. This is a regression guard as much as a
@@ -771,6 +812,26 @@ class Drawing(unittest.TestCase):
             any(b - a > 1 for a, b in zip(xs, xs[1:])),
             "the threshold line came out solid",
         )
+
+    def test_the_threshold_lines_reach_both_edges_of_the_plot(self):
+        # The same width as the ruling under them, so neither one looks
+        # as if it stopped short. On the face's own plot rather than the
+        # test box: a fixed dash period ended in a gap on exactly the
+        # widths that are a whole number of periods, and the card's plot
+        # was one of them.
+        for unit in ("mgdl", "mmol"):
+            renderer = WatchFaceRenderer(unit=unit, graph=TUNING)
+            left, top, right, bottom = renderer._graph_box()
+            face = renderer.render(_reading(110.0, ()), now=NOW)
+            for color in (THEME.color_low, THEME.color_very_high):
+                with self.subTest(unit=unit, color=color):
+                    xs = [
+                        x
+                        for y in range(top, bottom)
+                        for x in range(face.width)
+                        if face.getpixel((x, y))[:3] == color
+                    ]
+                    self.assertEqual((min(xs), max(xs)), (left, right))
 
     def test_a_stretch_that_went_low_is_drawn_red(self):
         # The dashed low line is the same red, so it is taken away first:

@@ -168,8 +168,12 @@ AXIS_STEP_MGDL = 50.0
 # two of the only three lines on the plot; against a ruled plot that
 # made them read as the scale rather than as two levels sitting on it.
 # Dashed against solid, and coloured against grey, is difference enough.
-DASH_ON = 9
-DASH_OFF = 7
+#
+# Both are in lit and unlit pixels, and the gap is the least a line gets
+# rather than what it gets: `dash_spans` widens the gaps a little so the
+# line starts and ends on a dash, whatever width the plot is.
+DASH_ON = 10
+DASH_OFF = 6
 DASH_WIDTH = 1
 
 # The ruling. Quiet enough to be scenery -- a scale you can measure
@@ -725,14 +729,33 @@ def _tick(draw, x: float, y: float, length: float) -> None:
     draw.line([(x, y), (x, y + length)], fill=GRID_COLOR, width=GRID_WIDTH)
 
 
+def dash_spans(left: int, right: int) -> list[tuple[int, int]]:
+    """The dashes of a rule from `left` to `right`, both ends inclusive.
+
+    Worked out from the width rather than stepped along it. Stepping a
+    fixed period ends the line wherever the period runs out, and that
+    was mostly in a gap: the plot is 320 pixels wide, a whole number of
+    periods, so the last dash stopped short of the right edge and the
+    line read as not reaching the edge of the plot.
+
+    So both ends are a dash, every dash is DASH_ON long, and the pixels
+    left over are shared out between the gaps -- which only ever widens
+    them, by under a pixel each on a plot this size, so the dashing
+    looks the same at any width. A rule too short for two dashes is one.
+    """
+    width = right - left + 1
+    count = (width + DASH_OFF) // (DASH_ON + DASH_OFF)
+    if count < 2:
+        return [(left, right)]
+    period = (width - DASH_ON) / (count - 1)
+    starts = [left + round(i * period) for i in range(count)]
+    return [(start, start + DASH_ON - 1) for start in starts]
+
+
 def _dashed_line(draw, y: float, left: float, right: float, color) -> None:
     """A horizontal dashed rule. Pillow draws solid lines only."""
-    x = left
-    while x < right:
-        draw.line(
-            [(x, y), (min(x + DASH_ON, right), y)], fill=color, width=DASH_WIDTH
-        )
-        x += DASH_ON + DASH_OFF
+    for start, end in dash_spans(round(left), round(right)):
+        draw.line([(start, y), (end, y)], fill=color, width=DASH_WIDTH)
 
 
 def _dot(draw, center: tuple[float, float], radius: float, color) -> None:
