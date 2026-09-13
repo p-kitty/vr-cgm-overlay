@@ -18,10 +18,6 @@ is "read the log", it means `logs/vr-cgm-overlay.log` and the dated
 ones beside it: a session can be left running and read afterwards, with
 no console kept open for it.
 
-- **Controller sleep and wake.** With the process running, power the
-  controller off, wait, and power it back on. The log should show `lost
-  the left controller` and then `attached to the left controller`, and
-  the face should come back.
 - **Token expiry and the automatic re-login.** No quick way to reach it;
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
