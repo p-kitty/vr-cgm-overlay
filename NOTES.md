@@ -22,24 +22,6 @@ no console kept open for it.
   tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
   days is the cheap way to be there when it does.
-- **`trend.fast_mgdl_min` against a real day.** It is now the most
-  consequential number on the face and it has never been looked at on a
-  real arm. It was a scale on one angle; with the arrow bent through
-  the last half hour it is the magnification on a whole shape, and the
-  sensor's own jitter goes through it too -- a couple of mg/dL over a
-  fifteen minute gap is about six degrees of segment and twelve of bend,
-  on glucose doing nothing at all. Too low and the arrow twitches; too
-  high and a meal rise is a shrug. The default of 2.0 is a guess that
-  has never been tested as a magnification.
-
-  A session with the log open answers it, and `--window` makes that a
-  desk job rather than an hour in a headset, since none of this is VR.
-  Every fetch logs the rate of each segment and the angle it became --
-  `+0.80/+1.20 mg/dL/min (bend, +36/+54 deg)` -- so the pair can be read
-  against each other; `vr-cgm-overlay --dry-run` prints one of the same.
-  **The number can only be settled this way, and taking the setting out
-  is meant to follow once it is.** Until then it stays configurable.
-
 - **How often the bend is actually available.** `graphData` itself is
   confirmed: a dry run against the live API returned 48 points over 11.9
   hours at a median gap of 15.05 minutes, which is what
