@@ -18,7 +18,14 @@ from __future__ import annotations
 import sys
 import unittest
 
-from cgm.desk.window import BACKDROP, compose, on_a_monitor, position_of
+from cgm.desk.window import (
+    BACKDROP,
+    beside,
+    compose,
+    on_a_monitor,
+    position_of,
+    work_area,
+)
 from cgm.face.renderer import HEIGHT, Theme, WatchFaceRenderer
 from cgm.main import _window_title
 
@@ -170,6 +177,63 @@ class Position(unittest.TestCase):
         # Where a window left on a monitor that has gone would come back.
         self.assertFalse(on_a_monitor(-100_000, -100_000))
         self.assertFalse(on_a_monitor(-32_000, -32_000))
+
+    @unittest.skipUnless(sys.platform == "win32", "asks Windows about monitors")
+    def test_the_work_area_holds_the_point_it_was_asked_about(self):
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        x, y = user32.GetSystemMetrics(0) // 2, user32.GetSystemMetrics(1) // 2
+        left, top, right, bottom = work_area(x, y)
+        self.assertTrue(left <= x < right and top <= y < bottom)
+
+    @unittest.skipUnless(sys.platform == "win32", "asks Windows about monitors")
+    def test_a_point_on_no_monitor_still_gets_the_nearest(self):
+        # A face dragged half off the screen has its middle out there.
+        self.assertIsNotNone(work_area(-100_000, -100_000))
+
+
+class Beside(unittest.TestCase):
+    """Where the settings window opens, given where the face is."""
+
+    AREA = (0, 0, 1920, 1040)
+    SIZE = (800, 500)
+
+    def test_to_the_right_with_the_tops_level(self):
+        self.assertEqual(beside((300, 200, 550, 360), self.SIZE, self.AREA), (550, 200))
+
+    def test_flips_left_at_the_right_edge(self):
+        self.assertEqual(
+            beside((1600, 200, 1850, 360), self.SIZE, self.AREA), (800, 200)
+        )
+
+    def test_touching_the_edge_exactly_still_fits(self):
+        self.assertEqual(
+            beside((870, 200, 1120, 360), self.SIZE, self.AREA), (1120, 200)
+        )
+
+    def test_neither_side_fits_so_it_stays_on_the_area(self):
+        # A monitor too narrow for both. Covering the face beats hiding
+        # half the dialog off the edge.
+        area = (0, 0, 1280, 1040)
+        x, _y = beside((500, 200, 750, 360), self.SIZE, area)
+        self.assertEqual(x, 1280 - 800)
+
+    def test_a_face_near_the_bottom_pulls_it_up(self):
+        _x, y = beside((300, 900, 550, 1060), self.SIZE, self.AREA)
+        self.assertEqual(y, 1040 - 500)
+
+    def test_a_window_taller_than_the_area_keeps_its_title_bar(self):
+        _x, y = beside((300, 200, 550, 360), (800, 1200), self.AREA)
+        self.assertEqual(y, 0)
+
+    def test_a_monitor_left_of_the_primary(self):
+        # Coordinates there are negative; nothing may assume zero is the
+        # left edge.
+        area = (-1920, 0, 0, 1040)
+        self.assertEqual(
+            beside((-400, 200, -150, 360), self.SIZE, area), (-1200, 200)
+        )
 
 
 class Layers(unittest.TestCase):

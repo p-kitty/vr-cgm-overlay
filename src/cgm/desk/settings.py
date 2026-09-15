@@ -65,6 +65,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from cgm.core import config as config_mod
+from cgm.desk.window import beside, position_of, work_area
 
 log = logging.getLogger(__name__)
 
@@ -308,6 +309,11 @@ class SettingsWindow:
         self._vars: dict[tuple[str, str], tk.Variable | Vector3Var] = {}
 
         self._top = tk.Toplevel(master)
+        # Kept off screen until it is built and placed. Shown straight
+        # away, it opens wherever Windows puts a new window -- the top
+        # left of the primary monitor, whichever one the face is on --
+        # and then jumps.
+        self._top.withdraw()
         self._top.title(f"settings - {path.name}")
         self._top.resizable(False, False)
         # The face is usually always-on-top; a dialog underneath it is a
@@ -346,6 +352,55 @@ class SettingsWindow:
             variable.trace_add("write", self._touched)
 
         self._top.protocol("WM_DELETE_WINDOW", self.close)
+        self._place_beside(master)
+        self._top.deiconify()
+
+    def _place_beside(self, master: tk.Misc) -> None:
+        """Open next to the face, where the right-click that asked was.
+
+        Beside rather than centred over it, which is where a dialog
+        usually goes: Save is followed by the face redrawing within the
+        second, and that is the one thing worth watching after pressing
+        it. And not at a remembered spot either, because the face can
+        have been moved since, possibly to another monitor.
+
+        The frame is worked out from Tk rather than asked of Windows.
+        `wm geometry` puts the corner at the outer frame, `winfo_rootx`
+        at the inside of it, and the difference is the border -- the
+        same on both windows, measured, so the face's stands in for this
+        one's, which has no frame yet while it is withdrawn.
+        """
+        master.update_idletasks()
+        # Minimised, the face is parked at -32000,-32000 and there is
+        # nothing to open beside. Windows' own choice is better than that.
+        if master.wm_state() != "normal":
+            return
+        corner = position_of(master.wm_geometry())
+        if corner is None:
+            return
+        x, y = corner
+        side = master.winfo_rootx() - x
+        above = master.winfo_rooty() - y
+        owner = (
+            x,
+            y,
+            master.winfo_rootx() + master.winfo_width() + side,
+            master.winfo_rooty() + master.winfo_height() + side,
+        )
+        self._top.update_idletasks()
+        size = (
+            self._top.winfo_reqwidth() + 2 * side,
+            self._top.winfo_reqheight() + above + side,
+        )
+        middle = ((owner[0] + owner[2]) // 2, (owner[1] + owner[3]) // 2)
+        area = work_area(*middle) or (
+            0,
+            0,
+            master.winfo_screenwidth(),
+            master.winfo_screenheight(),
+        )
+        left, top = beside(owner, size, area)
+        self._top.geometry(f"+{left}+{top}")
 
     # -- building -----------------------------------------------------------
 

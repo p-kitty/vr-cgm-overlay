@@ -110,6 +110,79 @@ def on_a_monitor(x: int, y: int) -> bool:
     return bool(user32.MonitorFromPoint(wintypes.POINT(x, y), MONITOR_DEFAULTTONULL))
 
 
+def work_area(x: int, y: int) -> tuple[int, int, int, int] | None:
+    """The usable part of the monitor nearest a point, or None.
+
+    Left, top, right, bottom, with the taskbar already taken off -- a
+    dialog put under it has its buttons hidden. The nearest monitor
+    rather than none, because the point asked about is a window's middle
+    and a window can hang off the edge of the screen it is on. Same
+    coordinates as `on_a_monitor`, for the same reason. Anywhere but
+    Windows this answers None and the caller falls back to what Tk
+    knows, which is the primary monitor.
+    """
+    try:
+        user32 = ctypes.WinDLL("user32")
+    except (AttributeError, OSError):
+        return None
+    from ctypes import wintypes
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("rcMonitor", wintypes.RECT),
+            ("rcWork", wintypes.RECT),
+            ("dwFlags", wintypes.DWORD),
+        ]
+
+    user32.MonitorFromPoint.argtypes = [wintypes.POINT, wintypes.DWORD]
+    user32.MonitorFromPoint.restype = wintypes.HANDLE
+    user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
+    MONITOR_DEFAULTTONEAREST = 2
+    monitor = user32.MonitorFromPoint(wintypes.POINT(x, y), MONITOR_DEFAULTTONEAREST)
+    info = MONITORINFO(cbSize=ctypes.sizeof(MONITORINFO))
+    if not monitor or not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+        return None
+    work = info.rcWork
+    return work.left, work.top, work.right, work.bottom
+
+
+def beside(
+    owner: tuple[int, int, int, int],
+    size: tuple[int, int],
+    area: tuple[int, int, int, int],
+) -> tuple[int, int]:
+    """Where to put a window of `size` next to `owner`, inside `area`.
+
+    Rectangles are left, top, right, bottom; the answer is a top-left
+    corner. Both are outer frames, title bar and borders included.
+
+    To the right of the owner, top edges level. Where that runs off the
+    area, to the left instead; where neither side has the room, as far
+    right as the area allows, over the owner if it must. Then pulled up
+    until the bottom is on the area, and never above its top -- so a
+    window taller than the area keeps its title bar, which is what it is
+    dragged by. The same flip-then-shift a context menu does when opened
+    near the edge of the screen.
+
+    No gap is added. Windows counts an invisible resize border into
+    every frame, so two frames that touch still show a strip of whatever
+    is behind them.
+    """
+    left, top, right, bottom = owner
+    width, height = size
+    area_left, area_top, area_right, area_bottom = area
+    if right + width <= area_right:
+        x = right
+    elif left - width >= area_left:
+        x = left - width
+    else:
+        x = max(area_left, min(right, area_right - width))
+    y = max(area_top, min(top, area_bottom - height))
+    return x, y
+
+
 def compose(face: Image.Image, scale: float) -> Image.Image:
     """Flatten the face onto the window backdrop at the asked-for size.
 
