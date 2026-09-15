@@ -397,7 +397,7 @@ class TrendDescription(unittest.TestCase):
     """The line the fetch log and --dry-run print.
 
     It is the only way to see which arrow a session actually drew, and
-    the only instrument for settling fast_mgdl_min against a real day --
+    the instrument fast_mgdl_min was settled with against real days --
     so it carries the rates the sensor gave and the angles that number
     made of them, side by side.
     """
