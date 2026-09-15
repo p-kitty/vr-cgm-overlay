@@ -6,9 +6,10 @@ windows on whoever ran it would be a nuisance, and the same rule keeps
 `tests/test_desk.py` away from a root. So the half that only exists once
 Tk is running has nothing over it: the right-click that opens the thing,
 whether a row is built for every setting, whether the variables are
-really attached to the widgets, whether Save reaches the file, and
-whether a rejected value says so on the window instead of taking the
-face down with it.
+really attached to the widgets, whether Save reaches the file, whether
+a rejected value says so on the window instead of taking the face down
+with it, and where the window opens -- which only Windows can say, once
+both frames exist.
 
 That is what this does, through the production path and nothing else: a
 real `FaceWindow`, a real `<Button-3>` on the face, and whatever that
@@ -39,7 +40,7 @@ from PIL import Image
 
 from cgm.core import config as config_mod
 from cgm.desk import settings as settings_mod
-from cgm.desk.window import FaceWindow, compose
+from cgm.desk.window import FaceWindow, compose, work_area
 from cgm.face.renderer import STATUS_MARKERS
 from cgm.main import build_renderer
 
@@ -117,6 +118,54 @@ def marks_cover(face: FaceWindow, cfg) -> list[str]:
     return found
 
 
+def frame(top: tk.Misc) -> tuple[int, int, int, int]:
+    """A window's outer frame, left, top, right, bottom, as Windows has it."""
+    import ctypes
+    from ctypes import wintypes
+
+    rect = wintypes.RECT()
+    ctypes.windll.user32.GetWindowRect(int(top.wm_frame(), 16), ctypes.byref(rect))
+    return rect.left, rect.top, rect.right, rect.bottom
+
+
+def placement(path: Path, face: FaceWindow) -> None:
+    """The settings open beside the face, on its other side near an edge.
+
+    Checked against Windows' own idea of both frames rather than against
+    the arithmetic in `_place_beside`, so a wrong guess at the border
+    there fails here instead of agreeing with itself.
+    """
+    root = face._root
+    root.update()
+    left, top, right, bottom = frame(root)
+    area = work_area((left + right) // 2, (top + bottom) // 2)
+    assert area is not None, "Windows named no monitor"
+
+    for where, x in (
+        ("right of it", area[0] + 50),
+        ("left of it, at the right edge", area[2] - (right - left) - 20),
+    ):
+        root.geometry(f"+{x}+{area[1] + 100}")
+        root.update()
+        window = settings_mod.SettingsWindow(root, path)
+        root.update()
+        owner, opened = frame(root), frame(window._top)
+        window.close()
+        inside = (
+            opened[0] >= area[0]
+            and opened[1] >= area[1]
+            and opened[2] <= area[2]
+            and opened[3] <= area[3]
+        )
+        assert inside, f"{where}: {opened} is off the work area {area}"
+        clear = opened[0] >= owner[2] or opened[2] <= owner[0]
+        assert clear, f"{where}: {opened} covers the face at {owner}"
+        side = "right of it" if opened[0] >= owner[2] else "left of it"
+        assert where.startswith(side), f"expected {where}, opened {side}"
+        assert opened[1] == owner[1], f"{where}: tops {opened[1]} and {owner[1]}"
+        say("opens beside the face", where)
+
+
 def check(path: Path, face: FaceWindow, show: bool) -> None:
     cfg = config_mod.load(path)
     message = build_renderer(cfg, with_graph=False, rounded=False).render_message(
@@ -158,6 +207,9 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     face.set_vr(False)
     face.set_image(message)
     say("the marks cover no marker", f"every status, at scales {MARK_SCALES}")
+
+    if sys.platform == "win32":
+        placement(path, face)
 
     window = settings_mod.SettingsWindow(opened[0], path)
     face._root.update()
