@@ -1,7 +1,7 @@
 # Configuration
 
 Every setting lives in `config.toml`, copied from `config.example.toml`
-at setup. This file explains what each section does; the example file
+at setup -- or written from it by the sign-in window a first run opens. This file explains what each section does; the example file
 carries the same thing as comments next to the values.
 
 - [The settings window](#the-settings-window)

@@ -7,8 +7,8 @@
 # imports there. Here every run starts from an empty interpreter and a
 # regular (non-editable) install, so it only has what the package asks for.
 #
-# Left out on purpose: tools/check_settings.py opens a real window and
-# drives it, and anything under cgm.vr needs a headset. Both stay manual.
+# Left out on purpose: tools/check_settings.py and tools/check_signin.py
+# open real windows and drive them, and anything under cgm.vr needs a headset. Both stay manual.
 
 name: test
 

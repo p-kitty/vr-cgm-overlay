@@ -87,13 +87,15 @@ class EntryPoint(unittest.TestCase):
     def test_main_reconfigures_before_its_first_print(self):
         # The config is deliberately missing, so main() reaches its
         # earliest print -- the config error on stderr -- and stops.
+        # --dry-run, because a resident run with no config opens the
+        # first-run sign-in window instead of printing anything.
         out, err = cp932_stream(), cp932_stream()
         streams = sys.stdout, sys.stderr
         handlers = logging.root.handlers[:]
         sys.stdout, sys.stderr = out, err
         try:
             with tempfile.TemporaryDirectory() as tmp:
-                code = main(["--config", str(Path(tmp) / "nowhere.toml")])
+                code = main(["--dry-run", "--config", str(Path(tmp) / "nowhere.toml")])
         finally:
             sys.stdout, sys.stderr = streams
             # main() calls basicConfig, which would otherwise leave the
