@@ -246,6 +246,27 @@ the app rather than being silently ignored.
 `config.example.toml` carries the same explanations as comments beside
 the values, if you would rather read it there.
 
+## Tested on
+
+One setup, and nothing else yet:
+
+| | |
+|---|---|
+| OS | Windows 11 |
+| Python | 3.14 |
+| Headset | Meta Quest 3 |
+| Link to the PC | Virtual Desktop, with SteamVR started from it |
+| LibreLinkUp | One follower account, which logs in at `api.libreview.io` with no region redirect |
+
+Everything outside that table is **untried**, not known to fail:
+Quest Link and Air Link, Index, Vive, Pico, Windows Mixed Reality, and
+the redirect a login from another region answers with. Reports from any
+of them are welcome — say which headset, which link and what you saw.
+
+It needs SteamVR itself as the OpenVR runtime. **OpenComposite does not
+provide overlays**, so with it in SteamVR's place the window keeps
+working and the face never appears in the headset.
+
 ## Known limits
 
 The low-glucose **buzz** is silent on a Quest 3 running through Virtual
