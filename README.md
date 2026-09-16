@@ -196,7 +196,9 @@ them are worth wearing a headset for as long as they take to answer.
 **The window draws the history sparkline and the overlay does not**, and
 that is the one thing the two frontends deliberately disagree about. See
 [The history sparkline](docs/graph.md); `graph.in_window` turns it off
-if you would rather have the number alone.
+if you would rather have the number alone. The same goes for the row
+with the average of that history, `average.in_window`; see
+[`[average]`](docs/configuration.md#average--the-historys-average).
 
 `alert_on_low` works here through sound. The controller buzz is the one
 channel a window has no hardware for; everything about *when* to

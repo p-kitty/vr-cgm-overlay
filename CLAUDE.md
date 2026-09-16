@@ -157,7 +157,8 @@ which the local venv cannot check: a dependency missing from
 `pyproject.toml` still imports here. Keep the two lists in step.
 
 `tests/` covers what can be asserted without a device: timestamp
-parsing, the trend fit and the arrow angle it maps to, the fetch
+parsing, the trend fit and the arrow angle it maps to, the history average,
+the fetch
 schedule and its backoff and the thread that drives it, config
 validation, the walk that reads config.toml and the one that writes it
 back without losing the file's comments, the live reload and which

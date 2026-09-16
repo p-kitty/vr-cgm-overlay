@@ -86,6 +86,13 @@ face glanced at mid-game is there to be read in half a second. What it
 draws, and the rules behind each part of it, is in
 [The history sparkline](graph.md).
 
+**And a third time, for an average — which is why it is twelve hours.**
+The mean of that history is one more reading of the same response.
+Longer would mean storing readings between fetches, and a store is a
+file of health data to keep, prune and explain, where until now there
+was none; the row says it covers twelve hours instead. See
+[`[average]`](configuration.md#average--the-historys-average).
+
 **Credentials live in `config.toml`, which git ignores.** That file grants
 access to health data; keep it out of the repository.
 

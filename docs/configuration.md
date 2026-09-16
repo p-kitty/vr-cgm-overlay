@@ -13,6 +13,7 @@ carries the same thing as comments next to the values.
 - [`[polling]` — fetching, and being told about a low](#polling--fetching-and-being-told-about-a-low)
 - [`[trend]` — the arrow](#trend--the-arrow)
 - [`[graph]` — the history sparkline](graph.md)
+- [`[average]` — the history's average](#average--the-historys-average)
 
 ## The settings window
 
@@ -261,3 +262,36 @@ flipped with the headset on to see both arrows against the same reading.
 
 Why the trend is worked out here at all is in
 [Why it is built this way](design.md#decisions-worth-knowing).
+
+## `[average]` — the history's average
+
+```toml
+[average]
+in_window = true
+in_vr = false
+```
+
+| Setting | What it does |
+|---|---|
+| `in_window` (true) | Draw the row in the desktop window |
+| `in_vr` (false) | Draw it on the controller face |
+
+One row between the unit and the graph, under a thin rule of its own:
+how many hours of history it covers as a quiet label on the left, and the
+mean of that history as a number on the right — `12h avg` and `133`. It
+costs no request, like the graph: it is the same history,
+averaged. While there is under an hour of history to average it shows
+dashes rather than passing the current reading off as a mean.
+
+**It is a twelve-hour average.** The API only ever sends about twelve
+hours, and nothing is stored between runs, so that is all there is to
+average. One meal moves it, and it rises and falls again within a day.
+
+The mean is over the samples, one every fifteen minutes, so a stretch
+the sensor was not scanning is left out rather than filled in. The row
+is grey whatever the reading is: the status colours say what glucose is
+now, and a mean over half a day is not now.
+
+The two frontends are separate switches for the reason the graph's are.
+Turning it on grows the card by 66 pixels, and the graph, if it is on,
+moves down under it.
