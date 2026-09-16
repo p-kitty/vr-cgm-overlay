@@ -168,6 +168,22 @@ rest goes to `logs/`. Starting a second copy on the same config is
 refused with a message rather than polling the account twice; close the
 window to quit the one that is running.
 
+### Building the Windows app
+
+For handing it to someone with no Python, the same code builds into a
+folder with an `.exe` in it:
+
+```bash
+pip install -e ".[vr,build]"
+python tools/build_exe.py
+```
+
+`dist/vr-cgm-overlay/` is the whole app; zip that folder. The build
+reads its config from **`%APPDATA%\vr-cgm-overlay\config.toml`** rather
+than from a checkout, with `logs/` and `state.json` beside it, so a
+build tried on this machine never touches the checkout's config.
+`--install-startup` from a build registers the `.exe` itself.
+
 ## Without a headset
 
 The desktop window is up by default, so there is nothing to do but look

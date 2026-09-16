@@ -5,6 +5,7 @@
 #
 #   pip install -e .        core plus the watch face; no SteamVR needed
 #   pip install -e .[vr]    adds the overlay
+#   pip install -e .[vr,build]   adds PyInstaller, for tools/build_exe.py
 #
 # The dependency floors below are not style: each is the first release of
 # that package that runs on Python 3.14. Below them the install succeeds
@@ -46,6 +47,12 @@ vr = [
     # 2.12.1401 replaced pkg_resources with importlib.resources. Earlier
     # releases import pkg_resources, which 3.14 no longer ships.
     "openvr>=2.12.1401",
+]
+# Only for tools/build_exe.py, which turns this into a Windows app that
+# runs with no Python installed. Nothing at runtime imports it.
+build = [
+    # 6.15.0 is the first release whose Requires-Python admits 3.14.
+    "pyinstaller>=6.15.0",
 ]
 
 [project.scripts]

@@ -61,6 +61,7 @@ if sys.version_info < (3, 14):
 
 from cgm.core import alert as alert_mod  # noqa: E402
 from cgm.core import config as config_mod  # noqa: E402
+from cgm.core import paths  # noqa: E402
 from cgm.core import startup  # noqa: E402
 from cgm.core.alert import LowAlert  # noqa: E402
 from cgm.core.console import force_utf8_output  # noqa: E402
@@ -768,11 +769,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--config",
         type=Path,
-        # The checkout this package was installed from, which is where
-        # config.toml sits next to config.example.toml. Resolved from the
-        # module rather than the working directory so the command works
-        # from anywhere, as it did when this file lived in src/.
-        default=Path(__file__).resolve().parents[2] / "config.toml",
+        # The checkout's own, or %APPDATA%'s in the bundled app; see
+        # `cgm.core.paths` for why the two differ.
+        default=paths.default_config(),
         help="path to the config file",
     )
     # Each of these says "run something narrower than the default", and

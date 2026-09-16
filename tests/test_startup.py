@@ -112,6 +112,17 @@ class Arguments(unittest.TestCase):
         args = startup.arguments(Path("config.toml"))
         self.assertEqual(args, f'-m cgm --config "{Path("config.toml").resolve()}"')
 
+    def test_the_bundled_app_is_given_only_the_config(self):
+        # Its executable already is the package; `-m cgm` would reach it
+        # as an unknown argument and stop it at sign-in.
+        args = startup.arguments(Path("config.toml"), frozen=True)
+        self.assertEqual(args, f'--config "{Path("config.toml").resolve()}"')
+
+    def test_the_bundled_app_starts_itself_rather_than_pythonw(self):
+        # A build carries no pythonw.exe to name.
+        self.assertEqual(startup.target(frozen=True), Path(sys.executable))
+        self.assertEqual(startup.target(frozen=False), startup.pythonw())
+
     def test_the_interpreter_is_the_console_less_one_beside_this(self):
         scripts = Path(r"C:\apps\vr cgm\.venv\Scripts")
         self.assertEqual(
