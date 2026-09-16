@@ -166,6 +166,20 @@ class Graph:
 
 
 @dataclass
+class Average:
+    """[average]. The mean of the history under the number.
+
+    Per frontend for the reason `Graph` is, with the same defaults: a
+    footnote row is worth its room at a desk and is one more thing to
+    read past in a headset. Nothing else is settable, because what is
+    averaged is whatever history the API sent -- about twelve hours.
+    """
+
+    in_window: bool = True
+    in_vr: bool = False
+
+
+@dataclass
 class Thresholds:
     """[thresholds]. Always mg/dL, whatever the display unit is."""
 
@@ -218,6 +232,7 @@ class Config:
     vr: Vr = field(default_factory=Vr)
     window: Window = field(default_factory=Window)
     graph: Graph = field(default_factory=Graph)
+    average: Average = field(default_factory=Average)
     thresholds: Thresholds = field(default_factory=Thresholds)
     trend: Trend = field(default_factory=Trend)
     polling: Polling = field(default_factory=Polling)

@@ -20,7 +20,7 @@ from pathlib import Path
 from cgm.core.alert import LowAlert
 from cgm.core.config import Config
 from cgm.core.librelink import Reading
-from cgm.face.renderer import GRAPH_HEIGHT, HEIGHT
+from cgm.face.renderer import AVERAGE_HEIGHT, GRAPH_HEIGHT, HEIGHT
 from cgm.main import Tick, alert_tuning
 
 PATH = Path("config.toml")
@@ -135,12 +135,14 @@ class Drawing(TickTestCase):
         self.assertFalse(is_low)
 
     def test_each_frontend_gets_its_own_graph_setting(self):
-        # The window is read at a desk and gets the sparkline by default;
-        # the overlay is glanced at and does not.
+        # The window is read at a desk and gets the sparkline and the
+        # average row by default; the overlay is glanced at and does not.
         tick = self.build()
         self.poller.reading = reading(112)
         tick()
-        self.assertEqual(self.window.image.height, HEIGHT + GRAPH_HEIGHT)
+        self.assertEqual(
+            self.window.image.height, HEIGHT + AVERAGE_HEIGHT + GRAPH_HEIGHT
+        )
         self.assertEqual(self.session.frame[0].height, HEIGHT)
 
     def test_a_message_card_before_the_first_reading(self):
@@ -315,6 +317,17 @@ class Reloading(TickTestCase):
         self.watcher.edit = config(graph={"in_vr": True, "in_window": False})
         tick()
         self.assertEqual(self.session.frame[0].height, HEIGHT + GRAPH_HEIGHT)
+        self.assertEqual(self.window.image.height, HEIGHT + AVERAGE_HEIGHT)
+
+    def test_turning_the_average_on_grows_the_card_on_the_next_frame(self):
+        tick = self.build()
+        self.poller.reading = reading(112)
+        self.watcher.edit = config(
+            graph={"in_window": False},
+            average={"in_vr": True, "in_window": False},
+        )
+        tick()
+        self.assertEqual(self.session.frame[0].height, HEIGHT + AVERAGE_HEIGHT)
         self.assertEqual(self.window.image.height, HEIGHT)
 
     def test_an_account_edit_says_it_needs_a_restart(self):

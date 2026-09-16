@@ -158,6 +158,17 @@ window_min = 480.0
 axis_high_mgdl = 300.0
 
 
+# The average of the history under the number, as one row between the
+# unit and the graph. Like the graph it costs no request: it is the same
+# twelve hours or so of history, averaged -- so one meal moves it, and it
+# is how today is going rather than a long-term figure. The row says how
+# many hours it covers, and shows dashes while there is under an hour to
+# average. Re-read while running.
+[average]
+in_window = true
+in_vr = false
+
+
 [thresholds]
 # All mg/dL. These are used even when displaying mmol/L.
 # The face is red below low, green up to high, yellow up to very_high,

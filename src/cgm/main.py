@@ -75,6 +75,7 @@ from cgm.core.logfile import LOG_FORMAT, log_to_file, log_uncaught  # noqa: E402
 from cgm.core.poller import Poller  # noqa: E402
 from cgm.core.state import STATE_NAME, load_position, save_position  # noqa: E402
 from cgm.core.watcher import ConfigWatcher  # noqa: E402
+from cgm.face.average import history_average  # noqa: E402
 from cgm.face.graph import GraphTuning  # noqa: E402
 from cgm.face.renderer import (  # noqa: E402
     Theme,
@@ -202,7 +203,11 @@ def build_graph(cfg: config_mod.Config) -> GraphTuning:
 
 
 def build_renderer(
-    cfg: config_mod.Config, *, with_graph: bool = False, rounded: bool = True
+    cfg: config_mod.Config,
+    *,
+    with_graph: bool = False,
+    rounded: bool = True,
+    with_average: bool = False,
 ) -> WatchFaceRenderer:
     """The renderer for one frontend, with or without the sparkline.
 
@@ -210,7 +215,9 @@ def build_renderer(
     one thing about the face the two frontends do not agree on: a
     window is read at a desk and the overlay is glanced at mid-game.
     `graph.in_window` and `graph.in_vr` are what they pass in. The face
-    itself has no opinion; it draws whichever card it was built for.
+    itself has no opinion; it draws whichever card it was built for. The
+    average row is the same kind of choice, and `average.in_window` and
+    `average.in_vr` are passed in the same way.
 
     The corners are the other such thing, and are not configurable at
     all: the arc pays for a compositor, so it belongs to whatever keeps
@@ -223,6 +230,7 @@ def build_renderer(
         trend=build_trend(cfg),
         graph=build_graph(cfg) if with_graph else None,
         rounded=rounded,
+        average=with_average,
     )
 
 
@@ -412,10 +420,15 @@ class Tick:
         its width in metres and grows downwards.
         """
         if self._session is not None:
-            self._vr_face = build_renderer(cfg, with_graph=cfg.graph.in_vr)
+            self._vr_face = build_renderer(
+                cfg, with_graph=cfg.graph.in_vr, with_average=cfg.average.in_vr
+            )
         if self._window is not None:
             self._window_face = build_renderer(
-                cfg, with_graph=cfg.graph.in_window, rounded=False
+                cfg,
+                with_graph=cfg.graph.in_window,
+                rounded=False,
+                with_average=cfg.average.in_window,
             )
 
     def show_message(self, message: str) -> None:
@@ -655,7 +668,11 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
     # prints below is about the history, which the graph is a picture of.
     # Rounded all the same: the PNG keeps its alpha channel and nothing
     # flattens it, so the corners cost nothing here.
-    renderer = build_renderer(cfg, with_graph=cfg.graph.in_window)
+    renderer = build_renderer(
+        cfg,
+        with_graph=cfg.graph.in_window,
+        with_average=cfg.average.in_window,
+    )
 
     reading = client.get_latest()
     print(
@@ -677,6 +694,14 @@ def dry_run(cfg: config_mod.Config, out: Path) -> int:
     lag = reading.history_lag_minutes()
     behind = "" if lag is None else f", the newest {lag:.1f} min behind the reading"
     print(f"history: {len(reading.history)} points{behind}; {detail}")
+    stats = history_average(reading.history)
+    if stats is None:
+        print("average: too little history to average")
+    else:
+        print(
+            f"average: {stats.mgdl:.0f} mg/dL over {stats.span_min / 60:.1f} h "
+            f"({stats.count} points)"
+        )
     renderer.render(reading, stale_after_min=cfg.display.stale_after_min).save(out)
     print(f"preview image: {out}")
     return 0

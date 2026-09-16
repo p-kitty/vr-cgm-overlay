@@ -12,9 +12,10 @@ corner of your eye:
   - stale data goes grey, so an old value is never mistaken for a live one
 All text is ASCII, so it survives fonts without CJK glyphs.
 
-The card grows a history sparkline below all that when one is asked
-for, and stays 256 tall when it is not -- so the frontend that wants a
-glanceable number only still gets exactly the face it always had. See
+The card grows a row for the history's average and a history sparkline
+below all that when they are asked for, and stays 256 tall when they
+are not -- so the frontend that wants a glanceable number only still
+gets exactly the face it always had. See `cgm.face.average` and
 `cgm.face.graph`, and `WatchFaceRenderer.width` and `.height`, which are
 the size to build a texture or a window from: neither is one number.
 
@@ -34,7 +35,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from cgm.face.graph import GraphTuning, draw_sparkline
+from cgm.face.average import history_average
+from cgm.face.graph import GraphTuning, draw_sparkline, format_value
 
 log = logging.getLogger(__name__)
 
@@ -91,6 +93,29 @@ WIDEST_VALUE = {"mgdl": "888", "mmol": "88.8"}
 #
 # The rest of the strip is the two rows of labels underneath.
 GRAPH_HEIGHT = 184
+
+# What the card grows by when the average row is on, between the unit
+# and age row and the sparkline. Everything above it keeps its place and
+# everything below it moves down by exactly this, graph included.
+#
+# The row is a section of its own rather than a third line of small grey
+# text under the unit and the age. Stacked that way the three ran
+# together and the average read as part of the reading. So a rule cuts
+# it off from the face above, and inside it the label is quiet and the
+# number is not -- the same label-and-value split the eye already reads
+# in "mg/dL ... 1m", one step down in size.
+AVERAGE_HEIGHT = 66
+# Where the rule and the row sit, in canvas coordinates. The rule clears
+# the unit row's descenders; the row clears the plot's top label below.
+AVERAGE_RULE_Y = 242
+AVERAGE_ROW_Y = 274
+AVERAGE_RULE_COLOR = (58, 62, 74)
+AVERAGE_LABEL_FONT = 26
+AVERAGE_LABEL_COLOR = (120, 125, 138)
+AVERAGE_VALUE_FONT = 38
+# Lighter than the unit, darker than the digits: a number worth reading,
+# and still not the reading.
+AVERAGE_VALUE_COLOR = (206, 210, 220)
 
 # Where the trace lives inside that strip.
 #
@@ -502,6 +527,7 @@ class WatchFaceRenderer:
         trend: TrendTuning | None = None,
         graph: GraphTuning | None = None,
         rounded: bool = True,
+        average: bool = False,
     ) -> None:
         self.theme = theme or Theme()
         self.unit = unit
@@ -511,6 +537,9 @@ class WatchFaceRenderer:
         # scaled, so the two cannot be set to disagree. Which frontend
         # gets one is `cgm.main`'s decision, not this class's.
         self.graph = graph
+        # The average row, which frontend gets it being `cgm.main`'s
+        # decision for the same reason the graph is.
+        self.average = average
         # The corner arc is for a compositor. Anything that keeps its
         # alpha channel keeps it; the Tk window, which flattens the card
         # onto an opaque backdrop, asks for square corners instead, or
@@ -524,7 +553,10 @@ class WatchFaceRenderer:
         # Messages too long for the card at that size, at the size they fit.
         self._fitted_fonts: dict[str, ImageFont.FreeTypeFont] = {}
         self.width = self._card_width()
-        self.height = HEIGHT + (GRAPH_HEIGHT if graph is not None else 0)
+        self._average_height = AVERAGE_HEIGHT if average else 0
+        self.height = (
+            HEIGHT + self._average_height + (GRAPH_HEIGHT if graph is not None else 0)
+        )
         # Smaller than anything else on the card on purpose: the axis
         # labels are there to be read when you go looking for them, not
         # to compete with the number for the half-second glance. Small
@@ -533,6 +565,8 @@ class WatchFaceRenderer:
         # stop clearing each other this is the thing to move, not the
         # card: the strip is sized by the trace now, not by the labels.
         self._font_axis = _load_font(18)
+        self._font_average_label = _load_font(AVERAGE_LABEL_FONT)
+        self._font_average_value = _load_font(AVERAGE_VALUE_FONT)
 
     # -- public API ---------------------------------------------------------
 
@@ -597,6 +631,9 @@ class WatchFaceRenderer:
             fill=color if is_stale else (160, 165, 178),
             anchor="rm",
         )
+
+        if self.average:
+            self._draw_average(draw, reading)
 
         if self.graph is not None:
             draw_sparkline(
@@ -678,6 +715,45 @@ class WatchFaceRenderer:
             self._fitted_fonts[message] = _load_font(size)
         return self._fitted_fonts[message]
 
+    def _draw_average(self, draw: ImageDraw.ImageDraw, reading) -> None:
+        """A rule, then the span as a quiet label and the mean as a number.
+
+        Grey whatever the reading is. The status colours say what the
+        glucose is now, and a mean over half a day is not now.
+
+        The span is in the label, measured rather than assumed, because
+        twelve hours is what the API usually sends and not a promise: a
+        fresh sensor sends less, and an average that does not say what
+        it is an average of reads as more than it is. Too little history
+        to average is written as dashes rather than left blank, so the
+        row does not look like it failed to draw.
+        """
+        draw.line(
+            (TEXT_MARGIN, AVERAGE_RULE_Y, self.width - TEXT_MARGIN, AVERAGE_RULE_Y),
+            fill=AVERAGE_RULE_COLOR,
+            width=2,
+        )
+        stats = history_average(reading.history)
+        if stats is None:
+            label, value = "avg", "--"
+        else:
+            label = f"{stats.span_min / 60:.0f}h avg"
+            value = format_value(stats.mgdl, self.unit)
+        draw.text(
+            (TEXT_MARGIN + 2, AVERAGE_ROW_Y),
+            label,
+            font=self._font_average_label,
+            fill=AVERAGE_LABEL_COLOR,
+            anchor="lm",
+        )
+        draw.text(
+            (self.width - TEXT_MARGIN, AVERAGE_ROW_Y),
+            value,
+            font=self._font_average_value,
+            fill=AVERAGE_VALUE_COLOR,
+            anchor="rm",
+        )
+
     def _graph_box(self) -> tuple[float, float, float, float]:
         """The plot rectangle, in canvas coordinates.
 
@@ -687,7 +763,7 @@ class WatchFaceRenderer:
         """
         return (
             GRAPH_MARGIN_X + GRAPH_LABEL_GUTTER,
-            GRAPH_TOP,
+            GRAPH_TOP + self._average_height,
             self.width - GRAPH_MARGIN_X,
             self.height - GRAPH_BOTTOM_MARGIN,
         )

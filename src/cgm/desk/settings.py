@@ -99,6 +99,11 @@ NOTES = {
         "on the vr tab change meaning. arm_guide draws that line while you "
         "tune it; turn it off when you are done."
     ),
+    "average": (
+        "The mean of the history the API sends, about twelve hours. The row "
+        "says how many hours it covers, and shows dashes while there is "
+        "under an hour to average."
+    ),
     "vr gaze": (
         "Dims the face while you are not looking at it. The other three do "
         "nothing while gaze_fade is off, and a reading under "
@@ -142,6 +147,8 @@ HINTS = {
     "vr.gaze_min_alpha": "what is left when you look away; never below 0.1",
     "graph.window_min": "minutes of history; 0 for all of it",
     "graph.axis_high_mgdl": "top of the axis, mg/dL",
+    "average.in_window": "show the average row in this window",
+    "average.in_vr": "show it on the controller face too",
     "thresholds.low_mgdl": "mg/dL, whatever the display unit is",
     "thresholds.high_mgdl": "mg/dL",
     "thresholds.very_high_mgdl": "mg/dL",
