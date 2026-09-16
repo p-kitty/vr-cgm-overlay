@@ -15,8 +15,9 @@ paragraph to explain, and nothing anyone has to scroll.
 **`preview-debug.png` is the working sheet.** One tile per thing a
 person has to judge and no assertion can: every marker edge side by
 side, the message card, a line breaking across a scanning gap, both
-ends of the axis under a graph, the labels in mmol/L, and the trend
-arrow bent through each shape the last half hour can take. It is not
+ends of the axis under a graph, the labels in mmol/L, the average row
+with and without a graph under it, and the trend arrow bent through each
+shape the last half hour can take. It is not
 committed and not linked from anywhere; render it when changing the
 face and look at it.
 
@@ -205,7 +206,19 @@ def debug(
     plain: WatchFaceRenderer, graphed: WatchFaceRenderer, mmol: WatchFaceRenderer
 ) -> list:
     """The working sheet: what the showcase leaves out."""
+    averaged = WatchFaceRenderer(graph=GraphTuning(), average=True)
+    averaged_plain = WatchFaceRenderer(unit="mmol", average=True)
     return [
+        # The average row between the face and the graph: check it
+        # clears the unit above it and the top axis label below, and
+        # that the graph under it is the same graph, only lower.
+        face(averaged, reading(110, 3, 1, DAY)),
+        # Without a graph, and in mmol/L, which is the widest the left
+        # half of the row gets.
+        face(averaged_plain, reading(6.1 * 18, 3, 1, DAY)),
+        # Too little history to average, which is dashes rather than a
+        # blank row -- and stale, where the row stays grey like the rest.
+        face(averaged, reading(58, 2, 41, [70, 64, 58])),
         # Every marker edge, to be told apart at a glance: top for high,
         # a heavier top for very high, bottom for low.
         face(plain, reading(214, 5, 1)),
