@@ -33,6 +33,10 @@ venv on Windows carries, so a sign-in opens the face and nothing else.
 With no console there is nowhere for an error to be printed, which is
 why `cgm.main` shows the ones that stop the process in a dialog instead.
 
+The bundled app has no interpreter beside it to name, and needs none:
+its executable is the program, built without a console, so the shortcut
+runs that directly with only the config to pass.
+
 The config is named in full: the one registered is the one that was
 checked when it was registered.
 """
@@ -44,6 +48,8 @@ import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
+
+from cgm.core.paths import is_frozen
 
 LINK_NAME = "vr-cgm-overlay.lnk"
 
@@ -112,9 +118,20 @@ def pythonw(python: Path | None = None) -> Path:
     return (python or Path(sys.executable)).with_name("pythonw.exe")
 
 
-def arguments(config_path: Path) -> str:
-    """What the shortcut passes to pythonw."""
-    return f'-m cgm --config "{config_path.resolve()}"'
+def target(*, frozen: bool | None = None) -> Path:
+    """What the shortcut starts: pythonw, or the bundled app itself."""
+    if frozen is None:
+        frozen = is_frozen()
+    return Path(sys.executable) if frozen else pythonw()
+
+
+def arguments(config_path: Path, *, frozen: bool | None = None) -> str:
+    """What the shortcut passes to what it starts."""
+    if frozen is None:
+        frozen = is_frozen()
+    config = f'--config "{config_path.resolve()}"'
+    # The bundled executable already is `cgm`; pythonw has to be told.
+    return config if frozen else f"-m cgm {config}"
 
 
 def _guid(text: str):
@@ -197,13 +214,13 @@ def install(config_path: Path, *, folder: Path | None = None) -> Path:
     """
     if sys.platform != "win32":
         raise OSError("starting with Windows needs Windows")
-    interpreter = pythonw()
-    if not interpreter.exists():
+    program = target()
+    if not program.exists():
         raise OSError(f"no pythonw.exe beside {sys.executable}")
     folder = folder or startup_folder()
     folder.mkdir(parents=True, exist_ok=True)
     link = folder / LINK_NAME
-    save_link(link, interpreter, arguments(config_path), config_path.resolve().parent)
+    save_link(link, program, arguments(config_path), config_path.resolve().parent)
     return link
 
 

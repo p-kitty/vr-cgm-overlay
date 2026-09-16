@@ -19,7 +19,7 @@ two frontends.
 
 | Layer | Holds | Needs |
 |---|---|---|
-| `cgm.core` | API client, config, poller, config watcher, fetch thread, log file, one-copy lock, startup shortcut | nothing special |
+| `cgm.core` | API client, config and where it lives, poller, config watcher, fetch thread, log file, one-copy lock, startup shortcut | nothing special |
 | `cgm.face` | the watch face drawing | Pillow |
 | `cgm.vr` | the SteamVR overlay and its arm guide | a headset |
 | `cgm.desk` | the same face in a desktop window, the settings window behind a right-click, and the error dialog for a run with no console | tkinter |
