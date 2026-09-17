@@ -1,5 +1,3 @@
-**Windows only. Not a medical device** — treat from the official app and a meter.
-
 Needs a LibreLinkUp follower account that already shows a reading in the LibreLinkUp phone app. FreeStyle Libre only.
 
 1. Download `vr-cgm-overlay-<version>-windows.zip` below and **Extract All**.
