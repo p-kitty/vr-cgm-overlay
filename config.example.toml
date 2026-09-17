@@ -101,7 +101,7 @@ flip_vertical = false   # set true if the face renders upside down
 [window]
 # Size, as a multiple of the face's own 454x256 (495 wide in mmol/L).
 # Between 0.25 and 4.0.
-scale = 1.0
+scale = 0.7
 
 # Keep the window above whatever else you are using. It is a glucose
 # readout, so having to go and find it defeats the point.
