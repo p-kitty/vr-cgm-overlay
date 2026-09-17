@@ -15,7 +15,15 @@ class DefaultConfig(unittest.TestCase):
         # it was -- and APPDATA has no say in it.
         found = paths.default_config(frozen=False, appdata=r"C:\Users\x\AppData\Roaming")
         self.assertEqual(found, paths.CHECKOUT / "config.toml")
-        self.assertTrue((found.parent / "config.example.toml").exists())
+
+    def test_the_checkout_is_the_top_of_the_source_tree(self):
+        # src/cgm/core/paths.py, three folders up. Checked from the
+        # module's own path rather than by looking for config.example.toml
+        # there: CI tests a regular install, from site-packages, where
+        # there is no checkout above the package to find.
+        module = Path(paths.__file__).resolve()
+        self.assertEqual(paths.CHECKOUT, module.parents[3])
+        self.assertEqual(module.parent.name, "core")
 
     def test_the_bundled_app_keeps_it_under_appdata(self):
         # Not inside the bundle, which the next release replaces whole.
