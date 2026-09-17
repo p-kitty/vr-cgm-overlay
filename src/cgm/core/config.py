@@ -131,7 +131,7 @@ class Window:
     way a window ignores every key under `Vr`.
     """
 
-    scale: float = 1.0
+    scale: float = 0.7
     always_on_top: bool = True
 
 

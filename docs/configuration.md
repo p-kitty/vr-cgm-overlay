@@ -114,7 +114,7 @@ as where it belongs, so the error message is the list of what to move.
 
 ```toml
 [window]
-scale = 1.0
+scale = 0.7
 always_on_top = true
 ```
 
