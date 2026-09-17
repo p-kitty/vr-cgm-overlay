@@ -22,7 +22,9 @@ from cgm.core import firstrun, paths
 from cgm.core.librelink import AuthError, LibreLinkError
 from cgm.main import main
 
-EXAMPLE = paths.CHECKOUT / "config.example.toml"
+# This repository's, not `paths.CHECKOUT`'s. CI tests a regular install,
+# where the package sits in site-packages and has no checkout above it.
+EXAMPLE = Path(__file__).resolve().parents[1] / "config.example.toml"
 
 
 class TempDir(unittest.TestCase):
@@ -156,7 +158,9 @@ class WriteAccount(TempDir):
 
 class ExampleConfig(unittest.TestCase):
     def test_a_checkout_uses_its_own(self):
-        self.assertEqual(paths.example_config(frozen=False), EXAMPLE)
+        self.assertEqual(
+            paths.example_config(frozen=False), paths.CHECKOUT / "config.example.toml"
+        )
         with EXAMPLE.open("rb") as fh:
             tomllib.load(fh)
 
