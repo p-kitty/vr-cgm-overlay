@@ -5,7 +5,11 @@ FreeStyle Libre glucose on your desktop and on your wrist in SteamVR, read throu
 **FreeStyle Libre only.** Readings come from a LibreLinkUp follower
 account and nowhere else: no Dexcom, Medtronic, Nightscout, meter or CSV.
 
-It runs as an OpenVR overlay, so **no game needs modding or patching**.
+**See it in two places at once:**
+
+- **On your desktop**, in a small window.
+- **In VR**, on your controller like a watch. It is an OpenVR overlay, so
+  it shows over any SteamVR game with **no modding or patching**.
 
 ![states](preview-states.png)
 
