@@ -23,6 +23,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from cgm.core import firstrun
+from cgm.desk.icon import give_icon
 
 log = logging.getLogger("vrcgm")
 
@@ -63,6 +64,7 @@ class SignInWindow:
 
         self._root = tk.Tk()
         self._root.title(TITLE)
+        give_icon(self._root)
         self._root.resizable(False, False)
 
         body = ttk.Frame(self._root, padding=16)

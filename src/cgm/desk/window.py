@@ -34,6 +34,7 @@ import tkinter as tk
 
 from PIL import Image, ImageTk
 
+from cgm.desk.icon import give_icon
 from cgm.face.renderer import CLEAR_COLUMN
 
 log = logging.getLogger("vrcgm")
@@ -249,6 +250,7 @@ class FaceWindow:
 
         self._root = tk.Tk()
         self._root.title("vr-cgm-overlay")
+        give_icon(self._root)
         self._root.configure(bg=_hex(BACKDROP))
         # The size is `window.scale`, so dragging the corner would only
         # letterbox the face inside a bigger frame.
