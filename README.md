@@ -1,3 +1,5 @@
+<img src="icon.png" alt="" width="128" align="right">
+
 # vr-cgm-overlay
 
 FreeStyle Libre glucose on your desktop and on your wrist in SteamVR, read through LibreLinkUp.

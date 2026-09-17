@@ -145,6 +145,6 @@ Each of these is a rule rather than a preference:
 
 `tools/preview.py` draws the face with no network and no headset. On its
 own it writes `preview-states.png`, the states at the top of
-`README.md`; `--debug` writes `preview-debug.png` instead, which is the
+`README.md`, and `icon.png` beside the title there; `--debug` writes `preview-debug.png` instead, which is the
 working sheet — every marker edge side by side, the message card, a line
 breaking across a scanning gap, and the labels in mmol/L.

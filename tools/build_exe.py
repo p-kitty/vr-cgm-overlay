@@ -30,6 +30,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from cgm.face.icon import save_ico
+
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "vr-cgm-overlay"
 
@@ -48,11 +50,18 @@ def main() -> int:
         return 2
 
     work = ROOT / "build" / "pyinstaller"
+    work.mkdir(parents=True, exist_ok=True)
+    icon = work / f"{NAME}.ico"
+    save_ico(icon)
     PyInstaller.__main__.run(
         [
             str(ROOT / "src" / "cgm" / "__main__.py"),
             "--name", NAME,
             "--windowed",
+            # Drawn by the same code the windows draw theirs with, into
+            # the work folder: there is no picture in the repository to
+            # fall out of step with the face.
+            "--icon", str(icon),
             "--noconfirm",
             "--clean",
             # The package from this checkout, installed or not.
