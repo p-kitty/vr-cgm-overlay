@@ -26,6 +26,7 @@ the account and writes it from the example; see `cgm.core.paths` and
 
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -71,6 +72,10 @@ def main() -> int:
             "--specpath", str(work),
         ]
     )
+    # MIT asks for the notice to travel with the program, and a zip is
+    # how it travels. Beside the .exe rather than in _internal, where
+    # nobody would look.
+    shutil.copy2(ROOT / "LICENSE", ROOT / "dist" / NAME / "LICENSE.txt")
     exe = ROOT / "dist" / NAME / f"{NAME}.exe"
     print(f"built {exe}")
     return 0
