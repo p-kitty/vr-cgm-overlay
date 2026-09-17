@@ -106,6 +106,13 @@ Put the `email` and `password` of that LibreLinkUp follower account in
 `config.toml` — the login from step 3, not the phone's LibreLink one if
 they differ.
 
+Or leave the copy and the editing out: started with no account in
+`config.toml`, or with no file at all, `vr-cgm-overlay` opens a small
+sign-in window instead, tries the address and password against
+LibreLinkUp until a reading comes back, and only then writes the file,
+from `config.example.toml`. `--dry-run` does not ask; it says the file
+is missing.
+
 That file holds your password, so it is excluded by `.gitignore`. Do not
 share or commit it.
 
@@ -182,6 +189,8 @@ python tools/build_exe.py
 reads its config from **`%APPDATA%\vr-cgm-overlay\config.toml`** rather
 than from a checkout, with `logs/` and `state.json` beside it, so a
 build tried on this machine never touches the checkout's config.
+With nothing there yet, the first start opens the sign-in window above
+and writes it.
 `--install-startup` from a build registers the `.exe` itself.
 
 ## Without a headset

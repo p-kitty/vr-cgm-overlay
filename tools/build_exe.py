@@ -18,8 +18,10 @@ Explorer and from the Startup folder, where a console is only a black
 window beside the face. `cgm.main` already runs that way under pythonw:
 errors that stop it go to a dialog, and the log goes to `logs/`.
 
-The config is not in the build. The app looks for it under %APPDATA%;
-see `cgm.core.paths`.
+The config is not in the build, only config.example.toml. The app looks
+for config.toml under %APPDATA%, and a first run with none there asks for
+the account and writes it from the example; see `cgm.core.paths` and
+`cgm.core.firstrun`.
 """
 
 from __future__ import annotations
@@ -58,6 +60,9 @@ def main() -> int:
             # __init__.py through importlib.resources, which no import
             # analysis can see, so the DLL is named here or left behind.
             "--collect-binaries", "openvr",
+            # A first run starts config.toml from this, comments and all;
+            # `cgm.core.paths.example_config` looks for it at the top.
+            "--add-data", f"{ROOT / 'config.example.toml'};.",
             # `cgm.vr` and `cgm.desk` are imported inside functions, so
             # say so rather than rely on the analysis reaching them.
             "--collect-submodules", "cgm",

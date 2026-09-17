@@ -61,6 +61,7 @@ if sys.version_info < (3, 14):
 
 from cgm.core import alert as alert_mod  # noqa: E402
 from cgm.core import config as config_mod  # noqa: E402
+from cgm.core import firstrun  # noqa: E402
 from cgm.core import paths  # noqa: E402
 from cgm.core import startup  # noqa: E402
 from cgm.core.alert import LowAlert  # noqa: E402
@@ -727,6 +728,25 @@ def report(message: str) -> None:
     show_error(message)
 
 
+def ask_for_account(config_path: Path) -> bool:
+    """The first-run sign-in. True once config.toml holds a working account.
+
+    False when the window was closed without one, which ends the run
+    quietly: closing it is how somebody says "not now".
+    """
+    try:
+        # Lazy for the same reason `cgm.desk.window` is: tkinter.
+        from cgm.desk.signin import ask_account
+    except ImportError as exc:
+        report(
+            f"config error: {config_path} has no account, and there is no "
+            f"window to ask for one in ({exc}); copy config.example.toml to it"
+        )
+        return False
+    log.info("no account in %s yet; asking for one", config_path)
+    return ask_account(config_path, example=paths.example_config())
+
+
 def install_startup(config_path: Path) -> int:
     """Register this config to start at sign-in, and say what was set."""
     try:
@@ -822,6 +842,14 @@ def main(argv: list[str] | None = None) -> int:
     # depend on the file it was registered with still being valid.
     if args.uninstall_startup:
         return uninstall_startup()
+
+    # A run that would stay up and has no account yet asks for one rather
+    # than stopping at "config.toml not found". Not for --dry-run or
+    # --install-startup, which are typed at a console by someone who
+    # already has a config in mind and is better told it is missing.
+    if not (args.dry_run or args.install_startup) and firstrun.needs_account(args.config):
+        if not ask_for_account(args.config):
+            return 0
 
     try:
         cfg = config_mod.load(args.config)

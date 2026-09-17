@@ -19,10 +19,10 @@ two frontends.
 
 | Layer | Holds | Needs |
 |---|---|---|
-| `cgm.core` | API client, config and where it lives, poller, config watcher, fetch thread, log file, one-copy lock, startup shortcut | nothing special |
+| `cgm.core` | API client, config and where it lives, the first-run account check, poller, config watcher, fetch thread, log file, one-copy lock, startup shortcut | nothing special |
 | `cgm.face` | the watch face drawing | Pillow |
 | `cgm.vr` | the SteamVR overlay and its arm guide | a headset |
-| `cgm.desk` | the same face in a desktop window, the settings window behind a right-click, and the error dialog for a run with no console | tkinter |
+| `cgm.desk` | the same face in a desktop window, the first-run sign-in, the settings window behind a right-click, and the error dialog for a run with no console | tkinter |
 
 **Put new code in the shallowest layer that can hold it.** The two
 frontends are the reason: whatever lives in one of them has to be
@@ -136,8 +136,9 @@ Two ways to supply one password was confusing with no real benefit.
 Before committing, confirm the code still runs, on Python 3.14 — the
 version the project targets. All of these import `cgm`, so the package
 has to be installed first (`pip install -e .`, once per checkout). None
-of them need a VR headset or network access; `check_settings.py` is the
-only one that needs a desktop, since it opens the window it is checking:
+of them need a VR headset or network access; `check_settings.py` and
+`check_signin.py` are the only ones that need a desktop, since each opens
+the window it is checking:
 
 ```bash
 python -m unittest discover -s tests  # the logic that runs headless
@@ -146,11 +147,12 @@ python tools/check_orbit.py           # the orbit placement geometry
 python tools/check_gaze.py            # the gaze fade and the rules on it
 python tools/check_palette.py         # the palette under colour blindness
 python tools/check_settings.py        # the settings window, from the right-click on
+python tools/check_signin.py          # the first-run sign-in window
 python -m compileall -q src tools tests
 ```
 
 `.github/workflows/test.yml` runs the same list, minus
-`check_settings.py`, on every push -- on Windows, from a clean,
+the two window checks, on every push -- on Windows, from a clean,
 non-editable install. It is a second look, not a gate: merges happen
 here, so it reports after the push. Its point is the install itself,
 which the local venv cannot check: a dependency missing from
@@ -164,7 +166,8 @@ validation, the walk that reads config.toml and the one that writes it
 back without losing the file's comments, the live reload and which
 settings a restart is still needed for, the colour thresholds, the
 window's compositing and title, what the settings window offers and what
-pressing Save means, the overlay's thread driven by a stand-in overlay,
+pressing Save means, when a first run asks for an account and what
+answering writes, the overlay's thread driven by a stand-in overlay,
 the texture files the overlay hands the compositor, what one pass of the draw loop hands each frontend and the alert, and
 that every import inside the package resolves -- including the lazy
 ones in `run()`, which only execute with a headset attached. It deliberately does not mock the
@@ -175,7 +178,8 @@ because each is handed an overlay rather than making one, and
 `cgm.vr.overlay` is not tested at all. It does not start Tk either: `cgm.desk` is tested down to the last thing
 before a window would open, and `tools/check_settings.py` covers the
 rest -- it opens a real face, right-clicks it, and drives the settings
-window that comes up.
+window that comes up; `tools/check_signin.py` does the same for the
+first-run sign-in, with the LibreLinkUp client stood in for.
 
 To check the API client against the live service (needs `config.toml`):
 
