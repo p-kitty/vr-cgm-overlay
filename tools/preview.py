@@ -2,7 +2,7 @@
 
 Two sheets, because they have two audiences.
 
-    python tools/preview.py            -> preview-states.png
+    python tools/preview.py            -> preview-states.png, icon.png
     python tools/preview.py --debug    -> preview-debug.png
 
 **`preview-states.png` is the picture at the top of `README.md`**, and
@@ -11,6 +11,10 @@ colours the face can be -- in range, high, low, very high -- each with
 the graph that says how it got there, and then the same face without
 one, which is what it shrinks to on a controller. Nothing that needs a
 paragraph to explain, and nothing anyone has to scroll.
+
+`icon.png` goes with it: the app icon from `cgm.face.icon`, heading
+the same README. Drawn at twice the width README shows it at, so a
+high-density screen gets real pixels rather than an upscale.
 
 **`preview-debug.png` is the working sheet.** One tile per thing a
 person has to judge and no assertion can: every marker edge side by
@@ -38,9 +42,12 @@ from PIL import Image
 
 from cgm.core.librelink import GRAPH_RESOLUTION_MIN, GlucosePoint, Reading
 from cgm.face.graph import GraphTuning
+from cgm.face.icon import draw_icon
 from cgm.face.renderer import WatchFaceRenderer
 
 GAP = 24
+# README shows the icon at half this.
+README_ICON = 256
 BACKDROP = (48, 50, 58, 255)
 
 # The instant the sheets are drawn at, fixed rather than taken from the
@@ -312,9 +319,14 @@ def main(argv: list[str] | None = None) -> int:
     else:
         tiles, name = showcase(plain, graphed), "preview-states.png"
 
-    out = Path(__file__).parent.parent / name
+    root = Path(__file__).parent.parent
+    out = root / name
     sheet(tiles).save(out)
     print(f"wrote: {out}")
+    if not args.debug:
+        icon = root / "icon.png"
+        draw_icon(README_ICON).save(icon)
+        print(f"wrote: {icon}")
     return 0
 
 
