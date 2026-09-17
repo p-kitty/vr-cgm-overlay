@@ -11,6 +11,55 @@ the face composites over any SteamVR title.
 
 ![states](preview-states.png)
 
+## Download for Windows
+
+No Python needed. Before anything else, check the account
+side described in
+[the next section](#first-a-librelinkup-account-that-already-shows-a-reading):
+**the LibreLinkUp app on a phone has to show a number**, because this
+reads that account and nothing else.
+
+1. From [Releases](https://github.com/p-kitty/vr-cgm-overlay/releases),
+   download `vr-cgm-overlay-<version>-windows.zip`.
+2. Right-click it, **Extract All**, and put the `vr-cgm-overlay` folder
+   wherever you keep programs.
+3. Open the folder and double-click **`vr-cgm-overlay.exe`**.
+4. Windows says **"Windows protected your PC"**. The program is not
+   signed, which costs money every year for a free tool, so Windows has
+   never heard of it. Click **More info**, then **Run anyway**. It asks
+   again after each update, since each one is a new file.
+5. Sign in with the **LibreLinkUp** email and password. They are tried
+   against LibreLinkUp before anything is saved, so if the window closes
+   and the glucose appears, it worked.
+6. For VR, start SteamVR. The face appears on your left controller;
+   [Placing the face in VR](docs/placement.md) covers moving it.
+
+Everything it keeps — the settings, including the password in plain
+text, the log, and where the window was — is in
+**`%APPDATA%\vr-cgm-overlay`**. Paste that into Explorer's address bar
+to open it.
+
+**Settings:** click the gear on the face. See [Settings](#settings).
+
+**Updating:** close it, delete the old `vr-cgm-overlay` folder, and
+extract the new one in its place. Your settings are not in that folder,
+so they stay.
+
+**Starting with Windows:** in PowerShell, run the `.exe` once with
+`--install-startup`, dragging the file into the window for its path:
+
+```powershell
+& "C:\path\to\vr-cgm-overlay\vr-cgm-overlay.exe" --install-startup
+```
+
+It prints nothing, and it adds one shortcut to your Startup folder; see
+[Starting with Windows](#starting-with-windows). Run it again after
+moving the folder.
+
+**Removing it:** close it, delete the `vr-cgm-overlay` folder and
+`%APPDATA%\vr-cgm-overlay`, and the shortcut in `shell:startup` if you
+added one. It changes nothing else on the machine.
+
 ## Design
 
 ```
@@ -50,7 +99,11 @@ readings that look stale, a trend fitted here rather than taken from the
 API — is in [Why it is built this way](docs/design.md), along with the
 quirks of the unofficial API the client works around.
 
-## Setup
+## Running from source
+
+For working on the code. To use it, [download the Windows
+app](#download-for-windows) instead; the account section right below
+applies either way.
 
 ### First, a LibreLinkUp account that already shows a reading
 
@@ -191,6 +244,18 @@ than from a checkout, with `logs/` and `state.json` beside it, so a
 build tried on this machine never touches the checkout's config.
 With nothing there yet, the first start opens the sign-in window above
 and writes it.
+
+A release is that folder, zipped and published by
+`.github/workflows/release.yml` when a version tag is pushed — never on
+an ordinary push. Bump `version` in `pyproject.toml`, merge, then:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The workflow refuses a tag that does not match the version, runs the
+unit tests, builds, and puts the zip on the Releases page.
 `--install-startup` from a build registers the `.exe` itself.
 
 ## Without a headset
