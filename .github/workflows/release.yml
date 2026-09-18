@@ -5,8 +5,14 @@
 # program warning to install, so it happens when somebody decides it
 # should rather than on every push:
 #
-#   1. bump `version` in pyproject.toml, commit, merge
-#   2. git tag v0.2.0 && git push origin v0.2.0
+#   1. write the release's changes into .github/release-notes.md
+#   2. bump `version` in pyproject.toml, commit, merge
+#   3. git tag v0.2.0 && git push origin v0.2.0
+#
+# The notes file holds what changed in that one release and nothing
+# else. How to install and update is in README, where somebody arriving
+# later can still find it; repeating it on every release page buries the
+# one thing the page is for.
 #
 # The tag has to match that version, or this stops before building: a
 # zip named v0.2.0 that reports itself as 0.1.0 is a bug report nobody
@@ -71,4 +77,3 @@ jobs:
           "vr-cgm-overlay-${{ github.ref_name }}-windows.zip"
           --title "${{ github.ref_name }}"
           --notes-file .github/release-notes.md
-          --generate-notes
