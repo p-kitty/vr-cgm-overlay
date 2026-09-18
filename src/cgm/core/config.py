@@ -227,15 +227,32 @@ class Polling:
 
 @dataclass
 class Config:
+    """The whole file. The order of these fields is the order it is read.
+
+    It is also the order config.example.toml is laid out in and the
+    order the settings window offers its tabs, so it is chosen for
+    whoever is reading rather than for how the code grew: the account
+    once, then what the face shows, then how often it is fetched, then
+    one section per frontend at the end.
+
+    [window] and [vr] are last because each is read by one frontend
+    only. [vr] is three tabs' worth of settings that do nothing without
+    a headset, and it used to sit third, which put it -- and the desktop
+    window with it -- between [display] and the four other sections
+    about what the face draws. Whatever is answered whichever way you
+    run this comes first now, and the half that depends on how you are
+    running it comes after.
+    """
+
     account: Account = field(default_factory=Account)
     display: Display = field(default_factory=Display)
-    vr: Vr = field(default_factory=Vr)
-    window: Window = field(default_factory=Window)
-    graph: Graph = field(default_factory=Graph)
-    average: Average = field(default_factory=Average)
     thresholds: Thresholds = field(default_factory=Thresholds)
     trend: Trend = field(default_factory=Trend)
+    graph: Graph = field(default_factory=Graph)
+    average: Average = field(default_factory=Average)
     polling: Polling = field(default_factory=Polling)
+    window: Window = field(default_factory=Window)
+    vr: Vr = field(default_factory=Vr)
 
 
 # Every setting there is: section, key, and the type it is held as.

@@ -95,33 +95,6 @@ goes grey. Two keys, and both are about the number rather than about the
 screen it is on, which is what is left here now that the controller keys
 have moved out.
 
-## `[vr]` — the face on your arm
-
-`hand` picks the controller to follow and `width_m` sets how big the
-overlay is. The rest is placement, and placement is a job of its own: see
-[Placing the face in VR](placement.md) for `offset`, `rotation_deg`,
-orbit mode, the arm guides, and gaze fading.
-
-Only the overlay reads this section, so `vr-cgm-overlay --window`
-ignores all of it — editing a key here with no overlay running does
-nothing and says nothing.
-
-**These keys used to be in `[display]`.** A `config.toml` written before
-the split does not start: every one of them is named, with `[vr]` given
-as where it belongs, so the error message is the list of what to move.
-
-## `[window]` — the desktop window
-
-```toml
-[window]
-scale = 0.7
-always_on_top = true
-```
-
-`scale` is a multiple of the face's own size, between `0.25` and `4.0`;
-both it and `always_on_top` change while the window is up. Only the
-window reads this section, so `vr-cgm-overlay --vr` ignores it.
-
 ## `[thresholds]` — the colour bands
 
 All four are mg/dL and are used even in mmol/L mode, so changing the
@@ -155,64 +128,6 @@ deuteranopia. It fails on any pair that colour alone has to carry and
 cannot, and warns on the pairs the markers are covering. Run it if you
 change the colours — and if you remove a marker, read its warnings,
 because each one becomes a real failure.
-
-## `[polling]` — fetching, and being told about a low
-
-`interval_sec` is how often the API is asked, and it cannot go below 30:
-the sensor updates about once a minute, so polling faster returns
-nothing new and risks the account being blocked.
-
-The face going red is the alert. Everything below `alert_on_low` is a
-supplement to it, for the case the face cannot cover: a low starting
-while you are looking at something else.
-
-```toml
-[polling]
-alert_on_low = true
-alert_haptic = true
-alert_sound = true
-sound_path = ""
-rearm_margin_mgdl = 5.0
-repeat_every_min = 0.0
-```
-
-`alert_on_low` is the master switch. Under it, **`alert_haptic` buzzes
-the controller** — VR only, and silent on some drivers, see
-[Known limits](../README.md#known-limits) — and **`alert_sound` plays a
-sound**, which works the same in VR and in `--window`. Sound is the
-channel that reaches you without looking at your wrist, which is exactly
-the case this is for.
-
-An empty `sound_path` plays your Windows *Exclamation* sound, so it is
-already whatever you chose. Point it at a `.wav` for something distinct.
-Only `.wav`: anything else would need a decoder, and the dependency list
-is deliberately short. Volume is the Windows mixer's, not this app's.
-
-Two rules decide *when*, and both exist because an alert that cries wolf
-gets muted, and a muted alert is worse than none because it is trusted.
-
-- **It fires on the way in, not throughout.** `repeat_every_min = 0`
-  means once per low. Set it to a number of minutes to be told again
-  while it lasts — worth it if sleeping through one is the worry.
-  The floor is 1, because a new reading only arrives about once a
-  minute.
-- **It waits for a real recovery before it will ring again.**
-  `rearm_margin_mgdl` is how far back up the reading has to come before
-  the next low counts as a new one. It is a margin on top of
-  `low_mgdl`, so at the defaults the recovery mark is 75:
-
-  | Reading | What happens |
-  |---|---|
-  | 68 | rings |
-  | 71 | silent — over 70, but not back to 75, so this is still the same low |
-  | 69 | silent — same low |
-  | 76 | recovered; the next dip counts again |
-  | 68 | rings |
-
-  Without it (`0`) a reading drifting around the threshold rings on
-  every crossing, and the sensor's own noise is a couple of mg/dL, so
-  69-71-69 is an ordinary thing for it to do. It changes only when the
-  sound fires — the face turns red at `low_mgdl` either way.
 
 ## `[trend]` — the arrow
 
@@ -295,3 +210,88 @@ now, and a mean over half a day is not now.
 The two frontends are separate switches for the reason the graph's are.
 Turning it on grows the card by 66 pixels, and the graph, if it is on,
 moves down under it.
+
+## `[polling]` — fetching, and being told about a low
+
+`interval_sec` is how often the API is asked, and it cannot go below 30:
+the sensor updates about once a minute, so polling faster returns
+nothing new and risks the account being blocked.
+
+The face going red is the alert. Everything below `alert_on_low` is a
+supplement to it, for the case the face cannot cover: a low starting
+while you are looking at something else.
+
+```toml
+[polling]
+alert_on_low = true
+alert_haptic = true
+alert_sound = true
+sound_path = ""
+rearm_margin_mgdl = 5.0
+repeat_every_min = 0.0
+```
+
+`alert_on_low` is the master switch. Under it, **`alert_haptic` buzzes
+the controller** — VR only, and silent on some drivers, see
+[Known limits](../README.md#known-limits) — and **`alert_sound` plays a
+sound**, which works the same in VR and in `--window`. Sound is the
+channel that reaches you without looking at your wrist, which is exactly
+the case this is for.
+
+An empty `sound_path` plays your Windows *Exclamation* sound, so it is
+already whatever you chose. Point it at a `.wav` for something distinct.
+Only `.wav`: anything else would need a decoder, and the dependency list
+is deliberately short. Volume is the Windows mixer's, not this app's.
+
+Two rules decide *when*, and both exist because an alert that cries wolf
+gets muted, and a muted alert is worse than none because it is trusted.
+
+- **It fires on the way in, not throughout.** `repeat_every_min = 0`
+  means once per low. Set it to a number of minutes to be told again
+  while it lasts — worth it if sleeping through one is the worry.
+  The floor is 1, because a new reading only arrives about once a
+  minute.
+- **It waits for a real recovery before it will ring again.**
+  `rearm_margin_mgdl` is how far back up the reading has to come before
+  the next low counts as a new one. It is a margin on top of
+  `low_mgdl`, so at the defaults the recovery mark is 75:
+
+  | Reading | What happens |
+  |---|---|
+  | 68 | rings |
+  | 71 | silent — over 70, but not back to 75, so this is still the same low |
+  | 69 | silent — same low |
+  | 76 | recovered; the next dip counts again |
+  | 68 | rings |
+
+  Without it (`0`) a reading drifting around the threshold rings on
+  every crossing, and the sensor's own noise is a couple of mg/dL, so
+  69-71-69 is an ordinary thing for it to do. It changes only when the
+  sound fires — the face turns red at `low_mgdl` either way.
+
+## `[window]` — the desktop window
+
+```toml
+[window]
+scale = 0.7
+always_on_top = true
+```
+
+`scale` is a multiple of the face's own size, between `0.25` and `4.0`;
+both it and `always_on_top` change while the window is up. Only the
+window reads this section, so `vr-cgm-overlay --vr` ignores it.
+
+## `[vr]` — the face on your arm
+
+`hand` picks the controller to follow and `width_m` sets how big the
+overlay is. The rest is placement, and placement is a job of its own: see
+[Placing the face in VR](placement.md) for `offset`, `rotation_deg`,
+orbit mode, the arm guides, and gaze fading.
+
+Only the overlay reads this section, so `vr-cgm-overlay --window`
+ignores all of it — editing a key here with no overlay running does
+nothing and says nothing.
+
+**These keys used to be in `[display]`.** A `config.toml` written before
+the split does not start: every one of them is named, with `[vr]` given
+as where it belongs, so the error message is the list of what to move.

@@ -42,70 +42,34 @@ unit = "mgdl"        # "mgdl" or "mmol"
 stale_after_min = 2.5
 
 
-# Where the face sits on your arm, and when it is lit. Only the overlay
-# reads this section: `vr-cgm-overlay --window` ignores all of it. Edit
-# and save with the headset on and it lands within a second, so change one
-# value at a time and watch the result. `hand` costs a second more,
-# because it reopens the overlay.
-[vr]
-hand = "left"        # which controller to follow; the off hand works best
-                     # (this one costs a second: the overlay is reopened)
-width_m = 0.14       # overlay width in metres
-
-# Ride around the forearm instead of being bolted to the controller, so
-# that turning your hand cannot push the face into your arm. Recommended;
-# see "Orbit mode" in docs/placement.md, which also explains what offset
-# and rotation_deg mean once this is on.
-orbit = false
-orbit_radius_m = 0.06    # how far off the arm's centreline the face floats
-orbit_limit_deg = 120.0  # how far round the arm it may travel from the top
-
-# Draw the arm orbit mode is aiming at: a cyan line down the modelled
-# centreline and magenta dots on the circle the face travels. Turn it on
-# while setting offset, off once it is right. See docs/placement.md.
-arm_guide = false
-
-# Position relative to the controller, in metres: 0.01 is one centimetre.
-# Point the controller away from you like a torch, then
-#   X: + right          Y: + up, off the back of the hand
-#   Z: + back towards the elbow
-# With orbit on this is a point on the arm's centreline, so Y usually goes
-# negative: try [0.0, -0.02, 0.10].
-offset = [0.0, 0.02, 0.10]
-
-# Tilt in degrees, applied X, then Y, then Z.
-#   X: - stands the face up towards your eyes, + lays it flat on the arm
-#   Y: swings it left and right
-#   Z: spins it in place; try 90 or -90 if the digits run across the arm
-# With orbit on the aiming is done for you, so start from [0, 0, 0] and use
-# these only to trim.
-rotation_deg = [-40.0, 0.0, 0.0]
-
-# Dim the face while you are not looking at it, so a number you want
-# glanceable is not also permanently in the corner of your eye. Off by
-# default; see "Gaze mode" in docs/placement.md. It never fades to
-# nothing, and never at all while a reading is low.
-gaze_fade = false
-gaze_full_deg = 20.0    # within this of the centre of view: full opacity
-gaze_fade_deg = 45.0    # past this: gaze_min_alpha, with a fade between
-gaze_min_alpha = 0.25   # how much is left when you look away; at least 0.1
-
-opacity = 1.0
-flip_vertical = false   # set true if the face renders upside down
+[thresholds]
+# All mg/dL. These are used even when displaying mmol/L.
+# The face is red below low, green up to high, yellow up to very_high,
+# and deep orange above it.
+low_mgdl = 70
+high_mgdl = 180
+very_high_mgdl = 240
 
 
-# The desktop window: the same watch face on a monitor instead of on a
-# controller. Only the window reads this section, so `vr-cgm-overlay --vr`
-# ignores it, the same way the overlay's own [vr] means nothing to a
-# window. Both are re-read while running.
-[window]
-# Size, as a multiple of the face's own 454x256 (495 wide in mmol/L).
-# Between 0.25 and 4.0.
-scale = 0.7
+# How the trend arrow is worked out. Re-read while running, like
+# [display], so the two can be compared with the headset on.
+[trend]
+# true:  read the arrow out of the recent history this app already
+#        receives, so it shows the shape of the last half hour rather
+#        than one of five positions.
+# false: use Abbott's own TrendArrow, the same five positions the phone
+#        app shows. Pick this to have both screens agree exactly.
+# Even with this on, the API value is the fallback whenever there is too
+# little history -- a fresh sensor, or a gap in scanning.
+local = true
 
-# Keep the window above whatever else you are using. It is a glucose
-# readout, so having to go and find it defeats the point.
-always_on_top = true
+# The rate, in mg/dL per minute, at which a segment of the arrow stands
+# straight up. Everything slower is in proportion, so half of this is
+# the 45 degree diagonal. It is the magnification on the whole shape:
+# lower it to make the arrow react harder to a slow drift, raise it if
+# the bend twitches on glucose that is doing nothing.
+# Ignored while local = false.
+fast_mgdl_min = 2.0
 
 
 # The history sparkline: the last few hours of readings, drawn under the
@@ -169,36 +133,6 @@ in_window = true
 in_vr = false
 
 
-[thresholds]
-# All mg/dL. These are used even when displaying mmol/L.
-# The face is red below low, green up to high, yellow up to very_high,
-# and deep orange above it.
-low_mgdl = 70
-high_mgdl = 180
-very_high_mgdl = 240
-
-
-# How the trend arrow is worked out. Re-read while running, like
-# [display], so the two can be compared with the headset on.
-[trend]
-# true:  read the arrow out of the recent history this app already
-#        receives, so it shows the shape of the last half hour rather
-#        than one of five positions.
-# false: use Abbott's own TrendArrow, the same five positions the phone
-#        app shows. Pick this to have both screens agree exactly.
-# Even with this on, the API value is the fallback whenever there is too
-# little history -- a fresh sensor, or a gap in scanning.
-local = true
-
-# The rate, in mg/dL per minute, at which a segment of the arrow stands
-# straight up. Everything slower is in proportion, so half of this is
-# the 45 degree diagonal. It is the magnification on the whole shape:
-# lower it to make the arrow react harder to a slow drift, raise it if
-# the bend twitches on glucose that is doing nothing.
-# Ignored while local = false.
-fast_mgdl_min = 2.0
-
-
 [polling]
 interval_sec = 60    # must be at least 30; the sensor updates ~once a minute
 
@@ -242,3 +176,69 @@ rearm_margin_mgdl = 5.0
 # worry, at the cost of the nuisance that gets alerts muted. Must be at
 # least 1: a new reading only arrives about once a minute.
 repeat_every_min = 0.0
+
+
+# The desktop window: the same watch face on a monitor instead of on a
+# controller. Only the window reads this section, so `vr-cgm-overlay --vr`
+# ignores it, the same way the overlay's own [vr] means nothing to a
+# window. Both are re-read while running.
+[window]
+# Size, as a multiple of the face's own 454x256 (495 wide in mmol/L).
+# Between 0.25 and 4.0.
+scale = 0.7
+
+# Keep the window above whatever else you are using. It is a glucose
+# readout, so having to go and find it defeats the point.
+always_on_top = true
+
+
+# Where the face sits on your arm, and when it is lit. Only the overlay
+# reads this section: `vr-cgm-overlay --window` ignores all of it. Edit
+# and save with the headset on and it lands within a second, so change one
+# value at a time and watch the result. `hand` costs a second more,
+# because it reopens the overlay.
+[vr]
+hand = "left"        # which controller to follow; the off hand works best
+                     # (this one costs a second: the overlay is reopened)
+width_m = 0.14       # overlay width in metres
+
+# Ride around the forearm instead of being bolted to the controller, so
+# that turning your hand cannot push the face into your arm. Recommended;
+# see "Orbit mode" in docs/placement.md, which also explains what offset
+# and rotation_deg mean once this is on.
+orbit = false
+orbit_radius_m = 0.06    # how far off the arm's centreline the face floats
+orbit_limit_deg = 120.0  # how far round the arm it may travel from the top
+
+# Draw the arm orbit mode is aiming at: a cyan line down the modelled
+# centreline and magenta dots on the circle the face travels. Turn it on
+# while setting offset, off once it is right. See docs/placement.md.
+arm_guide = false
+
+# Position relative to the controller, in metres: 0.01 is one centimetre.
+# Point the controller away from you like a torch, then
+#   X: + right          Y: + up, off the back of the hand
+#   Z: + back towards the elbow
+# With orbit on this is a point on the arm's centreline, so Y usually goes
+# negative: try [0.0, -0.02, 0.10].
+offset = [0.0, 0.02, 0.10]
+
+# Tilt in degrees, applied X, then Y, then Z.
+#   X: - stands the face up towards your eyes, + lays it flat on the arm
+#   Y: swings it left and right
+#   Z: spins it in place; try 90 or -90 if the digits run across the arm
+# With orbit on the aiming is done for you, so start from [0, 0, 0] and use
+# these only to trim.
+rotation_deg = [-40.0, 0.0, 0.0]
+
+# Dim the face while you are not looking at it, so a number you want
+# glanceable is not also permanently in the corner of your eye. Off by
+# default; see "Gaze mode" in docs/placement.md. It never fades to
+# nothing, and never at all while a reading is low.
+gaze_fade = false
+gaze_full_deg = 20.0    # within this of the centre of view: full opacity
+gaze_fade_deg = 45.0    # past this: gaze_min_alpha, with a fade between
+gaze_min_alpha = 0.25   # how much is left when you look away; at least 0.1
+
+opacity = 1.0
+flip_vertical = false   # set true if the face renders upside down
