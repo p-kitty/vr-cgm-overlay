@@ -57,11 +57,19 @@ CORNER_LIT = "#c8ccd4"
 
 # The corner marks' type, sized at window.scale 1.0. In pixels, not
 # points: they have to fit a column measured in the face's own pixels,
-# and a point is a different number of those on every display. These
-# are what the 13pt gear and 8pt badge came to at 96 dpi, so the marks
-# look as they always did at 1.0 and scale with the face from there.
-GEAR_FONT = ("Segoe UI Symbol", 17, "normal")
-BADGE_FONT = ("Segoe UI", 11, "bold")
+# and a point is a different number of those on every display.
+#
+# As large as `CLEAR_COLUMN` takes, which is what makes them findable at
+# a scale below 1.0: the default is 0.7, and the 17px gear it started
+# from came to ten screen pixels there -- a smudge rather than a
+# control. One step up from either of these and a mark lands on a lit
+# edge at scale 0.5, where the column is twelve pixels wide and the air
+# `_place_marks` keeps above the first mark runs out with it. That is
+# `tools/check_settings.py` talking: it draws every marker and reads the
+# pixels under both marks, so a size raised past what fits fails there
+# rather than in a headset.
+GEAR_FONT = ("Segoe UI Symbol", 21, "normal")
+BADGE_FONT = ("Segoe UI", 13, "bold")
 
 # How long the window has to sit still before where it is gets handed
 # on to be written down. A drag is a Configure event per pixel, and one
