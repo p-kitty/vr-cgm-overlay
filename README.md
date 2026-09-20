@@ -20,8 +20,8 @@ account and nowhere else: no Dexcom, Medtronic, Nightscout, meter or CSV.
 ## Download for Windows
 
 No Python needed. First check that
-[the LibreLinkUp app on a phone shows a number](#first-a-librelinkup-account-that-already-shows-a-reading)
-— this reads that account and nothing else.
+[the LibreLinkUp app on a phone shows a number](#first-a-librelinkup-account-that-already-shows-a-reading).
+This reads that account and nothing else.
 
 1. From [Releases](https://github.com/p-kitty/vr-cgm-overlay/releases),
    download `vr-cgm-overlay-<version>-windows.zip`.
@@ -32,8 +32,8 @@ No Python needed. First check that
    then **Run anyway**. This comes back after each update.
 5. Sign in with the **LibreLinkUp** email and password. Once the window
    closes and the glucose appears, it worked.
-6. For VR, start SteamVR. The face appears on your left controller; see
-   [Placing the face in VR](docs/placement.md) to move it.
+6. For VR, start SteamVR. The face appears on your left controller.
+   See [Placing the face in VR](docs/placement.md) to move it.
 
 Settings (including the password, in plain text), the log and the window
 position are kept in **`%APPDATA%\vr-cgm-overlay`**.
@@ -49,7 +49,7 @@ extract the new one in its place. Your settings stay.
 & "C:\path\to\vr-cgm-overlay\vr-cgm-overlay.exe" --install-startup
 ```
 
-This adds one shortcut to your Startup folder; see
+This adds one shortcut to your Startup folder. See
 [Starting with Windows](#starting-with-windows). Run it again if you
 move the folder.
 
@@ -84,7 +84,7 @@ added one. Nothing else on the machine is changed.
 **One process runs both the VR overlay (`cgm.vr`) and the desktop
 window (`cgm.desk`).** Login, fetching and the low alert are shared, so
 a low is announced once and the API sees one poller. `--window` or `--vr`
-runs only one half; the default is both.
+runs only one half. The default is both.
 
 The reasoning behind the design, and the API quirks the client works
 around, are in [Why it is built this way](docs/design.md).
@@ -92,7 +92,7 @@ around, are in [Why it is built this way](docs/design.md).
 ## Running from source
 
 For working on the code. To just use it,
-[download the Windows app](#download-for-windows); the account section
+[download the Windows app](#download-for-windows). The account section
 below applies either way.
 
 ### First, a LibreLinkUp account that already shows a reading
@@ -132,7 +132,8 @@ tests and `tools/`. Later commands assume this environment is active.
 Put the LibreLinkUp follower account's `email` and `password` in
 `config.toml`. Alternatively, skip the copy: with no account configured,
 `vr-cgm-overlay` opens a sign-in window, checks the login, and writes
-the file. (`--dry-run` does not ask; it reports the file missing.)
+the file. (`--dry-run` does not ask, and reports the file missing
+instead.)
 
 `config.toml` holds your password and is in `.gitignore`. Do not share
 or commit it.
@@ -156,7 +157,7 @@ it quits, and the window stays either way.
 
 A small **VR** in the window's top corner shows the face is on a
 controller. It is absent while SteamVR is down or no controller is
-active; that is not a fault.
+active, which is not a fault.
 
 Console output is also saved in **`logs/`** beside `config.toml`: one
 file a day, kept for two weeks. It contains readings, so it is in
@@ -184,7 +185,7 @@ To stop it, any of these:
 
 Without a console, startup errors (a mistake in `config.toml`, say) are
 shown in a dialog, and everything else goes to `logs/`. A second copy on
-the same config refuses to start; close the window to quit the running
+the same config refuses to start. Close the window to quit the running
 one.
 
 ### Building the Windows app
@@ -218,18 +219,19 @@ The desktop window opens by default. To run only the window:
 vr-cgm-overlay --window
 ```
 
-This needs no SteamVR, `openvr` or headset; `pip install -e .` is enough.
-(Without SteamVR, plain `vr-cgm-overlay` logs that and carries on with
-the window.) Everything in [Configuration](docs/configuration.md) except
-placement applies here too.
+This needs no SteamVR, `openvr` or headset, and `pip install -e .` is
+enough. (Without SteamVR, plain `vr-cgm-overlay` logs that and carries
+on with the window.) Everything in
+[Configuration](docs/configuration.md) except placement applies here
+too.
 
 It is handy on a second monitor, and for watching things that take hours
-— the fetch schedule, token renewal, how the trend arrow behaves over a
-real day — without wearing a headset.
+without wearing a headset: the fetch schedule, token renewal, how the
+trend arrow behaves over a real day.
 
-**The window draws the history sparkline; the overlay does not.** See
+**The window draws the history sparkline. The overlay does not.** See
 [The history sparkline](docs/graph.md). `graph.in_window` turns it off,
-and `average.in_window` does the same for the average row; see
+and `average.in_window` does the same for the average row. See
 [`[average]`](docs/configuration.md#average--the-historys-average).
 
 `alert_on_low` works in the window through sound only. With both
@@ -238,7 +240,7 @@ frontends up, a low is announced once.
 `--vr` does the opposite: the overlay with no window.
 
 The window reopens **where you last left it**. The position is kept in
-`state.json` beside `config.toml`; delete it to reset. If that monitor
+`state.json` beside `config.toml`. Delete it to reset. If that monitor
 is gone, Windows places the window instead.
 
 ## Settings
@@ -252,8 +254,8 @@ Placement is under the `vr`, `vr orbit` and `vr gaze` tabs. Adjust it
 with the headset on: change a number, press Save, watch the face move.
 See [Placing the face in VR](docs/placement.md).
 
-You can also edit `config.toml` directly; it is **re-read while the app
-runs** and changes show within a second. Only `[account]` needs a
+You can also edit `config.toml` directly. It is **re-read while the app
+runs**, and changes show within a second. Only `[account]` needs a
 restart. An unknown key stops the app rather than being ignored.
 
 | Where to look | For |
@@ -279,7 +281,7 @@ Only this setup so far:
 
 Anything else is **untried**, not known to fail: Quest Link, Air Link,
 Index, Vive, Pico, Windows Mixed Reality, and region redirects. Reports
-are welcome — say which headset, which link and what you saw.
+are welcome. Say which headset, which link and what you saw.
 
 SteamVR must be the OpenVR runtime. **OpenComposite does not support
 overlays**: the window works, but the face never appears in the headset.
@@ -292,7 +294,7 @@ Desktop, since the driver may ignore the haptic call it uses. That is why
 
 The **sound** plays on Windows' default audio device. If you cannot hear
 it in VR, make your headset's output the default. **Both are
-supplements; the face itself is the real alert.**
+supplements. The face itself is the real alert.**
 
 ## Cautions
 
