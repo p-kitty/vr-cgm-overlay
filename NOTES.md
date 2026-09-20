@@ -4,8 +4,8 @@ What is still open: paths nothing has exercised yet, limits that are not
 going away, and decisions that still stand.
 
 **Entries come out once they are resolved.** A fixed bug lives in its
-commit message and in a comment beside the code it bit; repeating it here
-only makes the file grow until nobody reads it. This is a list of what is
+commit message and in a comment beside the code it bit. Repeating it
+here only makes the file grow until nobody reads it. This is a list of what is
 still true, not a log of what happened.
 
 `README.md` is for people running this. This file is for people working
@@ -18,8 +18,8 @@ is "read the log", it means `logs/vr-cgm-overlay.log` and the dated
 ones beside it: a session can be left running and read afterwards, with
 no console kept open for it.
 
-- **Token expiry and the automatic re-login.** No quick way to reach it;
-  tokens outlast any session. It will surface on its own eventually, as a
+- **Token expiry and the automatic re-login.** No quick way to reach it,
+  since tokens outlast any session. It will surface on its own eventually, as a
   401 followed by one re-login in the log. A `--window` left open for
   days is the cheap way to be there when it does.
 - **How often the bend is actually available.** `graphData` itself is
@@ -36,7 +36,7 @@ no console kept open for it.
   A dry run on 2026-09-07 drew a bend from 48 points, so the path is
   reachable and not theoretical. How often is now measured too: the
   logs from 2026-09-11 11:16 to 2026-09-13 09:21 hold 1575 fetches, and
-  1369 of them bent while 206 -- 13% -- fell back to `(fit)`. Every
+  1369 of them bent while 206 (13%) fell back to `(fit)`. Every
   `(fit)` came with a lag of 30 minutes or more, which is where the
   third point crosses `BEND_MAX_SPAN_MIN`, so the fallback is the lag
   and nothing else. Every `fetched:` line ends on the lag as `history N
@@ -47,12 +47,12 @@ no console kept open for it.
   What no session has watched is how the arrow behaves as the lag
   crosses that line: the shape it draws changes under you, and whether
   that reads as the arrow doing something or as the arrow breaking is
-  the question. It costs nothing to wait for -- a `--window` left open
+  the question. It costs nothing to wait for: a `--window` left open
   logs `(bend)` and `(fit)` as it happens.
 
   The sparkline shows the same lag from the other side. Past 30 minutes
   it exceeded `MAX_GAP_MIN` and the trace broke in front of the newest
-  point, which looked like a fault and was not one; `LAST_GAP_MIN` now
+  point, which looked like a fault and was not one. `LAST_GAP_MIN` now
   joins that one gap up to an hour. So a break there again means a lag
   over an hour, twice anything the logs have shown.
 - **`LAST_GAP_MIN` is sized from three days of lag, not from its
@@ -81,23 +81,24 @@ no console kept open for it.
     a visible break it does not look wrong.
 
   **Neither case is being hunted.** The constant stays where it is and
-  gets corrected if ordinary use turns one of the two up. Both are visible from the face itself -- a
-  break in front of the newest point, or a flat run under an age that
-  kept climbing -- so waiting for one costs nothing.
+  gets corrected if ordinary use turns one of the two up. Both are
+  visible from the face itself (a break in front of the newest point, or
+  a flat run under an age that kept climbing), so waiting for one costs
+  nothing.
 
   The two cases are indistinguishable from inside `cgm.face.graph`,
   which sees only timestamps. If the bound turns out to need tuning
   rather than a one-off correction, the thing to reach for is the
-  reading's age -- during a real scanning gap the current measurement
+  reading's age. During a real scanning gap the current measurement
   is stale too, and during a publication lag it is not.
 - **The palette against real colour vision deficiency.** It is validated
   by simulation only: `tools/check_palette.py` runs the Viénot 1999 model
-  and asserts the separations. That model is dichromacy — full absence of
-  one cone type — and the anomalous trichromacies, which are far more
-  common, are only approximated by it. Nobody with a deficiency has
-  looked at the face. If someone can, the question to ask is whether in
-  range and low read as different states at a glance, not whether the
-  individual colours are nameable.
+  and asserts the separations. That model is dichromacy, the full absence
+  of one cone type, and the anomalous trichromacies, which are far more
+  common, are only approximated by it. Nobody with a deficiency has looked
+  at the face. If someone can, the question to ask is whether in range and
+  low read as different states at a glance, not whether the individual
+  colours are nameable.
 
 ## In range and low are green and red on purpose, and that costs something
 
@@ -121,8 +122,8 @@ The obvious-looking fixes do not work, so do not spend the time again:
   the 4.5 legibility floor, because protanopes lose sensitivity to those
   wavelengths. The red in use is already about as red as stays readable.
 - **Tuning within "still reads as red" is a losing trade.** The best
-  available lifts the worst pair from dE 13.9 to only 22.7 — still under
-  the floor — while dropping the redness from 148 to 95, which is a
+  available lifts the worst pair from dE 13.9 to only 22.7, still under
+  the floor, while dropping the redness from 148 to 95, which is a
   muted brick that no longer matches the app. It gives up the entire
   reason for being red and does not buy a pass.
 
@@ -133,7 +134,7 @@ To exercise the low path without waiting for a real low, set
 `thresholds.low_mgdl` above the current reading and restart: the first
 draw counts as a transition into a low, which colours the face red and
 fires the buzz. It has to stay under `high_mgdl`, because `_validate`
-rejects anything breaking `low < high < very_high`; raise
+rejects anything breaking `low < high < very_high`. Raise
 `high_mgdl` and `very_high_mgdl` too when the reading is already above
 them. Put them all back afterwards.
 
@@ -167,11 +168,11 @@ Run on a Quest 3 on 2026-09-07: eight hours of trace across a 378px plot
 reads as a shape at arm's length rather than as texture under the
 number, and it has been left on since. The plot is 320px of a narrower
 card now, which at the same `width_m` is about as wide in the headset
-(10.6cm against 11.1) -- close enough to expect the verdict to hold, but
+(10.6cm against 11.1), close enough to expect the verdict to hold, but
 not yet looked at. Growing the card from 7cm to 12cm
 around its centre wanted `offset` Y moved 0.02m, which is the whole
 retune. So nothing above is blocked on whether the graph is worth
-showing -- it is.
+showing. It is.
 
 What is still missing is the being-gone-again half. `in_vr = false`
 stays the shipped default, because that verdict came from one stack with
@@ -196,7 +197,7 @@ not a fixed misalignment to calibrate out.
 What it does is bound where the face can sensibly sit. Keep `offset` Z
 near the wrist, around 0.08 to 0.12, where the model is close to exact.
 The guide line is 40cm long and will always splay off the arm near the
-elbow; it is meant to be judged where it passes the markers.
+elbow. It is meant to be judged where it passes the markers.
 
 
 ## The low buzz is silent through Virtual Desktop

@@ -1,7 +1,7 @@
 # Configuration
 
 Every setting lives in `config.toml`, copied from `config.example.toml`
-at setup -- or written from it by the sign-in window a first run opens. This file explains what each section does; the example file
+at setup, or written from it by the sign-in window a first run opens. This file explains what each section does. The example file
 carries the same thing as comments next to the values.
 
 - [The settings window](#the-settings-window)
@@ -19,7 +19,7 @@ carries the same thing as comments next to the values.
 
 **Click the gear** in the top corner of the face, or right-click
 anywhere on it. Every section below gets a tab, with one row per
-setting, labelled with the key's own name — so what you change there is
+setting, labelled with the key's own name, so what you change there is
 what this page explains. `[vr]` is long enough to have been setting the
 height of the window on its own, so it is three tabs: `vr` for where the
 face sits, `vr orbit` and `vr gaze` for the two modes. They are all one
@@ -40,9 +40,9 @@ next digit.
 
 `[vr]` is offered like everything else, with `offset` and
 `rotation_deg` as three boxes each. Placement is still something you
-judge with the headset on — change a number, press Save, watch the face move — which is
-the same loop as saving the file, since both arrive through the same
-watcher. See [Placing the face in VR](placement.md).
+judge with the headset on: change a number, press Save, watch the face
+move. That is the same loop as saving the file, since both arrive
+through the same watcher. See [Placing the face in VR](placement.md).
 
 `vr-cgm-overlay --vr` has no window, so it has no settings window
 either.
@@ -56,17 +56,17 @@ restart, and the log says so when one of them changes.
 
 `hand` is the one edit that is not instant. The controller role is read
 when the overlay is created, so changing it closes the overlay and opens
-another -- which takes about a second and needs nothing from you. The
+another, which takes about a second and needs nothing from you. The
 window, if one is up, does not blink.
 
 **A setting nothing recognises stops the app** instead of being ignored.
 A key in the wrong section, a misspelled key or a misspelled section is
 otherwise accepted without a word and simply does nothing, which looks
-like a broken feature rather than a typo -- and under `[thresholds]` it
+like a broken feature rather than a typo, and under `[thresholds]` it
 means an alert that does not fire where you thought it would. The
 message names what it found and always says something about it: where
-the key should have gone, what it was probably meant to be, or -- when
-it resembles nothing at all -- what the section does take.
+the key should have gone, what it was probably meant to be, or, when
+it resembles nothing at all, what the section does take.
 
 ```
 config.toml holds settings nothing reads, so they would do nothing without saying so:
@@ -77,7 +77,7 @@ config.toml holds settings nothing reads, so they would do nothing without sayin
 
 Saved mid-session this costs nothing: the reload logs `ignoring the
 edited config` and keeps the settings already running. Where it does
-bite is going backwards -- a `config.toml` written against a newer
+bite is going backwards. A `config.toml` written against a newer
 commit will not start an older checkout, since the keys added since do
 not exist there. Comment those out for as long as the old checkout is in
 use.
@@ -86,7 +86,7 @@ use.
 section most often pasted in from somewhere else. That is the section
 most likely to arrive holding a key this does not read, and an
 `api_verison` that quietly kept the default would turn up as a login the
-API rejects hours later -- which is a worse morning than not starting.
+API rejects hours later, which is a worse morning than not starting.
 
 ## `[display]` — the reading itself
 
@@ -109,7 +109,7 @@ display unit cannot quietly change what counts as a low.
 | older than `stale_after_min` (2.5 min) | grey | full outline |
 
 Status is carried twice over. The colour gives severity, and a marker on
-one edge of the card gives direction — above range lights the top, below
+one edge of the card gives direction: above range lights the top, below
 range the bottom, and stale outlines the whole card rather than pointing
 anywhere.
 
@@ -118,7 +118,7 @@ Red-green colour vision deficiency affects roughly 1 in 20 men and
 flattens green, red and orange onto one olive band. Green and red are
 kept because they are what the official Libre app uses, and a value that
 means "fine" in one colour on the phone and another here would be worse
-than either — but that choice is only safe because position is carrying
+than either. But that choice is only safe because position is carrying
 the distinction underneath it. Position does not depend on seeing colour
 at all.
 
@@ -126,23 +126,23 @@ Someone with normal colour vision cannot check this by eye, so
 `tools/check_palette.py` simulates the palette under protanopia and
 deuteranopia. It fails on any pair that colour alone has to carry and
 cannot, and warns on the pairs the markers are covering. Run it if you
-change the colours — and if you remove a marker, read its warnings,
+change the colours, and if you remove a marker, read its warnings,
 because each one becomes a real failure.
 
 ## `[trend]` — the arrow
 
 | Setting | What it does |
 |---|---|
-| `local` (true) | `true` reads the arrow out of the history here; `false` uses Abbott's own `TrendArrow`, so the face and the phone show the same five arrows |
+| `local` (true) | `true` reads the arrow out of the history here. `false` uses Abbott's own `TrendArrow`, so the face and the phone show the same five arrows |
 | `fast_mgdl_min` (2.0) | The rate at which a segment of the arrow stands straight up. Everything slower is in proportion, so half of it is the 45 degree diagonal |
 
 **The arrow is bent through the last half hour**, not pointed along an
-average of it. Its shaft runs through the three most recent points —
-about 30 minutes ago, 15 minutes ago, and now — with the head at the
+average of it. Its shaft runs through the three most recent points
+(about 30 minutes ago, 15 minutes ago, and now), with the head at the
 `now` end, so the bend between the two segments is the shape of that
 stretch: still climbing, levelling off, or rolling over. A reading that
 has been rising steadily and one that fell and has just turned around
-used to draw the same arrow; they no longer do.
+used to draw the same arrow. They no longer do.
 
 It says what is happening now, and deliberately not what happens next.
 Nothing here knows about meals or injections, so there is no forecast
@@ -157,8 +157,8 @@ reading twitch. Raise it if it does.
 
 There are three arrows, and which one gets drawn depends on how much of
 the last half hour is really there. `--dry-run` prints which, and so
-does the log line on every fetch — a bend that quietly stopped appearing
-would otherwise read as calm glucose.
+does the log line on every fetch, because a bend that quietly stopped
+appearing would otherwise read as calm glucose.
 
 | Source | When | What is drawn |
 |---|---|---|
@@ -192,9 +192,9 @@ in_vr = false
 | `in_vr` (false) | Draw it on the controller face |
 
 One row between the unit and the graph, under a thin rule of its own:
-how many hours of history it covers as a quiet label on the left, and the
-mean of that history as a number on the right — `12h avg` and `133`. It
-costs no request, like the graph: it is the same history,
+how many hours of history it covers as a quiet label on the left, and
+the mean of that history as a number on the right, reading `12h avg`
+and `133`. It costs no request, like the graph: it is the same history,
 averaged. While there is under an hour of history to average it shows
 dashes rather than passing the current reading off as a mean.
 
@@ -232,8 +232,8 @@ repeat_every_min = 0.0
 ```
 
 `alert_on_low` is the master switch. Under it, **`alert_haptic` buzzes
-the controller** — VR only, and silent on some drivers, see
-[Known limits](../README.md#known-limits) — and **`alert_sound` plays a
+the controller** (VR only, and silent on some drivers, see
+[Known limits](../README.md#known-limits)) and **`alert_sound` plays a
 sound**, which works the same in VR and in `--window`. Sound is the
 channel that reaches you without looking at your wrist, which is exactly
 the case this is for.
@@ -248,9 +248,9 @@ gets muted, and a muted alert is worse than none because it is trusted.
 
 - **It fires on the way in, not throughout.** `repeat_every_min = 0`
   means once per low. Set it to a number of minutes to be told again
-  while it lasts — worth it if sleeping through one is the worry.
-  The floor is 1, because a new reading only arrives about once a
-  minute.
+  while it lasts, which is worth it if sleeping through one is the
+  worry. The floor is 1, because a new reading only arrives about once
+  a minute.
 - **It waits for a real recovery before it will ring again.**
   `rearm_margin_mgdl` is how far back up the reading has to come before
   the next low counts as a new one. It is a margin on top of
@@ -259,15 +259,15 @@ gets muted, and a muted alert is worse than none because it is trusted.
   | Reading | What happens |
   |---|---|
   | 68 | rings |
-  | 71 | silent — over 70, but not back to 75, so this is still the same low |
-  | 69 | silent — same low |
-  | 76 | recovered; the next dip counts again |
+  | 71 | silent, over 70 but not back to 75, so this is still the same low |
+  | 69 | silent, same low |
+  | 76 | recovered, and the next dip counts again |
   | 68 | rings |
 
   Without it (`0`) a reading drifting around the threshold rings on
   every crossing, and the sensor's own noise is a couple of mg/dL, so
   69-71-69 is an ordinary thing for it to do. It changes only when the
-  sound fires — the face turns red at `low_mgdl` either way.
+  sound fires. The face turns red at `low_mgdl` either way.
 
 ## `[window]` — the desktop window
 
@@ -277,8 +277,8 @@ scale = 0.7
 always_on_top = true
 ```
 
-`scale` is a multiple of the face's own size, between `0.25` and `4.0`;
-both it and `always_on_top` change while the window is up. Only the
+`scale` is a multiple of the face's own size, between `0.25` and `4.0`.
+Both it and `always_on_top` change while the window is up. Only the
 window reads this section, so `vr-cgm-overlay --vr` ignores it.
 
 ## `[vr]` — the face on your arm
@@ -289,7 +289,7 @@ overlay is. The rest is placement, and placement is a job of its own: see
 orbit mode, the arm guides, and gaze fading.
 
 Only the overlay reads this section, so `vr-cgm-overlay --window`
-ignores all of it — editing a key here with no overlay running does
+ignores all of it. Editing a key here with no overlay running does
 nothing and says nothing.
 
 **These keys used to be in `[display]`.** A `config.toml` written before

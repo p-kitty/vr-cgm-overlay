@@ -1,16 +1,16 @@
 # The LibreLinkUp follower account this reads. LibreLinkUp is the watching
-# app; LibreLink is the one the sensor is scanned with, and an account made
+# app. LibreLink is the one the sensor is scanned with, and an account made
 # in the wrong one logs in fine and follows nobody. FreeStyle Libre through
-# this API is the only source the app has -- see README.md.
+# this API is the only source the app has. See README.md.
 [account]
 # Email of the LibreLinkUp follower account (the one doing the watching).
 email = "you@example.com"
 
 # LibreLinkUp password.
-# Do not share this file or commit it; .gitignore already excludes it.
+# Do not share this file or commit it. It is already in .gitignore.
 password = ""
 
-# Leave empty when you follow exactly one person; it is detected then.
+# Leave empty when you follow exactly one person. It is detected then.
 # Set it only if you follow several.
 patient_id = ""
 
@@ -18,21 +18,21 @@ patient_id = ""
 region = ""
 
 # Raise this when Abbott starts rejecting the version we send. A rejected
-# version shows up as a 4xx on login; match whatever the current release
+# version shows up as a 4xx on login. Match whatever the current release
 # of LibreLinkUpDesktop or pylibrelinkup sends.
 api_version = "4.16.0"
 
 
 # The reading itself: how the number is spelled, and when it stops being
-# trusted. Re-read while the app runs, like everything below [account];
-# see docs/configuration.md.
+# trusted. Re-read while the app runs, like everything below [account].
+# See docs/configuration.md.
 [display]
 unit = "mgdl"        # "mgdl" or "mmol"
 
 # Readings older than this go grey. The floor here is set by the poll
 # cycle rather than by taste. A value already carries some age when it
-# arrives -- the gap between the sensor publishing it and this asking for
-# it -- and that gap drifts through the whole 0 to 60 seconds as the two
+# arrives, the gap between the sensor publishing it and this asking for
+# it, and that gap drifts through the whole 0 to 60 seconds as the two
 # cycles slide past each other. On top of it the value is held for
 # interval_sec plus a few seconds of jitter, so on screen the age peaks
 # at up to about 122 seconds with nothing wrong at all. Under 2.1 the
@@ -60,7 +60,7 @@ very_high_mgdl = 240
 # false: use Abbott's own TrendArrow, the same five positions the phone
 #        app shows. Pick this to have both screens agree exactly.
 # Even with this on, the API value is the fallback whenever there is too
-# little history -- a fresh sensor, or a gap in scanning.
+# little history: a fresh sensor, or a gap in scanning.
 local = true
 
 # The rate, in mg/dL per minute, at which a segment of the arrow stands
@@ -73,7 +73,7 @@ fast_mgdl_min = 2.0
 
 
 # The history sparkline: the last few hours of readings, drawn under the
-# number. It costs nothing to fetch -- the same response the current
+# number. It costs nothing to fetch: the same response the current
 # value arrives in already carries about twelve hours of history, and
 # until now only the trend arrow read it. Re-read while running, like
 # everything below [account].
@@ -82,7 +82,7 @@ fast_mgdl_min = 2.0
 # read at a desk, where a few hours of history is worth the space it
 # takes, and the overlay is glanced at mid-game, where the whole point
 # is the number in half a second. Turning it on grows the card from
-# 454x256 to 454x440 -- the window resizes, and in VR the face keeps its
+# 454x256 to 454x440. The window resizes, and in VR the face keeps its
 # width in metres and gets taller.
 in_window = true
 in_vr = false
@@ -90,7 +90,7 @@ in_vr = false
 # How far back it shows, in minutes. Eight hours by default, which is
 # long enough to hold a night.
 #
-# 0 means all of it -- every point the response carried, about twelve
+# 0 means all of it: every point the response carried, about twelve
 # hours, with the time axis running from the oldest reading to the
 # newest rather than a fixed length. Any other value is a length, and
 # 180 is then the floor: the time axis is labelled every three hours on
@@ -102,20 +102,20 @@ window_min = 480.0
 # The top of the Y axis, in mg/dL like every other threshold here, and
 # a minimum rather than a ceiling: it sits here on an ordinary day and
 # grows, to the next round 50, only far enough to keep a hyper on the
-# chart. So the scale holds still while nothing unusual happens -- fit
+# chart. So the scale holds still while nothing unusual happens (fit
 # it to the data instead and a quiet flat stretch becomes a mountain
-# range, which makes a calm reading look alarming -- and it never clips
+# range, which makes a calm reading look alarming) and it never clips
 # the one reading worth seeing clearly. It has to be above high_mgdl,
 # since the target range is drawn as a band across the axis.
 #
 # The BOTTOM is fixed at 50 and is not a setting. Every graph starts in
 # the same place, so the eye learns where the floor is once rather than
-# per config file; a reading under it is drawn on it, and the digits
+# per config file. A reading under it is drawn on it, and the digits
 # above are what say how far under. low_mgdl therefore cannot be set
 # below 50.
 #
 # low_mgdl gets a dashed line in the low colour and very_high_mgdl one
-# in the very high colour -- each marks the level the face turns that
+# in the very high colour, each marking the level the face turns that
 # colour at. 50 and both thresholds are always labelled in the left
 # margin, in whatever display.unit is set to. The top is labelled only
 # when it has grown, which is how you can tell that it has.
@@ -124,7 +124,7 @@ axis_high_mgdl = 300.0
 
 # The average of the history under the number, as one row between the
 # unit and the graph. Like the graph it costs no request: it is the same
-# twelve hours or so of history, averaged -- so one meal moves it, and it
+# twelve hours or so of history, averaged, so one meal moves it, and it
 # is how today is going rather than a long-term figure. The row says how
 # many hours it covers, and shows dashes while there is under an hour to
 # average. Re-read while running.
@@ -134,7 +134,7 @@ in_vr = false
 
 
 [polling]
-interval_sec = 60    # must be at least 30; the sensor updates ~once a minute
+interval_sec = 60    # at least 30, since the sensor updates ~once a minute
 
 # The master switch for announcing a low. The channels under it are
 # supplements: the face going red is the alert, and neither of these is
@@ -142,7 +142,7 @@ interval_sec = 60    # must be at least 30; the sensor updates ~once a minute
 alert_on_low = true
 
 # Buzz the controller. Only the VR overlay has one, and the call is the
-# legacy haptic API that a driver is free to ignore -- it does nothing
+# legacy haptic API that a driver is free to ignore, and it does nothing
 # on a Quest 3 through Virtual Desktop. Harmless to leave on.
 alert_haptic = true
 
@@ -151,7 +151,7 @@ alert_haptic = true
 alert_sound = true
 
 # Empty plays your Windows "Exclamation" sound. Set it to a .wav to use
-# your own -- forward slashes, and only .wav, since anything else would
+# your own: forward slashes, and only .wav, since anything else would
 # need a decoder this does not carry.
 sound_path = ""
 
@@ -162,19 +162,19 @@ sound_path = ""
 #   68  -> rings
 #   71  -> silent: over 70, but not back to 75, so this is still the
 #          same low rather than a new one
-#   76  -> recovered; the next dip counts again
+#   76  -> recovered, and the next dip counts again
 #   68  -> rings
 #
 # Without it (0) a reading drifting around the threshold rings on every
 # crossing, and the sensor's own noise is a couple of mg/dL, so 69-71-69
 # is an ordinary thing for it to do. This only changes when the sound
-# fires; the face turns red at low_mgdl either way.
+# fires. The face turns red at low_mgdl either way.
 rearm_margin_mgdl = 5.0
 
 # 0 fires once, on the way in. Set it to a number of minutes to be told
-# again while the low lasts -- worth it if sleeping through one is the
-# worry, at the cost of the nuisance that gets alerts muted. Must be at
-# least 1: a new reading only arrives about once a minute.
+# again while the low lasts, which is worth it if sleeping through one
+# is the worry, at the cost of the nuisance that gets alerts muted. Must
+# be at least 1: a new reading only arrives about once a minute.
 repeat_every_min = 0.0
 
 
@@ -198,13 +198,13 @@ always_on_top = true
 # value at a time and watch the result. `hand` costs a second more,
 # because it reopens the overlay.
 [vr]
-hand = "left"        # which controller to follow; the off hand works best
+hand = "left"        # which controller to follow. The off hand works best
                      # (this one costs a second: the overlay is reopened)
 width_m = 0.14       # overlay width in metres
 
 # Ride around the forearm instead of being bolted to the controller, so
-# that turning your hand cannot push the face into your arm. Recommended;
-# see "Orbit mode" in docs/placement.md, which also explains what offset
+# that turning your hand cannot push the face into your arm. Recommended.
+# See "Orbit mode" in docs/placement.md, which also explains what offset
 # and rotation_deg mean once this is on.
 orbit = false
 orbit_radius_m = 0.06    # how far off the arm's centreline the face floats
@@ -226,19 +226,19 @@ offset = [0.0, 0.02, 0.10]
 # Tilt in degrees, applied X, then Y, then Z.
 #   X: - stands the face up towards your eyes, + lays it flat on the arm
 #   Y: swings it left and right
-#   Z: spins it in place; try 90 or -90 if the digits run across the arm
+#   Z: spins it in place. Try 90 or -90 if the digits run across the arm
 # With orbit on the aiming is done for you, so start from [0, 0, 0] and use
 # these only to trim.
 rotation_deg = [-40.0, 0.0, 0.0]
 
 # Dim the face while you are not looking at it, so a number you want
 # glanceable is not also permanently in the corner of your eye. Off by
-# default; see "Gaze mode" in docs/placement.md. It never fades to
+# default. See "Gaze mode" in docs/placement.md. It never fades to
 # nothing, and never at all while a reading is low.
 gaze_fade = false
 gaze_full_deg = 20.0    # within this of the centre of view: full opacity
 gaze_fade_deg = 45.0    # past this: gaze_min_alpha, with a fade between
-gaze_min_alpha = 0.25   # how much is left when you look away; at least 0.1
+gaze_min_alpha = 0.25   # how much is left when you look away, at least 0.1
 
 opacity = 1.0
 flip_vertical = false   # set true if the face renders upside down
