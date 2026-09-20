@@ -2,6 +2,8 @@
 
 FreeStyle Libre glucose on your desktop and on your wrist in SteamVR, read through LibreLinkUp.
 
+![the desktop window](screenshot-window.png)
+
 **FreeStyle Libre only.** Readings come from a LibreLinkUp follower
 account and nowhere else: no Dexcom, Medtronic, Nightscout, meter or CSV.
 
