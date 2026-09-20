@@ -9,7 +9,7 @@ controller-tracked watch face, so it stays readable during VR gameplay.
 Glucose data comes from the unofficial LibreLinkUp API.
 
 Single Python process. `README.md` has the architecture diagram and how
-to run it; `docs/` holds the reference it links out to — `design.md` for
+to run it. `docs/` holds the reference it links out to: `design.md` for
 the reasoning and the LibreLinkUp API quirks the client works around,
 `configuration.md` for the settings, `placement.md` for the VR
 placement, `graph.md` for the sparkline.
@@ -27,7 +27,7 @@ two frontends.
 **Put new code in the shallowest layer that can hold it.** The two
 frontends are the reason: whatever lives in one of them has to be
 written twice or go without. Neither imports the other, and `cgm.main`
-wires both -- one process runs the window and the overlay together, with
+wires both: one process runs the window and the overlay together, with
 one poller and one low alert between them, and `--window` and `--vr` ask
 for one half alone.
 
@@ -40,10 +40,10 @@ up for `TrendTuning`, so the fetch log cannot name a trend source the
 face is not drawing, and `cgm.core.config` reaches up for
 `AXIS_FLOOR_MGDL` and `TICK_MAJOR_MIN`, so the floor and the window
 length it rejects a config against are the floor the graph is drawn on
-and the step its time axis is labelled at -- and for the face's own
-defaults (`Theme`, `TrendTuning`, `GraphTuning`, `STALE_AFTER_MIN`), so
-a preview drawn with no config at all uses the numbers an empty
-`config.toml` does.
+and the step its time axis is labelled at. It also reaches up for the
+face's own defaults (`Theme`, `TrendTuning`, `GraphTuning`,
+`STALE_AFTER_MIN`), so a preview drawn with no config at all uses the
+numbers an empty `config.toml` does.
 
 `NOTES.md` holds what is still open: unverified paths, limits that are
 not going away, decisions that still stand. Keep it out of `README.md`,
@@ -77,7 +77,7 @@ git checkout master
 git checkout -b <type>/<short-description>
 ```
 
-Commit freely on the working branch — small, focused commits are
+Commit freely on the working branch. Small, focused commits are
 preferred over one large one.
 
 **Never merge into `master` without being told to.** Leave finished work
@@ -93,8 +93,8 @@ git merge --no-ff <branch>
 **Work in this checkout. Use a worktree only when another session is
 already running on the repository.** A branch here is cheaper: the
 editable install points at `src/` in this directory, so the tools and the
-tests run with no environment set up. A worktree is for one thing only —
-keeping two sessions from fighting over the working tree — so cut one
+tests run with no environment set up. A worktree is for one thing only,
+keeping two sessions from fighting over the working tree, so cut one
 when a second is in progress, and not otherwise.
 
 In a worktree, two things need saying because neither is obvious:
@@ -123,7 +123,7 @@ Prefix every subject line with a Conventional Commits type:
 
 Keep the subject in the imperative and under about 72 characters, then
 leave a blank line and explain **why** the change was made. What changed
-is already in the diff; the reasoning is not.
+is already in the diff. The reasoning is not.
 
 ```
 refactor: drop keyring and read the password from config only
@@ -133,10 +133,10 @@ Two ways to supply one password was confusing with no real benefit.
 
 ## Verification
 
-Before committing, confirm the code still runs, on Python 3.14 — the
+Before committing, confirm the code still runs, on Python 3.14, the
 version the project targets. All of these import `cgm`, so the package
 has to be installed first (`pip install -e .`, once per checkout). None
-of them need a VR headset or network access; `check_settings.py` and
+of them need a VR headset or network access. `check_settings.py` and
 `check_signin.py` are the only ones that need a desktop, since each opens
 the window it is checking:
 
@@ -152,7 +152,7 @@ python -m compileall -q src tools tests
 ```
 
 `.github/workflows/test.yml` runs the same list, minus
-the two window checks, on every push -- on Windows, from a clean,
+the two window checks, on every push: on Windows, from a clean,
 non-editable install. It is a second look, not a gate: merges happen
 here, so it reports after the push. Its point is the install itself,
 which the local venv cannot check: a dependency missing from
@@ -169,16 +169,16 @@ window's compositing and title, what the settings window offers and what
 pressing Save means, when a first run asks for an account and what
 answering writes, the overlay's thread driven by a stand-in overlay,
 the texture files the overlay hands the compositor, what one pass of the draw loop hands each frontend and the alert, and
-that every import inside the package resolves -- including the lazy
+that every import inside the package resolves, including the lazy
 ones in `run()`, which only execute with a headset attached. It deliberately does not mock the
-LibreLinkUp HTTP calls — the real risk there is the unofficial API
-changing shape, which only `--dry-run` can see — and it does not touch
+LibreLinkUp HTTP calls (the real risk there is the unofficial API
+changing shape, which only `--dry-run` can see) and it does not touch
 the SteamVR bindings: `cgm.vr.session` and `cgm.vr.texture` are tested
 because each is handed an overlay rather than making one, and
 `cgm.vr.overlay` is not tested at all. It does not start Tk either: `cgm.desk` is tested down to the last thing
 before a window would open, and `tools/check_settings.py` covers the
-rest -- it opens a real face, right-clicks it, and drives the settings
-window that comes up; `tools/check_signin.py` does the same for the
+rest: it opens a real face, right-clicks it, and drives the settings
+window that comes up. `tools/check_signin.py` does the same for the
 first-run sign-in, with the LibreLinkUp client stood in for.
 
 To check the API client against the live service (needs `config.toml`):
@@ -187,34 +187,34 @@ To check the API client against the live service (needs `config.toml`):
 vr-cgm-overlay --dry-run
 ```
 
-To watch the whole thing run — fetching, reloading, the face changing
-over time — with no headset involved:
+To watch the whole thing run (fetching, reloading, the face changing
+over time) with no headset involved:
 
 ```bash
 vr-cgm-overlay --window
 ```
 
 Anything under `src/cgm/vr/` requires a headset and SteamVR to verify. Do
-not claim overlay behaviour is confirmed without a device — say it is
+not claim overlay behaviour is confirmed without a device. Say it is
 untested instead. `src/cgm/desk/` has no such excuse: it opens on any
 desktop, so verify it there.
 
 ## Constraints
 
 - **Do not lower `polling.interval_sec` below 30.** The sensor updates
-  about once a minute; polling faster yields nothing new and risks the
-  account being rate limited or blocked.
+  about once a minute, so polling faster yields nothing new and risks
+  the account being rate limited or blocked.
 - **Never commit `config.toml`.** It holds the account password. It is in
-  `.gitignore`; keep it there.
+  `.gitignore`. Keep it there.
 - **But do edit it.** Untracked is not the same as untouchable. When a
   change adds a setting, put it in `config.toml` as well as in
-  `config.example.toml` — a setting the user has to paste in by hand is
+  `config.example.toml`. A setting the user has to paste in by hand is
   not delivered, it is homework. Load the file once afterwards to prove
   it still parses, and say what was added. Leave values the user has
   already tuned alone unless the change is about those values.
 - **Target Python 3.14, and do not lower the dependency floors in
   `pyproject.toml`.** Each one is the first release of that package
-  that runs on 3.14; below them the install succeeds and the import
+  that runs on 3.14. Below them the install succeeds and the import
   fails. `src/cgm/main.py` refuses an older interpreter, so keep that
   guard and the floors in step.
 - Range checks are always done in mg/dL, even when displaying mmol/L.
