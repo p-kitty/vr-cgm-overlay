@@ -6,10 +6,10 @@ controller to follow, so none of it applies at all under `--window`. For
 the settings both frontends share, see [Configuration](configuration.md).
 
 These keys were in `[display]` until the sections were split. A
-config.toml written before that does not start; the app names each key
+config.toml written before that does not start. The app names each key
 it found in the wrong place and says it belongs under `[vr]`.
 
-**They are also three tabs in the settings window** — the gear in the
+**They are also three tabs in the settings window**: the gear in the
 corner of the desktop face, then `vr`, `vr orbit` and `vr gaze`. They
 are still one `[vr]` section in the file. Nothing below changes if you use it: it writes the
 same `config.toml`, and the running overlay picks the edit up the same
@@ -44,9 +44,9 @@ placement: offset=[0.000, 0.020, 0.100] rotation=[-40.0, 0.0, 0.0]
 
 ## What the numbers mean
 
-`offset` is in **metres** — `0.01` is one centimetre. `rotation_deg` is
-in **degrees**. Both are relative to the controller, not to the room, so
-they follow your hand around.
+`offset` is in **metres**, so `0.01` is one centimetre. `rotation_deg`
+is in **degrees**. Both are relative to the controller, not to the
+room, so they follow your hand around.
 
 Point the controller away from you, like a torch. Then:
 
@@ -81,7 +81,7 @@ A fixed placement is bolted to the controller, and that is the problem:
 your forearm is not. Rolling your wrist turns your hand about twice as
 far as the forearm follows it, so a face that lies neatly on your arm
 palm-down is inside your arm palm-up. It does not hide behind the arm
-either — SteamVR composites overlays over the scene without a depth
+either. SteamVR composites overlays over the scene without a depth
 test, so it cuts straight through.
 
 Orbit mode fixes it by modelling your forearm as a line and letting the
@@ -106,8 +106,8 @@ Two of the settings change meaning when it is on:
 | `rotation_deg` | how the face is aimed | a trim on top of the aiming, which is now automatic |
 
 `orbit_limit_deg` is how far round the arm it may travel from the top,
-either way. At `120` it stops before it reaches the underside; `180`
-lets it go anywhere.
+either way. At `120` it stops before it reaches the underside. At `180`
+it can go anywhere.
 
 ## Tuning it with the guides
 
@@ -131,7 +131,7 @@ Now the settings are things you look at:
 
 1. **`offset` X and Y** until the cyan line runs down the middle of your
    arm and stays there as you turn your hand. This is the one that was
-   guesswork; with the line drawn it is not. Y usually wants to be
+   guesswork. With the line drawn it is not. Y usually wants to be
    negative, the controller origin sitting above your wrist.
 2. **`offset` Z** until the dots ring the part of your arm you want the
    face on. Keep it near the wrist, around `0.08` to `0.12`: the model is
@@ -165,8 +165,8 @@ What it measures is the angle between where you are **looking** and
 where the face is, not where your hand is. Holding your wrist up beside
 your eye while looking somewhere else dims it, the same as dropping your
 arm does. Within `gaze_full_deg` of the centre of your view the face is
-at the full `opacity`; past `gaze_fade_deg` it is at `gaze_min_alpha`;
-between the two it slides. The fade itself takes about a third of a
+at the full `opacity`. Past `gaze_fade_deg` it is at `gaze_min_alpha`,
+and between the two it slides. The fade itself takes about a third of a
 second in either direction, slow enough not to flicker as your eye
 crosses it and quick enough to be up before a glance has settled.
 
@@ -182,7 +182,7 @@ Two things it will not do, on purpose:
   would invert the priority.
 
 It is off by default. A glucose readout is not a desktop window, and
-being able to see it without looking for it is most of the point — turn
+being able to see it without looking for it is most of the point. Turn
 this on only if you find it is one thing too many in view.
 
 `tools/check_gaze.py` asserts both of those rules, along with the

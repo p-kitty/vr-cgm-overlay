@@ -1,14 +1,14 @@
 # Why it is built this way
 
 The decisions that shaped the app, and the unofficial API it has to live
-with. `README.md` has the diagram and the everyday commands; this file
+with. `README.md` has the diagram and the everyday commands. This file
 is the reasoning behind them.
 
 ## Decisions worth knowing
 
 **LibreLinkUp is the only source, and there is no seam for a second
 one.** The client is a single module, `cgm.core.librelink`, and
-everything above it takes a `Reading` from it; a Dexcom or Nightscout
+everything above it takes a `Reading` from it. A Dexcom or Nightscout
 backend would be a rewrite of that module rather than a setting. An
 abstraction for a source nobody has asked for buys a layer of
 indirection and no readings. It would not be free either: what the face
@@ -22,9 +22,9 @@ cut off by Abbott. The age readout and controller tracking, though, need
 to refresh every second.
 
 **The last reading stays up when the network drops**, but its age keeps
-climbing and it greys out past two and a half minutes — about one
-missed update, which is as soon as the poll cycle allows without the
-face blinking grey during ordinary fetching. A display that silently
+climbing and it greys out past two and a half minutes. That is about
+one missed update, which is as soon as the poll cycle allows without
+the face blinking grey during ordinary fetching. A display that silently
 freezes mid-session is the dangerous failure, so stale has to look stale.
 
 **Range checks are always mg/dL**, even in mmol/L mode, so switching the
@@ -44,7 +44,7 @@ Abbott's own
 `TrendArrow` is five buckets on thresholds it does not publish and
 nothing here can adjust, so a gentle drift and a hard climb arrive as
 the same arrow. The same response already carries about twelve hours of
-history, which used to be discarded; the arrow is read out of that
+history, which used to be discarded. The arrow is read out of that
 instead, and because it is a drawing rather than a glyph it can point
 anywhere. Nothing extra is fetched and nothing is stored, so the trend
 is right again the moment the process restarts. `TrendArrow` stays as
@@ -53,11 +53,11 @@ the fallback for a fresh sensor or a gap in scanning, and
 rather the face and the phone agree exactly.
 
 **The arrow is bent through three points, not fitted through many.**
-The arrow says what is happening now; it does not say what happens
+The arrow says what is happening now. It does not say what happens
 next, because nothing here knows about meals or injections and without
 those a forecast is not available at any price. So what it should carry
 is the shape of the last half hour, and a least-squares fit is the one
-thing that cannot carry it — smoothing is precisely what buries a
+thing that cannot carry it. Smoothing is precisely what buries a
 reading that fell and has just turned around, which comes out of a fit
 identical to one that has been climbing all along. The shaft runs
 through the three most recent points instead, each segment at the rate
@@ -68,8 +68,8 @@ doing nothing. The chart flattens that and the arrow magnifies it, and
 `trend.fast_mgdl_min` is the magnification.
 
 **The fit is what is left when those three points are not there.** The
-history is downsampled to a point every fifteen minutes — coarser than
-the sensor's own record — and it is published behind the current
+history is downsampled to a point every fifteen minutes, coarser than
+the sensor's own record, and it is published behind the current
 measurement, often by twenty to thirty minutes. Past forty-five the
 three most recent points are no longer the last half hour, so the arrow
 refuses the bend and falls back to a line fitted over the hour, which is
@@ -79,22 +79,22 @@ glucose.
 
 **The same history is read twice.** The response the current value
 arrives in carries about twelve hours of it, so once the trend was being
-fitted from it, drawing it was free — no extra request, no cache,
+fitted from it, drawing it was free: no extra request, no cache,
 nothing stored. The desktop window shows the last eight hours as a
-sparkline under the number; the overlay does not by default, because a
+sparkline under the number. The overlay does not by default, because a
 face glanced at mid-game is there to be read in half a second. What it
 draws, and the rules behind each part of it, is in
 [The history sparkline](graph.md).
 
-**And a third time, for an average — which is why it is twelve hours.**
+**And a third time, for an average, which is why it is twelve hours.**
 The mean of that history is one more reading of the same response.
 Longer would mean storing readings between fetches, and a store is a
 file of health data to keep, prune and explain, where until now there
-was none; the row says it covers twelve hours instead. See
+was none. The row says it covers twelve hours instead. See
 [`[average]`](configuration.md#average--the-historys-average).
 
 **Credentials live in `config.toml`, which git ignores.** That file grants
-access to health data; keep it out of the repository.
+access to health data, so keep it out of the repository.
 
 ## LibreLinkUp API quirks
 
@@ -107,9 +107,9 @@ have actually been reported against existing clients.
 | Login answers with a region redirect | Follow `data.redirect` and log in again (once) |
 | `account-id` header (SHA256 of the user id) required | Derived at login, sent on every later call |
 | `Timestamp` is local time with no zone | Age is computed from `FactoryTimestamp` (UTC) |
-| `Value` is in the account's own unit, which follows its country | Only `ValueInMgPerDl` is read; mmol/L is derived from it |
+| `Value` is in the account's own unit, which follows its country | Only `ValueInMgPerDl` is read, and mmol/L is derived from it |
 | No token while terms or email verification are pending | `step.type` is detected and explained |
 | Tokens expire with no refresh endpoint and no warning | A 401 triggers one automatic re-login |
-| `TrendArrow` is five buckets on undocumented thresholds | The trend is fitted from `graphData`; `TrendArrow` is the fallback |
+| `TrendArrow` is five buckets on undocumented thresholds | The trend is fitted from `graphData`, with `TrendArrow` as the fallback |
 | `graphData` is downsampled to a point every 15 min | Three points are half an hour, which is the stretch the arrow bends through |
-| `graphData` lags the current measurement, by 20-30 min | Past a 45 minute span the arrow gives up the bend and falls back to a fit; every fetch logs the lag |
+| `graphData` lags the current measurement, by 20-30 min | Past a 45 minute span the arrow gives up the bend and falls back to a fit, and every fetch logs the lag |
