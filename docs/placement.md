@@ -10,7 +10,9 @@ config.toml written before that does not start. The app names each key
 it found in the wrong place and says it belongs under `[vr]`.
 
 **They are also three tabs in the settings window**: the gear in the
-corner of the desktop face, then `vr`, `vr orbit` and `vr gaze`. They
+corner of the desktop face, then `vr`, `vr orbit` and `vr gaze`.
+`arm_guide` sits on the first of them, because the line it draws is
+what `offset` is set against as much as anything orbit does. They
 are still one `[vr]` section in the file. Nothing below changes if you use it: it writes the
 same `config.toml`, and the running overlay picks the edit up the same
 way. Everything here about nudging a number and watching the face move
