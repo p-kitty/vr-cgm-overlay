@@ -385,7 +385,7 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     # Both questions are modal dialogs, which would stop this run dead;
     # the window takes its answers from these two attributes instead.
     answers = {"name": "made", "yes": False}
-    window.ask_name = lambda _parent, _prompt: answers["name"]
+    window.ask_name = lambda _parent, _prompt, initial="": answers["name"]
     window.confirm = lambda _parent, _prompt: answers["yes"]
 
     # On none there is nothing to delete, and New is there.
@@ -414,17 +414,49 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     assert window.save()
     say("New and Delete wait for Save", "grey while anything is unsaved")
 
+    # Rename keeps it live and moves nothing; the old name is gone.
+    assert window._rename_button.instate(["!disabled"]), "Rename dead on a preset"
+    before = config_mod.load(path).vr.offset
+    answers["name"] = "renamed"
+    window._rename_preset()
+    assert config_mod.load(path).vr.preset == "renamed", "rename let go of it"
+    assert config_mod.load(path).vr.offset == before, "rename moved the face"
+    assert presets_mod.available(path) == ["renamed", "wrist"], (
+        presets_mod.available(path)
+    )
+    assert window._preset_var.get() == "renamed"
+    assert any(
+        "[renamed]" in window._notebook.tab(i, "text")
+        for i in range(len(settings_mod.tabs()))
+    ), "the tabs kept the old name"
+    say("Rename keeps it live", "made -> renamed, nothing moved")
+
+    # The hint borrows the status line and gives it back, but never
+    # over the result of pressing the button.
+    window._say("before")
+    window._rename_button.event_generate("<Enter>")
+    hint = settings_mod.PRESET_BUTTONS["rename"][1]
+    assert window._status.cget("text") == hint, window._status.cget("text")
+    window._rename_button.event_generate("<Leave>")
+    assert window._status.cget("text") == "before", "the hint was left behind"
+    window._rename_button.event_generate("<Enter>")
+    window._say("a result")
+    window._rename_button.event_generate("<Leave>")
+    assert window._status.cget("text") == "a result", "leaving wiped a result"
+    say("symbols say what they do", "on hover, without eating a result")
+
     # Saying no deletes nothing.
     window._delete_preset()
-    assert "made" in presets_mod.available(path), "deleted on a no"
-    assert config_mod.load(path).vr.preset == "made"
+    assert "renamed" in presets_mod.available(path), "deleted on a no"
+    assert config_mod.load(path).vr.preset == "renamed"
 
     answers["yes"] = True
     window._delete_preset()
-    assert "made" not in presets_mod.available(path), "not deleted on a yes"
+    assert "renamed" not in presets_mod.available(path), "not deleted on a yes"
     assert config_mod.load(path).vr.preset == "", "still naming a deleted preset"
     assert window._preset_var.get() == settings_mod.NO_PRESET
     assert window._delete_button.instate(["disabled"]), "Delete offered on none"
+    assert window._rename_button.instate(["disabled"]), "Rename offered on none"
     say("Delete asks, then goes", "no keeps it, yes removes it")
 
     if show:

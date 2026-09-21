@@ -136,14 +136,18 @@ in it is out of range, is not switched to. The old choice stays and
 the window says why, rather than leaving a `config.toml` the app will
 not start from.
 
-**New...** beside the chooser saves where the face is now under a
-new name and switches to it. Nothing moves, because the new preset is
-a copy of the placement in use: only the file those numbers live in
-changes. A name that is already taken is refused rather than
-overwritten. **Delete** removes the chosen preset after asking, and
-hands the placement back to `config.toml`, which may be somewhere else,
-so the face can move. Both are greyed out with anything unsaved, for
-the same reason the chooser is.
+Three buttons sit beside the chooser. Point at one and the status
+line says what it does.
+
+| | |
+|---|---|
+| ➕ | Save where the face is now under a new name, and switch to it. Nothing moves: the new preset is a copy of the placement in use, so only the file those numbers live in changes. A name already taken is refused rather than overwritten. |
+| ✎ | Rename the chosen preset. It stays live if it was, and nothing moves. |
+| 🗑 | Delete the chosen preset, after asking. The placement goes back to `config.toml`, which may be somewhere else, so the face can move. |
+
+All three are greyed out with anything unsaved, for the same reason
+the chooser is, and ✎ and 🗑 also on `(none)`, where there is nothing
+for them to act on.
 
 Which settings belong to the preset is on the tab names:
 `vr placement [wrist]` and `vr orbit [wrist]` change when you switch,

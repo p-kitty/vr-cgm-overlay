@@ -86,6 +86,18 @@ HEADER_KEYS = frozenset({presets_mod.SELECTOR})
 # that has not loaded rather than as a choice.
 NO_PRESET = "(none)"
 
+# The preset buttons, as symbols with a hint each. Symbols because three
+# words beside a dropdown made the bar wider than the notebook under it;
+# a hint because a symbol alone is a guess. The hint goes to the status
+# line on hover rather than into a tooltip, which Tk does not have and
+# which would be one more window to place beside an always-on-top face.
+# The delete one is a bin rather than a cross, which reads as "close".
+PRESET_BUTTONS = {
+    "new": ("\u2795", "new preset: save where the face is now under a new name"),
+    "rename": ("\u270e", "rename this preset"),
+    "delete": ("\U0001f5d1", "delete this preset"),
+}
+
 GROUPS = {
     "vr": (
         # Everything a preset owns, split across two tabs, and nothing a
@@ -454,20 +466,21 @@ class SettingsWindow:
         self._preset_box.pack(side="left", padx=(8, 0))
         self._preset_box.bind("<<ComboboxSelected>>", self._switch_preset)
 
-        self._new_button = ttk.Button(bar, text="New...", command=self._new_preset)
-        self._new_button.pack(side="left", padx=(8, 0))
-        self._delete_button = ttk.Button(
-            bar, text="Delete", command=self._delete_preset
+        self._new_button = self._preset_button(bar, "new", self._new_preset)
+        self._rename_button = self._preset_button(
+            bar, "rename", self._rename_preset
         )
-        self._delete_button.pack(side="left", padx=(4, 0))
+        self._delete_button = self._preset_button(
+            bar, "delete", self._delete_preset
+        )
         self._offer_preset_buttons(True)
 
     # The two questions the buttons ask, as attributes so that
     # tools/check_settings.py can answer them without a modal dialog
     # blocking the run. Each takes the window and the text to show.
     ask_name = staticmethod(
-        lambda parent, prompt: simpledialog.askstring(
-            "New preset", prompt, parent=parent
+        lambda parent, prompt, initial="": simpledialog.askstring(
+            "Preset name", prompt, parent=parent, initialvalue=initial
         )
     )
     confirm = staticmethod(
@@ -475,6 +488,61 @@ class SettingsWindow:
             "Delete preset", prompt, parent=parent
         )
     )
+
+    def _preset_button(self, bar, which: str, command) -> ttk.Button:
+        """One symbol button, which says what it does when pointed at.
+
+        The hint borrows the status line and gives it back on the way
+        out, unless something replaced the hint meanwhile -- the result
+        of pressing the button, usually, which is exactly the message
+        that must not be wiped by moving the mouse off it.
+        """
+        symbol, hint = PRESET_BUTTONS[which]
+        button = ttk.Button(bar, text=symbol, width=3, command=command)
+        button.pack(side="left", padx=(8 if which == "new" else 2, 0))
+
+        def enter(_event) -> None:
+            self._before_hint = self._status.cget("text")
+            self._say(hint)
+
+        def leave(_event) -> None:
+            if self._status.cget("text") == hint:
+                self._say(getattr(self, "_before_hint", ""))
+
+        button.bind("<Enter>", enter)
+        button.bind("<Leave>", leave)
+        return button
+
+    def _rename_preset(self) -> None:
+        """Give the chosen preset a new name. The live one stays live.
+
+        Nothing moves: the numbers are the same numbers under another
+        name. The old name is offered as the starting text, since a
+        rename is usually a small correction to it.
+        """
+        old = self._preset
+        if not old:
+            return
+        name = self.ask_name(
+            self._top,
+            f"New name for {old}.\nLetters, digits, dot, dash and underscore.",
+            initial=old,
+        )
+        if not name or name.strip() == old:
+            return  # cancelled, nothing typed, or unchanged
+        name = name.strip()
+
+        try:
+            self._cfg = config_mod.rename_preset(self._path, old, name)
+        except (OSError, ValueError) as exc:
+            self._say(str(exc))
+            return
+
+        self._preset = self._cfg.vr.preset
+        self._refresh_choices()
+        self._reload_boxes()
+        self._say(f"renamed {old} to {name}")
+        log.info("placement preset renamed: %s -> %s", old, name)
 
     def _new_preset(self) -> None:
         """Save what is on the wrist now under a new name, and go to it.
@@ -544,14 +612,15 @@ class SettingsWindow:
         self._preset_var.set(self._preset or NO_PRESET)
 
     def _offer_preset_buttons(self, offer: bool) -> None:
-        """New and Delete follow the chooser: live only with nothing unsaved.
+        """The buttons follow the chooser: live only with nothing unsaved.
 
-        Delete also needs a preset to delete, so it stays grey on none.
+        Rename and Delete also need a preset to act on, so they stay grey
+        on none.
         """
         self._new_button.configure(state="normal" if offer else "disabled")
-        self._delete_button.configure(
-            state="normal" if offer and self._preset else "disabled"
-        )
+        on_one = "normal" if offer and self._preset else "disabled"
+        self._rename_button.configure(state=on_one)
+        self._delete_button.configure(state=on_one)
 
     def _switch_preset(self, *_event) -> None:
         """Write the new choice, then rebuild every box from it.
