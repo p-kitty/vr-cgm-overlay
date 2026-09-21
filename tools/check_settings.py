@@ -459,6 +459,41 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     assert window._rename_button.instate(["disabled"]), "Rename offered on none"
     say("Delete asks, then goes", "no keeps it, yes removes it")
 
+    # The question itself, now drawn by Tk rather than the OS. Each
+    # answer is given by pressing the dialog's own button, from a timer,
+    # since the dialog holds the loop until it is answered.
+    def answer(how: str) -> bool:
+        def go() -> None:
+            dialogs = [
+                w
+                for w in window._top.winfo_children()
+                if isinstance(w, tk.Toplevel) and w.title() == "Delete preset"
+            ]
+            assert len(dialogs) == 1, f"{len(dialogs)} delete dialogs open"
+            (dialog,) = dialogs
+            if how == "escape":
+                dialog.event_generate("<Escape>")
+                return
+            stack = [dialog]
+            labels = []
+            while stack:
+                widget = stack.pop()
+                stack.extend(widget.winfo_children())
+                if widget.winfo_class() == "TButton":
+                    labels.append(widget.cget("text"))
+                    if widget.cget("text") == how:
+                        widget.invoke()
+                        return
+            raise AssertionError(f"no {how} button, only {labels}")
+
+        window._top.after(200, go)
+        return settings_mod.ask_to_delete(window._top, "Delete the preset x?")
+
+    assert answer("Delete") is True, "Delete did not mean yes"
+    assert answer("Cancel") is False, "Cancel did not mean no"
+    assert answer("escape") is False, "Escape did not mean no"
+    say("the delete dialog is Tk's", "Delete / Cancel, Escape is Cancel")
+
     if show:
         window._say("a throwaway copy; nothing saved here reaches your config.toml")
         print("\n  showing it; close the settings window to finish")

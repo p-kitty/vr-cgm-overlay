@@ -62,7 +62,7 @@ from __future__ import annotations
 import logging
 import tkinter as tk
 from pathlib import Path
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import simpledialog, ttk
 
 from cgm.core import config as config_mod
 from cgm.core import presets as presets_mod
@@ -331,6 +331,61 @@ def apply_values(cfg: config_mod.Config, values: dict[tuple[str, str], object]) 
         )
 
 
+def ask_to_delete(parent: tk.Misc, prompt: str) -> bool:
+    """Delete or Cancel, drawn by Tk, and True only for Delete.
+
+    Not `messagebox.askyesno`: that is the Windows message box, whose
+    buttons are labelled in the language of the OS, so on a Japanese
+    Windows it said はい and いいえ beside a name prompt saying OK and
+    Cancel. Drawn here, every word in the window is the window's own.
+
+    The buttons name the action rather than answering a question, so
+    the one that destroys something says so. Cancel has the focus and
+    Escape and closing the window both mean Cancel: the default of a
+    question that deletes numbers found by hand has to be no.
+    """
+    answer = {"delete": False}
+    top = tk.Toplevel(parent)
+    top.withdraw()
+    top.title("Delete preset")
+    top.resizable(False, False)
+    top.transient(parent)
+    try:
+        top.attributes("-topmost", parent.attributes("-topmost"))
+    except tk.TclError:  # not every parent answers for that
+        pass
+
+    frame = ttk.Frame(top, padding=14)
+    frame.pack(fill="both", expand=True)
+    ttk.Label(frame, text=prompt, wraplength=360, justify="left").pack(anchor="w")
+
+    def delete() -> None:
+        answer["delete"] = True
+        top.destroy()
+
+    buttons = ttk.Frame(frame, padding=(0, 12, 0, 0))
+    buttons.pack(fill="x")
+    cancel = ttk.Button(buttons, text="Cancel", command=top.destroy)
+    cancel.pack(side="right")
+    ttk.Button(buttons, text="Delete", command=delete).pack(
+        side="right", padx=(0, 8)
+    )
+
+    top.bind("<Escape>", lambda _event: top.destroy())
+    top.protocol("WM_DELETE_WINDOW", top.destroy)
+
+    # Over the middle of the window that asked, where the eye already is.
+    top.update_idletasks()
+    x = parent.winfo_rootx() + (parent.winfo_width() - top.winfo_reqwidth()) // 2
+    y = parent.winfo_rooty() + (parent.winfo_height() - top.winfo_reqheight()) // 3
+    top.geometry(f"+{max(x, 0)}+{max(y, 0)}")
+    top.deiconify()
+    cancel.focus_set()
+    top.grab_set()
+    parent.wait_window(top)
+    return answer["delete"]
+
+
 class SettingsWindow:
     """One Toplevel over one config.toml.
 
@@ -465,11 +520,7 @@ class SettingsWindow:
             "Preset name", prompt, parent=parent, initialvalue=initial
         )
     )
-    confirm = staticmethod(
-        lambda parent, prompt: messagebox.askyesno(
-            "Delete preset", prompt, parent=parent
-        )
-    )
+    confirm = staticmethod(ask_to_delete)
 
     def _preset_button(self, bar, which: str, command) -> ttk.Button:
         """One symbol button, which says what it does when pointed at.
