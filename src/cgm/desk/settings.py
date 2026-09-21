@@ -75,7 +75,7 @@ log = logging.getLogger(__name__)
 # so a setting added later appears there rather than going missing.
 GROUPS = {
     "vr": (
-        ("vr orbit", ("orbit", "orbit_radius_m", "orbit_limit_deg", "arm_guide")),
+        ("vr orbit", ("orbit", "orbit_radius_m", "orbit_limit_deg")),
         (
             "vr gaze",
             ("gaze_fade", "gaze_full_deg", "gaze_fade_deg", "gaze_min_alpha"),
@@ -91,13 +91,14 @@ NOTES = {
     "vr": (
         "Placement is judged with the headset on: change a number, press "
         "Save, and watch the face move. Nudging it in config.toml works "
-        "the same way. See docs/placement.md for what the numbers mean."
+        "the same way. arm_guide draws the arm the settings here are "
+        "aiming at, so turn it on while you tune and off when you are "
+        "done. See docs/placement.md for what the numbers mean."
     ),
     "vr orbit": (
         "Off, the face is bolted to the controller. On, it rides round the "
-        "modelled centreline of your forearm -- and offset and rotation_deg "
-        "on the vr tab change meaning. arm_guide draws that line while you "
-        "tune it; turn it off when you are done."
+        "modelled centreline of your forearm, and offset and rotation_deg "
+        "on the vr tab change meaning."
     ),
     "average": (
         "The mean of the history the API sends, about twelve hours. The row "
@@ -140,7 +141,7 @@ HINTS = {
     "vr.orbit": "ride around the forearm instead of being bolted to the controller",
     "vr.orbit_radius_m": "how far off the arm's centreline the face floats",
     "vr.orbit_limit_deg": "how far round the arm it may travel, up to 180",
-    "vr.arm_guide": "draw the arm orbit mode is aiming at, while you tune it",
+    "vr.arm_guide": "draw the arm the placement is aiming at, while you tune it",
     "vr.gaze_fade": "dim the face while you are not looking at it",
     "vr.gaze_full_deg": "within this of the centre of view: full opacity",
     "vr.gaze_fade_deg": "past this: gaze_min_alpha, fading in between",
