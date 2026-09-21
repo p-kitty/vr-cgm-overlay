@@ -123,7 +123,25 @@ class Tabs(unittest.TestCase):
             for key in keys
         ]
         self.assertEqual(len(shown), len(set(shown)), "a setting is on two tabs")
-        self.assertEqual(set(shown), {tuple(n.split(".")) for n in names()})
+
+        # Everything except the settings that get a control above the
+        # notebook. Those are still shown, and still saved, just not as
+        # a row: see HEADER_KEYS. Subtracting them here rather than
+        # loosening the check keeps it a statement that nothing has
+        # gone missing.
+        expected = {
+            tuple(name.split("."))
+            for name in names()
+            if name.split(".")[1] not in settings_mod.HEADER_KEYS
+        }
+        self.assertEqual(set(shown), expected)
+
+    def test_a_header_setting_is_not_also_a_row(self):
+        # The point of lifting one out is that it governs the tabs. A
+        # copy of it inside them would be a second control for the same
+        # value, disagreeing with the first as soon as either moved.
+        for _label, _section, keys in settings_mod.tabs():
+            self.assertFalse(set(keys) & settings_mod.HEADER_KEYS)
 
     def test_a_section_that_is_not_carved_is_one_whole_tab(self):
         for label, section, keys in settings_mod.tabs():

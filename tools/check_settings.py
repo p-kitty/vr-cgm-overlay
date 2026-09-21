@@ -33,12 +33,14 @@ from __future__ import annotations
 
 import sys
 import tempfile
+import tomllib
 import tkinter as tk
 from pathlib import Path
 
 from PIL import Image
 
 from cgm.core import config as config_mod
+from cgm.core import presets as presets_mod
 from cgm.desk import settings as settings_mod
 from cgm.desk.window import FaceWindow, compose, work_area
 from cgm.face.renderer import STATUS_MARKERS
@@ -217,10 +219,15 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
 
     # One widget per offered setting, and none for anything that is not
     # a setting.
+    # HEADER_KEYS are offered by a control above the notebook rather
+    # than a row in it, and deliberately stay out of `_vars`: `save`
+    # writes everything in there, and the chooser has to write on its
+    # own terms. They are checked below instead.
     expected = {
         (section, key)
         for section in settings_mod.sections()
         for key in config_mod.FIELD_TYPES[section]
+        if key not in settings_mod.HEADER_KEYS
     }
     assert not expected - set(rows), f"no widget for {sorted(expected - set(rows))}"
     assert not set(rows) - expected, f"a widget for {sorted(set(rows) - expected)}"
@@ -292,8 +299,88 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     assert window._save_button.instate(["!disabled"]), "Save went away with the error"
     say("a bad value is refused", complaint.split(";")[0])
 
+    # -- the preset chooser -------------------------------------------------
+
+    # Back to something saveable, so the window is at rest again.
+    rows[("polling", "interval_sec")].set("60")
+    assert window.save(), "could not get back to a clean window"
+
+    # Nothing unsaved, so the chooser is live and Save is not.
+    assert window._preset_box.instate(["readonly"]), "the chooser is dead at rest"
+    assert window._save_button.instate(["disabled"])
+
+    # The rule the whole design rests on: `save` writes every box,
+    # touched or not, so a window showing one preset's numbers while
+    # pointed at another would copy the first over the second. The
+    # chooser and Save are therefore never both live.
+    rows[("thresholds", "low_mgdl")].set("85")
+    assert window._preset_box.instate(["disabled"]), "could switch with edits pending"
+    assert window._save_button.instate(["!disabled"])
+    assert window.save()
+    assert window._preset_box.instate(["readonly"]), "the chooser stayed dead"
+    say("chooser and Save exclude", "never both live")
+
+    # Switching writes the choice, and the boxes come back holding what
+    # the new preset says rather than what the old one did.
+    folder = presets_mod.directory(path)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "wrist.toml").write_text(
+        '[vr]\noffset = [0.0, 0.0, 0.22]\norbit = true\n', encoding="utf-8"
+    )
+    assert "wrist" in presets_mod.available(path), presets_mod.available(path)
+
+    window._preset_var.set("wrist")
+    window._switch_preset()
+    assert config_mod.load(path).vr.preset == "wrist", "the choice was not written"
+    assert config_mod.load(path).vr.offset == (0.0, 0.0, 0.22), "the preset lost"
+    shown = [float(part) for part in rows[("vr", "offset")].get()]
+    assert shown == [0.0, 0.0, 0.22], f"the boxes still show the old preset: {shown}"
+    assert window._save_button.instate(["disabled"]), "reloading counted as an edit"
+    say("switching reloads the boxes", f"offset now {tuple(shown)}")
+
+    # And the tabs a preset governs say which one, so the answer is on
+    # screen rather than remembered.
+    labelled = [
+        window._notebook.tab(i, "text")
+        for i, (_l, _s, keys) in enumerate(settings_mod.tabs())
+        if set(keys) & presets_mod.PRESET_KEYS
+    ]
+    assert labelled, "no tab holds a preset key"
+    assert all("[wrist]" in text for text in labelled), labelled
+    untouched = [
+        window._notebook.tab(i, "text")
+        for i, (_l, _s, keys) in enumerate(settings_mod.tabs())
+        if not (set(keys) & presets_mod.PRESET_KEYS)
+    ]
+    assert not any("[wrist]" in text for text in untouched), untouched
+    say("tabs name the preset", ", ".join(labelled))
+
+    # Saving now writes the placement to the preset file and leaves
+    # config.toml's [vr] alone, or the two would hold different answers
+    # to the same question and the preset would silently keep winning.
+    for part, value in zip(rows[("vr", "offset")].parts, ("0.0", "0.01", "0.25")):
+        part.set(value)
+    assert window.save(), "saving under a preset was refused"
+    written = (folder / "wrist.toml").read_text(encoding="utf-8")
+    assert "0.25" in written, written
+    # Read as TOML rather than searched as text: the example config has
+    # other numbers that happen to spell the same.
+    own = tomllib.loads(path.read_text(encoding="utf-8"))["vr"].get("offset")
+    assert own != [0.0, 0.01, 0.25], f"it went to config.toml too: {own}"
+    assert config_mod.load(path).vr.offset == (0.0, 0.01, 0.25)
+    say("Save reaches the preset", "wrist.toml, not config.toml")
+
+    # Back to none, which is what every config did before presets.
+    window._preset_var.set(settings_mod.NO_PRESET)
+    window._switch_preset()
+    assert config_mod.load(path).vr.preset == ""
+    assert all(
+        "[" not in window._notebook.tab(i, "text")
+        for i in range(len(settings_mod.tabs()))
+    ), "a tab kept the preset name"
+    say("back to no preset", "config.toml alone again")
+
     if show:
-        rows[("polling", "interval_sec")].set("60")
         window._say("a throwaway copy; nothing saved here reaches your config.toml")
         print("\n  showing it; close the settings window to finish")
         window._top.protocol("WM_DELETE_WINDOW", face._root.quit)

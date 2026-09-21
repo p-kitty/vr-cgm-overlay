@@ -65,6 +65,7 @@ from pathlib import Path
 from tkinter import ttk
 
 from cgm.core import config as config_mod
+from cgm.core import presets as presets_mod
 from cgm.desk.window import beside, position_of, work_area
 
 log = logging.getLogger(__name__)
@@ -73,6 +74,18 @@ log = logging.getLogger(__name__)
 # `[vr]` needs it -- see the module docstring for why -- and only the
 # groups are named: whatever is left over stays on the section's own tab,
 # so a setting added later appears there rather than going missing.
+# Settings that get a control above the notebook instead of a row in
+# it. Only `vr.preset` so far, and it earns it: it decides which
+# placement the [vr] tabs are showing, so a row inside those tabs would
+# be a control that changes the meaning of the rows around it while
+# looking like one of them.
+HEADER_KEYS = frozenset({presets_mod.SELECTOR})
+
+# What the chooser shows for "no preset at all", which is the empty
+# string in the file. A blank entry in a dropdown reads as a control
+# that has not loaded rather than as a choice.
+NO_PRESET = "(none)"
+
 GROUPS = {
     "vr": (
         ("vr orbit", ("orbit", "orbit_radius_m", "orbit_limit_deg")),
@@ -177,13 +190,18 @@ def tabs() -> list[tuple[str, str, tuple[str, ...]]]:
     The section's own tab gets the leftovers, computed rather than
     listed, which is what keeps a new setting from falling between the
     two.
+
+    `HEADER_KEYS` are the exception, and the only one: a setting that
+    governs what the other tabs are showing cannot sit on one of them.
     """
     out: list[tuple[str, str, tuple[str, ...]]] = []
     for section in sections():
         groups = GROUPS.get(section, ())
         taken = {key for _label, keys in groups for key in keys}
         rest = tuple(
-            key for key in config_mod.FIELD_TYPES[section] if key not in taken
+            key
+            for key in config_mod.FIELD_TYPES[section]
+            if key not in taken and key not in HEADER_KEYS
         )
         out.append((section, section, rest))
         out.extend((label, section, keys) for label, keys in groups)
@@ -264,10 +282,10 @@ class Vector3Var:
     `offset` and `rotation_deg` are the only compound values there are,
     and a single box holding `0.0, -0.02, 0.12` would be a text format
     to parse and to complain about. Three boxes instead, and this stands
-    in for a `tk.Variable` in the two ways the window uses one: `get`
+    in for a `tk.Variable` in the three ways the window uses one: `get`
     hands back the three strings, which `config.parse` already accepts
-    because a TOML array arrives as a list too, and `trace_add` marks the
-    window edited from any of them.
+    because a TOML array arrives as a list too, `set` takes three values
+    at once, and `trace_add` marks the window edited from any of them.
     """
 
     def __init__(self, value) -> None:
@@ -275,6 +293,16 @@ class Vector3Var:
 
     def get(self) -> list[str]:
         return [part.get() for part in self.parts]
+
+    def set(self, value) -> None:
+        """Refill all three, the way switching preset hands them back.
+
+        Spelled through `spell` like the initial fill, so a reloaded box
+        reads the same as one the window opened with rather than showing
+        Python's idea of the float.
+        """
+        for part, fresh in zip(self.parts, value):
+            part.set(spell(fresh))
 
     def trace_add(self, mode: str, callback) -> None:
         for part in self.parts:
@@ -332,11 +360,14 @@ class SettingsWindow:
         except tk.TclError:  # not every master answers for that
             pass
 
-        notebook = ttk.Notebook(self._top)
+        self._preset = self._cfg.vr.preset
+        self._build_preset_bar()
+
+        notebook = self._notebook = ttk.Notebook(self._top)
         notebook.pack(fill="both", expand=True, padx=10, pady=(10, 0))
         for label, section, keys in tabs():
             frame = ttk.Frame(notebook, padding=12)
-            notebook.add(frame, text=label)
+            notebook.add(frame, text=self._tab_label(label, section, keys))
             self._fill(frame, label, section, keys)
 
         self._status = ttk.Label(self._top, text="", wraplength=560)
@@ -362,6 +393,100 @@ class SettingsWindow:
         self._top.protocol("WM_DELETE_WINDOW", self.close)
         self._place_beside(master)
         self._top.deiconify()
+
+    def _tab_label(self, label: str, section: str, keys: tuple[str, ...]) -> str:
+        """The tab's name, with the live preset on the ones it decides.
+
+        A tab holding a preset key is showing that preset's values and
+        nothing else's, so it says which. The tabs a preset does not
+        reach keep their plain name: labelling all of them would claim
+        the preset governs settings it has no part in.
+        """
+        if not self._preset or not (set(keys) & presets_mod.PRESET_KEYS):
+            return label
+        return f"{label} [{self._preset}]"
+
+    def _build_preset_bar(self) -> None:
+        """The preset chooser, above the notebook rather than inside it.
+
+        Above, because it decides what every `[vr]` tab is showing. A
+        row among them would look like one more setting while silently
+        changing the meaning of the ones beside it.
+
+        **It is disabled whenever there is anything unsaved**, and that
+        is a correctness rule rather than a nicety. `save` writes every
+        box, touched or not, so a window still showing one preset's
+        numbers while pointed at another would quietly copy the first
+        over the second. Making the chooser and the Save button
+        mutually exclusive puts that state out of reach: switching is
+        only possible with nothing outstanding, and switching reloads
+        every box before anything can be typed into it.
+        """
+        bar = ttk.Frame(self._top, padding=(12, 10, 12, 0))
+        bar.pack(fill="x")
+        ttk.Label(bar, text="placement preset").pack(side="left")
+
+        names = presets_mod.available(self._path)
+        if self._preset and self._preset not in names:
+            # Named in config.toml with no file behind it. Offered
+            # anyway, so the box shows what the config actually says
+            # rather than appearing to be set to something else.
+            names = sorted([*names, self._preset])
+
+        self._preset_var = tk.StringVar(value=self._preset or NO_PRESET)
+        self._preset_box = ttk.Combobox(
+            bar,
+            textvariable=self._preset_var,
+            values=[NO_PRESET, *names],
+            state="readonly",
+            width=24,
+        )
+        self._preset_box.pack(side="left", padx=(8, 0))
+        self._preset_box.bind("<<ComboboxSelected>>", self._switch_preset)
+
+    def _switch_preset(self, *_event) -> None:
+        """Write the new choice, then rebuild every box from it.
+
+        Written first because the preset is what decides which values
+        the boxes should hold, so there is nothing to show until the
+        file says which one is live. The running overlay picks the same
+        edit up within the second, which is what makes the answer to
+        "which one am I editing" the thing on your wrist.
+        """
+        chosen = self._preset_var.get()
+        chosen = "" if chosen == NO_PRESET else chosen
+        if chosen == self._preset:
+            return
+
+        try:
+            # Not load, set, save: save writes the loaded placement into
+            # the named preset, and the loaded placement is the old one.
+            self._cfg = config_mod.select_preset(self._path, chosen)
+        except (OSError, ValueError) as exc:
+            self._preset_var.set(self._preset or NO_PRESET)
+            self._say(str(exc))
+            return
+
+        self._preset = chosen
+        self._reload_boxes()
+        self._say(f"editing {chosen or 'config.toml'}")
+        log.info("placement preset: %s", chosen or "none")
+
+    def _reload_boxes(self) -> None:
+        """Put the current config back into every widget.
+
+        Only ever reached with nothing unsaved, so there is no edit here
+        to lose. Setting the variables trips their write traces and so
+        offers a Save for changes this made itself, which is undone at
+        the end rather than by detaching the traces: a trace removed and
+        not put back -- an exception in between is all it takes -- is a
+        Save button that has quietly stopped noticing edits.
+        """
+        for (section, key), variable in self._vars.items():
+            variable.set(getattr(getattr(self._cfg, section), key))
+        for index, (label, section, keys) in enumerate(tabs()):
+            self._notebook.tab(index, text=self._tab_label(label, section, keys))
+        self._offer_save(False)
 
     def _place_beside(self, master: tk.Misc) -> None:
         """Open next to the face, where the right-click that asked was.
@@ -534,9 +659,15 @@ class SettingsWindow:
 
         A button that does nothing is worse than no button: it says the
         window is unsure whether it has your change.
+
+        The preset chooser is greyed the opposite way, by the same call,
+        so the two are never both live. See `_build_preset_bar` for why
+        that is a correctness rule and not tidiness.
         """
-        if self._top.winfo_exists():
-            self._save_button.configure(state="normal" if offer else "disabled")
+        if not self._top.winfo_exists():
+            return
+        self._save_button.configure(state="normal" if offer else "disabled")
+        self._preset_box.configure(state="disabled" if offer else "readonly")
 
     def _say(self, text: str) -> None:
         if self._top.winfo_exists():
