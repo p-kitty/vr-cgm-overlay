@@ -21,8 +21,9 @@ carries the same thing as comments next to the values.
 anywhere on it. Every section below gets a tab, with one row per
 setting, labelled with the key's own name, so what you change there is
 what this page explains. `[vr]` is long enough to have been setting the
-height of the window on its own, so it is three tabs: `vr` for where the
-face sits, `vr orbit` and `vr gaze` for the two modes. They are all one
+height of the window on its own, so it is four tabs: `vr` for what
+every placement shares, `vr placement` and `vr orbit` for what a preset
+owns, and `vr gaze`. They are all one
 section in the file. Save is greyed out until you change something,
 and greys itself out again once it has written.
 

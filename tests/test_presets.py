@@ -279,6 +279,137 @@ class Switching(PresetTestCase):
         self.assertEqual(self.path.read_text("utf-8"), before)
 
 
+class Creating(PresetTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.config("offset = [0.0, 0.02, 0.1]\nwidth_m = 0.12\n")
+
+    def test_a_new_preset_copies_what_is_in_use_and_goes_live(self):
+        cfg = config_mod.create_preset(self.path, "hand")
+        self.assertEqual(cfg.vr.preset, "hand")
+        self.assertEqual(cfg.vr.offset, (0.0, 0.02, 0.1))
+        saved = tomllib.loads((self.folder / "hand.toml").read_text("utf-8"))
+        self.assertEqual(saved["vr"]["width_m"], 0.12)
+
+    def test_it_holds_every_preset_key(self):
+        # A preset is the whole answer to where the face goes. One left
+        # out would be inherited from config.toml and change under it.
+        config_mod.create_preset(self.path, "hand")
+        saved = tomllib.loads((self.folder / "hand.toml").read_text("utf-8"))
+        self.assertEqual(set(saved["vr"]), set(presets.PRESET_KEYS))
+
+    def test_copying_from_a_live_preset_copies_the_preset(self):
+        self.preset("wrist", "offset = [0.0, 0.0, 0.22]\n")
+        config_mod.select_preset(self.path, "wrist")
+        cfg = config_mod.create_preset(self.path, "wrist-2")
+        self.assertEqual(cfg.vr.offset, (0.0, 0.0, 0.22))
+
+    def test_a_taken_name_is_refused_and_the_old_one_kept(self):
+        self.preset("wrist", "offset = [0.0, 0.0, 0.22]\n")
+        with self.assertRaises(ValueError) as caught:
+            config_mod.create_preset(self.path, "wrist")
+        self.assertIn("already exists", str(caught.exception))
+        self.assertIn("0.22", (self.folder / "wrist.toml").read_text("utf-8"))
+
+    def test_an_unsafe_name_writes_nothing(self):
+        with self.assertRaises(ValueError):
+            config_mod.create_preset(self.path, "../config")
+        self.assertFalse(self.folder.exists())
+
+
+class Renaming(PresetTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.config("offset = [0.0, 0.02, 0.1]\n")
+        self.preset("wrist", "# tuned seated\noffset = [0.0, 0.0, 0.22]\n")
+        self.preset("hand", "offset = [0.0, 0.03, 0.08]\n")
+
+    def test_renaming_one_that_is_not_live(self):
+        cfg = config_mod.rename_preset(self.path, "hand", "palm")
+        self.assertEqual(cfg.vr.preset, "")
+        self.assertEqual(presets.available(self.path), ["palm", "wrist"])
+
+    def test_renaming_the_live_one_keeps_it_live(self):
+        config_mod.select_preset(self.path, "wrist")
+        cfg = config_mod.rename_preset(self.path, "wrist", "forearm")
+        self.assertEqual(cfg.vr.preset, "forearm")
+        self.assertEqual(cfg.vr.offset, (0.0, 0.0, 0.22))
+        self.assertFalse((self.folder / "wrist.toml").exists())
+
+    def test_the_numbers_and_comments_come_across(self):
+        config_mod.rename_preset(self.path, "wrist", "forearm")
+        text = (self.folder / "forearm.toml").read_text("utf-8")
+        self.assertIn("tuned seated", text)
+        self.assertIn("0.22", text)
+
+    def test_the_header_names_the_new_name(self):
+        # A file whose own comment says to type the old name sends
+        # whoever reads it to a preset that is not there.
+        config_mod.create_preset(self.path, "made")
+        config_mod.rename_preset(self.path, "made", "kept")
+        text = (self.folder / "kept.toml").read_text("utf-8")
+        self.assertIn(presets.header_line("kept"), text)
+        self.assertNotIn(presets.header_line("made"), text)
+
+    def test_a_taken_name_is_refused_and_both_kept(self):
+        with self.assertRaises(ValueError) as caught:
+            config_mod.rename_preset(self.path, "hand", "wrist")
+        self.assertIn("already exists", str(caught.exception))
+        self.assertIn("0.22", (self.folder / "wrist.toml").read_text("utf-8"))
+        self.assertIn("0.08", (self.folder / "hand.toml").read_text("utf-8"))
+
+    def test_an_unsafe_name_is_refused(self):
+        with self.assertRaises(ValueError):
+            config_mod.rename_preset(self.path, "hand", "../config")
+        self.assertTrue((self.folder / "hand.toml").exists())
+
+    def test_a_preset_that_is_not_there_is_named(self):
+        with self.assertRaises(FileNotFoundError):
+            config_mod.rename_preset(self.path, "nowhere", "somewhere")
+
+    def test_the_app_still_starts_afterwards(self):
+        config_mod.select_preset(self.path, "wrist")
+        config_mod.rename_preset(self.path, "wrist", "forearm")
+        self.load()
+
+
+class Deleting(PresetTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.config("offset = [0.0, 0.02, 0.1]\n")
+        self.preset("wrist", "offset = [0.0, 0.0, 0.22]\n")
+        self.preset("hand", "offset = [0.0, 0.03, 0.08]\n")
+
+    def test_deleting_one_that_is_not_live_leaves_the_live_one(self):
+        config_mod.select_preset(self.path, "wrist")
+        cfg = config_mod.delete_preset(self.path, "hand")
+        self.assertEqual(cfg.vr.preset, "wrist")
+        self.assertEqual(presets.available(self.path), ["wrist"])
+
+    def test_deleting_the_live_one_falls_back_to_config_toml(self):
+        config_mod.select_preset(self.path, "wrist")
+        cfg = config_mod.delete_preset(self.path, "wrist")
+        self.assertEqual(cfg.vr.preset, "")
+        self.assertEqual(cfg.vr.offset, (0.0, 0.02, 0.1))
+        self.assertFalse((self.folder / "wrist.toml").exists())
+
+    def test_the_app_still_starts_afterwards(self):
+        # The order matters: removing the file first would leave
+        # config.toml naming a preset that is not there.
+        config_mod.select_preset(self.path, "wrist")
+        config_mod.delete_preset(self.path, "wrist")
+        self.load()
+
+    def test_a_preset_that_is_not_there_is_named(self):
+        with self.assertRaises(FileNotFoundError):
+            config_mod.delete_preset(self.path, "nowhere")
+
+    def test_an_unsafe_name_deletes_nothing(self):
+        with self.assertRaises(ValueError):
+            config_mod.delete_preset(self.path, "../config")
+        self.assertTrue(self.path.exists())
+
+
 class Keys(unittest.TestCase):
     def test_every_preset_key_is_a_real_setting(self):
         # Checked at import too; this says so where a reader will look.

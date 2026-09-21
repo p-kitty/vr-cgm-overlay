@@ -76,6 +76,13 @@ class Offered(unittest.TestCase):
         # So the window and the file read in the same order.
         self.assertEqual(settings_mod.sections(), list(config_mod.FIELD_TYPES))
 
+    def test_a_note_is_one_short_line(self):
+        # Asked for: the notes were paragraphs, and a window read in
+        # passing does not get its paragraphs read.
+        for label, note in settings_mod.NOTES.items():
+            with self.subTest(label):
+                self.assertLessEqual(len(note), 90, note)
+
     def test_a_note_is_about_a_tab_that_exists(self):
         labels = {label for label, _section, _keys in settings_mod.tabs()}
         for label, note in settings_mod.NOTES.items():
@@ -87,9 +94,23 @@ class Offered(unittest.TestCase):
         # The tab a desk cannot judge on its own. Saying nothing would
         # leave somebody typing offsets and wondering why nothing looks
         # different on their monitor.
-        note = settings_mod.NOTES["vr"]
+        note = settings_mod.NOTES["vr placement"]
         self.assertIn("headset", note)
         self.assertIn("placement.md", note)
+
+    def test_no_tab_mixes_preset_and_shared_settings(self):
+        # Which settings a preset switch will change has to be readable
+        # off the tab name. A tab holding some of each would need every
+        # row read to know, and its name could only say "some of these".
+        from cgm.core import presets
+
+        for label, section, keys in settings_mod.tabs():
+            if section != presets.SECTION:
+                continue
+            owned = set(keys) & presets.PRESET_KEYS
+            with self.subTest(label):
+                self.assertIn(owned, (set(), set(keys)), f"{label} mixes the two")
+
 
     def test_every_setting_has_a_widget(self):
         # This runs at import too. Here so it fails by name rather than

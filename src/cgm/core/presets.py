@@ -111,6 +111,16 @@ HEADER = """# A placement preset. config.toml chooses it with `preset = "{name}"
 """
 
 
+def header_line(name: str) -> str:
+    """The first line of `HEADER` for `name`, which says how to choose it.
+
+    Split out so a rename can find the line and correct it. A file whose
+    own comment names it wrongly tells whoever opens it to type the old
+    name, which then fails.
+    """
+    return HEADER.format(name=name).splitlines()[0]
+
+
 def directory(config_path: Path) -> Path:
     """Where presets live: beside whatever config.toml is in use.
 

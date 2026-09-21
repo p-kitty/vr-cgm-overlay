@@ -62,7 +62,7 @@ from __future__ import annotations
 import logging
 import tkinter as tk
 from pathlib import Path
-from tkinter import ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from cgm.core import config as config_mod
 from cgm.core import presets as presets_mod
@@ -86,8 +86,26 @@ HEADER_KEYS = frozenset({presets_mod.SELECTOR})
 # that has not loaded rather than as a choice.
 NO_PRESET = "(none)"
 
+# The preset buttons, as symbols with a hint each. Symbols because three
+# words beside a dropdown made the bar wider than the notebook under it;
+# a hint because a symbol alone is a guess. The hint goes to the status
+# line on hover rather than into a tooltip, which Tk does not have and
+# which would be one more window to place beside an always-on-top face.
+# The delete one is a bin rather than a cross, which reads as "close".
+PRESET_BUTTONS = {
+    "new": ("\u2795", "new preset: save where the face is now under a new name"),
+    "rename": ("\u270e", "rename this preset"),
+    "delete": ("\U0001f5d1", "delete this preset"),
+}
+
 GROUPS = {
     "vr": (
+        # Everything a preset owns, split across two tabs, and nothing a
+        # preset does not own on either. A tab that mixed the two would
+        # need every row read to know which ones a preset switch will
+        # change, and the tab name could only say "some of these". See
+        # the test that holds this.
+        ("vr placement", ("offset", "rotation_deg", "width_m", "flip_vertical")),
         ("vr orbit", ("orbit", "orbit_radius_m", "orbit_limit_deg")),
         (
             "vr gaze",
@@ -97,32 +115,18 @@ GROUPS = {
 }
 
 # A line at the top of one tab, where the tab needs something said about
-# it that no single row does. Keyed by tab rather than by section, so a
-# carved one can say what it is for -- and, for the two modes, that the
-# rows under it do nothing until the switch at the top is on.
+# it that no single row does. One short line, and only where it earns
+# it: the window is read in passing, and what a preset controls is
+# already shown by the tab names rather than said here. Keyed by tab
+# rather than by section, so a carved one can have its own.
 NOTES = {
-    "vr": (
-        "Placement is judged with the headset on: change a number, press "
-        "Save, and watch the face move. Nudging it in config.toml works "
-        "the same way. arm_guide draws the arm the settings here are "
-        "aiming at, so turn it on while you tune and off when you are "
-        "done. See docs/placement.md for what the numbers mean."
+    "vr placement": (
+        "Judge it with the headset on: change, Save, watch the face. "
+        "See docs/placement.md."
     ),
-    "vr orbit": (
-        "Off, the face is bolted to the controller. On, it rides round the "
-        "modelled centreline of your forearm, and offset and rotation_deg "
-        "on the vr tab change meaning."
-    ),
-    "average": (
-        "The mean of the history the API sends, about twelve hours. The row "
-        "says how many hours it covers, and shows dashes while there is "
-        "under an hour to average."
-    ),
-    "vr gaze": (
-        "Dims the face while you are not looking at it. The other three do "
-        "nothing while gaze_fade is off, and a reading under "
-        "thresholds.low_mgdl is never faded whatever they say."
-    ),
+    "vr orbit": "With orbit on, offset and rotation_deg change meaning.",
+    "average": "About twelve hours of history. Dashes until there is an hour.",
+    "vr gaze": "Nothing here works while gaze_fade is off. A low is never faded.",
 }
 
 # Settings whose value is one of a short list. A free text box for these
@@ -444,6 +448,162 @@ class SettingsWindow:
         self._preset_box.pack(side="left", padx=(8, 0))
         self._preset_box.bind("<<ComboboxSelected>>", self._switch_preset)
 
+        self._new_button = self._preset_button(bar, "new", self._new_preset)
+        self._rename_button = self._preset_button(
+            bar, "rename", self._rename_preset
+        )
+        self._delete_button = self._preset_button(
+            bar, "delete", self._delete_preset
+        )
+        self._offer_preset_buttons(True)
+
+    # The two questions the buttons ask, as attributes so that
+    # tools/check_settings.py can answer them without a modal dialog
+    # blocking the run. Each takes the window and the text to show.
+    ask_name = staticmethod(
+        lambda parent, prompt, initial="": simpledialog.askstring(
+            "Preset name", prompt, parent=parent, initialvalue=initial
+        )
+    )
+    confirm = staticmethod(
+        lambda parent, prompt: messagebox.askyesno(
+            "Delete preset", prompt, parent=parent
+        )
+    )
+
+    def _preset_button(self, bar, which: str, command) -> ttk.Button:
+        """One symbol button, which says what it does when pointed at.
+
+        The hint borrows the status line and gives it back on the way
+        out, unless something replaced the hint meanwhile -- the result
+        of pressing the button, usually, which is exactly the message
+        that must not be wiped by moving the mouse off it.
+        """
+        symbol, hint = PRESET_BUTTONS[which]
+        button = ttk.Button(bar, text=symbol, width=3, command=command)
+        button.pack(side="left", padx=(8 if which == "new" else 2, 0))
+
+        def enter(_event) -> None:
+            self._before_hint = self._status.cget("text")
+            self._say(hint)
+
+        def leave(_event) -> None:
+            if self._status.cget("text") == hint:
+                self._say(getattr(self, "_before_hint", ""))
+
+        button.bind("<Enter>", enter)
+        button.bind("<Leave>", leave)
+        return button
+
+    def _rename_preset(self) -> None:
+        """Give the chosen preset a new name. The live one stays live.
+
+        Nothing moves: the numbers are the same numbers under another
+        name. The old name is offered as the starting text, since a
+        rename is usually a small correction to it.
+        """
+        old = self._preset
+        if not old:
+            return
+        name = self.ask_name(
+            self._top,
+            f"New name for {old}.\nLetters, digits, dot, dash and underscore.",
+            initial=old,
+        )
+        if not name or name.strip() == old:
+            return  # cancelled, nothing typed, or unchanged
+        name = name.strip()
+
+        try:
+            self._cfg = config_mod.rename_preset(self._path, old, name)
+        except (OSError, ValueError) as exc:
+            self._say(str(exc))
+            return
+
+        self._preset = self._cfg.vr.preset
+        self._refresh_choices()
+        self._reload_boxes()
+        self._say(f"renamed {old} to {name}")
+        log.info("placement preset renamed: %s -> %s", old, name)
+
+    def _new_preset(self) -> None:
+        """Save what is on the wrist now under a new name, and go to it.
+
+        Nothing moves: the new preset is a copy of the placement in use,
+        so all that changes is which file those numbers live in. That is
+        also why it needs nothing unsaved -- the copy is taken from the
+        file, and an unsaved edit would be left behind in the old one.
+        """
+        name = self.ask_name(
+            self._top,
+            "Name for a preset holding where the face is now.\n"
+            "Letters, digits, dot, dash and underscore.",
+        )
+        if not name:
+            return  # cancelled, or nothing typed
+        name = name.strip()
+
+        try:
+            self._cfg = config_mod.create_preset(self._path, name)
+        except (OSError, ValueError) as exc:
+            self._say(str(exc))
+            return
+
+        self._preset = name
+        self._refresh_choices()
+        self._reload_boxes()
+        self._say(f"made {name} from the placement in use; editing it now")
+        log.info("placement preset created: %s", name)
+
+    def _delete_preset(self) -> None:
+        """Remove the chosen preset, after saying what that will do.
+
+        Deleting the live one hands the placement back to config.toml,
+        which can be somewhere else entirely, so the face may move. The
+        question says so rather than letting it be a surprise on the
+        wrist.
+        """
+        name = self._preset
+        if not name:
+            return
+        if not self.confirm(
+            self._top,
+            f"Delete the preset {name}?\n\n"
+            "Its numbers are gone for good, and the face goes back to the "
+            "placement in config.toml, which may be somewhere else.",
+        ):
+            return
+
+        try:
+            self._cfg = config_mod.delete_preset(self._path, name)
+        except (OSError, ValueError) as exc:
+            self._say(str(exc))
+            return
+
+        self._preset = ""
+        self._refresh_choices()
+        self._reload_boxes()
+        self._say(f"deleted {name}; back to config.toml")
+        log.info("placement preset deleted: %s", name)
+
+    def _refresh_choices(self) -> None:
+        """Offer the presets that exist now, with the live one selected."""
+        self._preset_box.configure(
+            values=[NO_PRESET, *presets_mod.available(self._path)]
+        )
+        self._preset_var.set(self._preset or NO_PRESET)
+
+    def _offer_preset_buttons(self, offer: bool) -> None:
+        """The buttons follow the chooser: live only with nothing unsaved.
+
+        Rename and Delete also need a preset to act on, so they stay grey
+        on none.
+        """
+        self._new_button.configure(state="normal" if offer else "disabled")
+        on_one = "normal" if offer and self._preset else "disabled"
+        self._rename_button.configure(state=on_one)
+        self._delete_button.configure(state=on_one)
+
     def _switch_preset(self, *_event) -> None:
         """Write the new choice, then rebuild every box from it.
 
@@ -668,6 +828,7 @@ class SettingsWindow:
             return
         self._save_button.configure(state="normal" if offer else "disabled")
         self._preset_box.configure(state="disabled" if offer else "readonly")
+        self._offer_preset_buttons(not offer)
 
     def _say(self, text: str) -> None:
         if self._top.winfo_exists():
