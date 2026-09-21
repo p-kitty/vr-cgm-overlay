@@ -40,6 +40,7 @@ from typing import get_type_hints
 
 import tomlkit
 
+from cgm.core import presets
 from cgm.core.alert import REARM_MGDL, REPEAT_MIN
 from cgm.core.librelink import API_VERSION
 from cgm.face.graph import AXIS_FLOOR_MGDL, TICK_MAJOR_MIN, GraphTuning
@@ -107,6 +108,12 @@ class Vr:
     it, and `--window` can leave every key here alone.
     """
 
+    # Which placement preset is live, or "" for none. A preset is a
+    # file beside config.toml holding the keys in
+    # `cgm.core.presets.PRESET_KEYS`, and while one is chosen its
+    # values win over the ones here. Empty is what every config did
+    # before presets existed, and is still the default.
+    preset: str = ""
     hand: str = "left"
     width_m: float = 0.14
     offset: tuple[float, float, float] = (0.0, 0.02, 0.10)
@@ -282,6 +289,29 @@ VECTOR3 = tuple[float, float, float]
 FIELD_KINDS = (str, float, bool, VECTOR3)
 
 
+def _check_preset_keys() -> None:
+    """Refuse at import a preset key that is not a setting.
+
+    `presets.PRESET_KEYS` names the `[vr]` keys a preset file owns, and
+    it is a hand-written list in another module, so it can fall out of
+    step with the dataclass in either direction. A name that is nothing
+    would be written into the preset file on the next save, read back
+    on the next start, and rejected there -- an error in a file nobody
+    edited, at the worst moment, blamed on the file.
+    """
+    unknown = presets.PRESET_KEYS - set(FIELD_TYPES[presets.SECTION])
+    if unknown:
+        raise KeyError(
+            "presets.PRESET_KEYS names settings that are not in "
+            f"[{presets.SECTION}]: {', '.join(sorted(unknown))}"
+        )
+    if presets.SELECTOR in presets.PRESET_KEYS:
+        raise KeyError(
+            f"{presets.SECTION}.{presets.SELECTOR} chooses the preset; "
+            "it cannot also live inside one"
+        )
+
+
 def _check_field_kinds(field_types: dict[str, dict[str, type]] | None = None) -> None:
     """Refuse an unsupported annotation at import rather than at load.
 
@@ -303,6 +333,7 @@ def _check_field_kinds(field_types: dict[str, dict[str, type]] | None = None) ->
 
 
 _check_field_kinds()
+_check_preset_keys()
 
 
 # What each section of the file is allowed to contain: the same table
@@ -556,8 +587,28 @@ def load(path: Path) -> Config:
             if key in body:
                 setattr(held, key, _read(section, key, kind, body[key]))
 
+    _apply_preset(cfg, path)
+    # After the preset, so what is checked is what will actually be
+    # used. Validating first would pass a config the preset then breaks.
     _validate(cfg)
     return cfg
+
+
+def _apply_preset(cfg: Config, path: Path) -> None:
+    """Let the chosen preset file win over `[vr]`, if there is one.
+
+    Empty `vr.preset` reads no file and changes nothing, which is what
+    every config did before presets existed. See `cgm.core.presets` for
+    why a preset is a file rather than a table.
+    """
+    if not cfg.vr.preset:
+        return
+
+    name = cfg.vr.preset
+    body = presets.read(presets.path_for(path, name), presets.PRESET_KEYS)
+    kinds = FIELD_TYPES[presets.SECTION]
+    for key, value in body.items():
+        setattr(cfg.vr, key, _read(f"preset {name}", key, kinds[key], value))
 
 
 def save(cfg: Config, path: Path) -> None:
@@ -586,6 +637,25 @@ def save(cfg: Config, path: Path) -> None:
     """
     _validate(cfg)
 
+    # `save` writes the placement into whichever preset `cfg` names. If
+    # that is not the one the file names, the caller changed `preset`
+    # after loading, and `cfg` is holding the *old* preset's placement:
+    # saving would pour it into the new preset and destroy what was
+    # there. Switching goes through `select_preset`, which touches
+    # nothing but the name.
+    # A file that does not exist yet -- a first run writing config.toml
+    # from nothing -- has no preset chosen, so nothing to switch from.
+    on_disk = (
+        tomllib.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    )
+    was = on_disk.get(presets.SECTION, {}).get(presets.SELECTOR, "")
+    if cfg.vr.preset != was:
+        raise ValueError(
+            f"save cannot switch preset ({was or 'none'} to "
+            f"{cfg.vr.preset or 'none'}); use select_preset, which leaves "
+            "both presets as they are"
+        )
+
     document = (
         tomlkit.parse(path.read_text(encoding="utf-8"))
         if path.exists()
@@ -593,11 +663,26 @@ def save(cfg: Config, path: Path) -> None:
     )
     defaults = Config()
 
+    # With a preset chosen, its keys go to its own file instead of into
+    # config.toml. Writing them to both would leave two answers to the
+    # same question, and the preset's would keep winning, so the one in
+    # config.toml would be a value that is visibly there and silently
+    # ignored -- the exact failure `_check_keys` exists to prevent.
+    owned = presets.PRESET_KEYS if cfg.vr.preset else frozenset()
+    if owned:
+        presets.write(
+            presets.path_for(path, cfg.vr.preset),
+            {key: getattr(cfg.vr, key) for key in sorted(owned)},
+            _written,
+        )
+
     for section, kinds in FIELD_TYPES.items():
         table = document.get(section)
         held = getattr(cfg, section)
         default = getattr(defaults, section)
         for key, kind in kinds.items():
+            if section == presets.SECTION and key in owned:
+                continue
             value = getattr(held, key)
             existing = table[key] if table is not None and key in table else None
             if existing is not None:
@@ -620,6 +705,49 @@ def save(cfg: Config, path: Path) -> None:
     scratch = path.with_name(path.name + ".new")
     scratch.write_text(tomlkit.dumps(document), encoding="utf-8")
     scratch.replace(path)
+
+
+def select_preset(path: Path, name: str) -> Config:
+    """Make `name` the live preset, changing nothing else. "" for none.
+
+    Only the one key in config.toml is written. Neither preset file is
+    touched, which is the difference from setting `vr.preset` and
+    calling `save`: that writes the loaded placement into the named
+    preset, and the loaded placement is the old one.
+
+    The new choice is proved before it is kept. The file is written,
+    loaded back through the same path a startup takes, and put back as
+    it was if that fails -- a preset whose numbers do not validate, or
+    whose file is missing, leaves the old choice in place rather than
+    a config.toml the app will not start from.
+
+    Returns the loaded config, since every caller wants it next.
+    """
+    if name:
+        presets.check_name(name)
+
+    before = path.read_text(encoding="utf-8")
+    document = tomlkit.parse(before)
+    table = document.get(presets.SECTION)
+    if table is None:
+        table = tomlkit.table()
+        document[presets.SECTION] = table
+
+    # Written as "" rather than removed when going back to none. The
+    # file is the only place most settings are explained, and a setting
+    # that has vanished from it cannot be found again by reading it.
+    table[presets.SELECTOR] = name
+
+    scratch = path.with_name(path.name + ".new")
+    scratch.write_text(tomlkit.dumps(document), encoding="utf-8")
+    scratch.replace(path)
+
+    try:
+        return load(path)
+    except (OSError, ValueError):
+        scratch.write_text(before, encoding="utf-8")
+        scratch.replace(path)
+        raise
 
 
 def _validate(cfg: Config) -> None:

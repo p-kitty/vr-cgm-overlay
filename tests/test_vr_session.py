@@ -377,24 +377,36 @@ class Wiring(unittest.TestCase):
     exactly those.
     """
 
+    def vr_settings(self):
+        """Every [vr] key the overlay is supposed to be handed.
+
+        All of them but the preset selector, which names the file the
+        rest were read out of rather than anything about the face. By
+        the time a Config exists the preset has already been applied,
+        so handing the name on would be handing over a question that
+        has been answered.
+        """
+        from cgm.core import presets
+        from cgm.core.config import FIELD_TYPES
+
+        return set(FIELD_TYPES["vr"]) - {presets.SELECTOR}
+
     def test_every_vr_setting_is_handed_to_the_overlay(self):
-        from cgm.core.config import FIELD_TYPES, Config
+        from cgm.core.config import Config
         from cgm.main import build_overlay
 
         handed = build_overlay(lambda **kwargs: kwargs, Config())
-        self.assertEqual(set(handed), set(FIELD_TYPES["vr"]))
+        self.assertEqual(set(handed), self.vr_settings())
 
     def test_the_overlay_takes_exactly_the_vr_settings(self):
         import inspect
-
-        from cgm.core.config import FIELD_TYPES
 
         try:
             from cgm.vr.overlay import WristOverlay
         except ImportError:
             self.skipTest("no SteamVR bindings; pip install -e .[vr]")
         taken = set(inspect.signature(WristOverlay).parameters)
-        self.assertEqual(taken, set(FIELD_TYPES["vr"]))
+        self.assertEqual(taken, self.vr_settings())
 
 
 if __name__ == "__main__":

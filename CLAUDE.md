@@ -19,7 +19,7 @@ two frontends.
 
 | Layer | Holds | Needs |
 |---|---|---|
-| `cgm.core` | API client, config and where it lives, the first-run account check, poller, config watcher, fetch thread, log file, one-copy lock, startup shortcut | nothing special |
+| `cgm.core` | API client, config and where it lives, placement presets, the first-run account check, poller, config watcher, fetch thread, log file, one-copy lock, startup shortcut | nothing special |
 | `cgm.face` | the watch face drawing, and the app icon drawn from it | Pillow |
 | `cgm.vr` | the SteamVR overlay and its arm guide | a headset |
 | `cgm.desk` | the same face in a desktop window, the first-run sign-in, the settings window behind a right-click, and the error dialog for a run with no console | tkinter |
@@ -163,7 +163,9 @@ parsing, the trend fit and the arrow angle it maps to, the history average,
 the fetch
 schedule and its backoff and the thread that drives it, config
 validation, the walk that reads config.toml and the one that writes it
-back without losing the file's comments, the live reload and which
+back without losing the file's comments, which placement preset is
+live and switching between them without one overwriting the other,
+the live reload and which
 settings a restart is still needed for, the colour thresholds, the
 window's compositing and title, what the settings window offers and what
 pressing Save means, when a first run asks for an account and what
