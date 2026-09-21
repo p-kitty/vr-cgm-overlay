@@ -1,4 +1,9 @@
 config.toml
+# Placement presets, beside config.toml. No password in them, but they
+# are one person's arm and one person's controller, tuned by hand with
+# a headset on: as personal as config.toml, and no more use to anybody
+# else.
+presets/
 # The run log: every reading, and the patient id. Health data, so it
 # stays out of git for the same reason config.toml does.
 logs/
