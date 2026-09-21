@@ -21,6 +21,7 @@ applies either way.
 - [Getting it where you want it](#getting-it-where-you-want-it)
 - [What the numbers mean](#what-the-numbers-mean)
 - [Fixing what you actually see](#fixing-what-you-actually-see)
+- [Presets](#presets)
 - [Orbit mode](#orbit-mode)
 - [Tuning it with the guides](#tuning-it-with-the-guides)
 - [Gaze mode](#gaze-mode)
@@ -76,6 +77,65 @@ Point the controller away from you, like a torch. Then:
 
 Controller origins differ between Index, Touch and Vive, so assume the
 first run needs tuning.
+
+## Presets
+
+A face on the back of your hand and a face on your forearm are not the
+same placement with one number changed. They disagree about `offset`,
+about `rotation_deg`, and often about whether orbit mode is worth
+having, so switching between them by editing `config.toml` means
+keeping the other set of numbers written down somewhere and typing
+them back in. Presets keep each one in a file of its own.
+
+```
+config.toml           preset = "wrist"
+presets/hand.toml     [vr] offset = ... rotation_deg = ...
+presets/wrist.toml    [vr] offset = ... orbit = true
+```
+
+`presets/` sits beside whatever `config.toml` is in use. A preset file
+holds only the settings that decide where the face goes:
+
+| In a preset | Stays in config.toml, shared by every preset |
+|---|---|
+| `offset`, `rotation_deg` | `hand` |
+| `orbit`, `orbit_radius_m`, `orbit_limit_deg` | `opacity`, `arm_guide` |
+| `width_m`, `flip_vertical` | the gaze settings |
+
+The line is drawn at what changes when you decide where on your arm to
+put the number. Which hand holds the controller does not change, and
+neither do your eyes. A shared setting typed into a preset file is
+refused at startup and named, rather than quietly becoming per-preset
+for whoever put it there.
+
+While a preset is chosen its values win over the same keys in
+`config.toml`, and anything it leaves out comes from `config.toml`. So
+a preset only has to hold what it disagrees about. Empty `preset`
+reads no file at all.
+
+### Switching, and not losing one
+
+**Switch from the settings window**, with the chooser above the tabs.
+The tabs a preset governs get its name, `vr [wrist]` and so on, so
+which one you are editing is on screen rather than remembered. And the
+face moves the moment you switch, so it is also on your wrist.
+
+The chooser is greyed out whenever something is unsaved, and that is a
+safety rule rather than tidiness. Save writes every box, touched or
+not, so a window still showing one preset's numbers while pointed at
+another would copy the first over the second. With the two never live
+at once, that cannot happen: switching needs a window with nothing
+outstanding, and every box is reloaded from the new preset before
+anything can be typed into it.
+
+A preset that will not load, because its file is missing or a number
+in it is out of range, is not switched to. The old choice stays and
+the window says why, rather than leaving a `config.toml` the app will
+not start from.
+
+Editing `preset` in `config.toml` by hand works too, and reloads within
+the second like everything else. To make a new preset, copy an existing
+file in `presets/` and rename it: the window lists whatever is there.
 
 ## Orbit mode
 

@@ -198,6 +198,16 @@ always_on_top = true
 # value at a time and watch the result. `hand` costs a second more,
 # because it reopens the overlay.
 [vr]
+# Which placement preset is live. Empty for none, which reads this file
+# alone and is what every config did before presets. A preset is a file
+# in presets/ beside this one, named presets/<name>.toml, holding only
+# the settings that decide where the face goes -- offset, rotation_deg,
+# orbit and its two numbers, width_m, flip_vertical -- and those win
+# over the same keys here while it is chosen. Everything else in this
+# section stays here and is shared by every preset. Switch from the
+# settings window, which keeps the two from overwriting each other. See
+# "Presets" in docs/placement.md.
+preset = ""
 hand = "left"        # which controller to follow. The off hand works best
                      # (this one costs a second: the overlay is reopened)
 width_m = 0.14       # overlay width in metres
