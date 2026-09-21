@@ -783,6 +783,43 @@ def create_preset(path: Path, name: str) -> Config:
         raise
 
 
+def rename_preset(path: Path, old: str, new: str) -> Config:
+    """Give a preset a new name, keeping it live if it was.
+
+    Copy, repoint, then remove -- never a bare file rename. With the
+    live preset, a rename followed by rewriting config.toml has a moment
+    where config.toml names a file that is not there, and a crash in
+    that moment is an app that will not start. This order has none:
+    until the last step both files exist, and config.toml always names
+    one of them.
+
+    The file's own header says which name chooses it, so that line is
+    corrected on the way. Every other comment is kept as it was.
+    """
+    source = presets.path_for(path, old)
+    target = presets.path_for(path, new)
+    if not source.is_file():
+        raise FileNotFoundError(f"there is no preset called {old}")
+    if target.exists():
+        raise ValueError(f"a preset called {new} already exists")
+
+    text = source.read_text(encoding="utf-8").replace(
+        presets.header_line(old), presets.header_line(new), 1
+    )
+    scratch = target.with_name(target.name + ".new")
+    scratch.write_text(text, encoding="utf-8")
+    scratch.replace(target)
+
+    try:
+        if load(path).vr.preset == old:
+            select_preset(path, new)
+    except (OSError, ValueError):
+        target.unlink(missing_ok=True)
+        raise
+    source.unlink()
+    return load(path)
+
+
 def delete_preset(path: Path, name: str) -> Config:
     """Remove a preset file. The live one is let go of first.
 
