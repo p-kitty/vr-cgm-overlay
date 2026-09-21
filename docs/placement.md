@@ -9,10 +9,13 @@ These keys were in `[display]` until the sections were split. A
 config.toml written before that does not start. The app names each key
 it found in the wrong place and says it belongs under `[vr]`.
 
-**They are also three tabs in the settings window**: the gear in the
-corner of the desktop face, then `vr`, `vr orbit` and `vr gaze`.
-`arm_guide` sits on the first of them, because the line it draws is
-what `offset` is set against as much as anything orbit does. They
+**They are also four tabs in the settings window**: the gear in the
+corner of the desktop face, then `vr`, `vr placement`, `vr orbit` and
+`vr gaze`. `vr placement` and `vr orbit` hold exactly what a
+[preset](#presets) owns and `vr` holds what every preset shares, so a
+tab is never part one and part the other. `arm_guide` sits on `vr`,
+because the line it draws is what `offset` is set against whichever
+preset is live. They
 are still one `[vr]` section in the file. Nothing below changes if you use it: it writes the
 same `config.toml`, and the running overlay picks the edit up the same
 way. Everything here about nudging a number and watching the face move
@@ -133,9 +136,22 @@ in it is out of range, is not switched to. The old choice stays and
 the window says why, rather than leaving a `config.toml` the app will
 not start from.
 
+**New...** beside the chooser saves where the face is now under a
+new name and switches to it. Nothing moves, because the new preset is
+a copy of the placement in use: only the file those numbers live in
+changes. A name that is already taken is refused rather than
+overwritten. **Delete** removes the chosen preset after asking, and
+hands the placement back to `config.toml`, which may be somewhere else,
+so the face can move. Both are greyed out with anything unsaved, for
+the same reason the chooser is.
+
+Which settings belong to the preset is on the tab names:
+`vr placement [wrist]` and `vr orbit [wrist]` change when you switch,
+and the rest do not.
+
 Editing `preset` in `config.toml` by hand works too, and reloads within
-the second like everything else. To make a new preset, copy an existing
-file in `presets/` and rename it: the window lists whatever is there.
+the second like everything else. So does copying a file in `presets/`
+to a new name: the window lists whatever is there.
 
 ## Orbit mode
 

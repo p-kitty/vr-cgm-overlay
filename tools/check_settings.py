@@ -380,6 +380,53 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     ), "a tab kept the preset name"
     say("back to no preset", "config.toml alone again")
 
+    # -- New and Delete -----------------------------------------------------
+
+    # Both questions are modal dialogs, which would stop this run dead;
+    # the window takes its answers from these two attributes instead.
+    answers = {"name": "made", "yes": False}
+    window.ask_name = lambda _parent, _prompt: answers["name"]
+    window.confirm = lambda _parent, _prompt: answers["yes"]
+
+    # On none there is nothing to delete, and New is there.
+    assert window._new_button.instate(["!disabled"]), "New is dead at rest"
+    assert window._delete_button.instate(["disabled"]), "Delete offered on none"
+
+    before = config_mod.load(path).vr.offset
+    window._new_preset()
+    assert config_mod.load(path).vr.preset == "made", "New did not switch to it"
+    assert config_mod.load(path).vr.offset == before, "New moved the face"
+    assert "made" in presets_mod.available(path)
+    assert window._preset_var.get() == "made", window._preset_var.get()
+    assert window._delete_button.instate(["!disabled"]), "Delete dead on a preset"
+    say("New copies and switches", f"made, offset still {before}")
+
+    # A taken name is refused, not overwritten.
+    window._new_preset()
+    assert "already exists" in window._status.cget("text"), window._status.cget("text")
+    say("a taken name is refused", "made kept as it was")
+
+    # With anything unsaved, neither button is live, for the reason the
+    # chooser is not: both work from the file, not from the boxes.
+    rows[("thresholds", "low_mgdl")].set("86")
+    assert window._new_button.instate(["disabled"]), "New with edits pending"
+    assert window._delete_button.instate(["disabled"]), "Delete with edits pending"
+    assert window.save()
+    say("New and Delete wait for Save", "grey while anything is unsaved")
+
+    # Saying no deletes nothing.
+    window._delete_preset()
+    assert "made" in presets_mod.available(path), "deleted on a no"
+    assert config_mod.load(path).vr.preset == "made"
+
+    answers["yes"] = True
+    window._delete_preset()
+    assert "made" not in presets_mod.available(path), "not deleted on a yes"
+    assert config_mod.load(path).vr.preset == "", "still naming a deleted preset"
+    assert window._preset_var.get() == settings_mod.NO_PRESET
+    assert window._delete_button.instate(["disabled"]), "Delete offered on none"
+    say("Delete asks, then goes", "no keeps it, yes removes it")
+
     if show:
         window._say("a throwaway copy; nothing saved here reaches your config.toml")
         print("\n  showing it; close the settings window to finish")

@@ -87,9 +87,25 @@ class Offered(unittest.TestCase):
         # The tab a desk cannot judge on its own. Saying nothing would
         # leave somebody typing offsets and wondering why nothing looks
         # different on their monitor.
-        note = settings_mod.NOTES["vr"]
+        note = settings_mod.NOTES["vr placement"]
         self.assertIn("headset", note)
         self.assertIn("placement.md", note)
+
+    def test_no_tab_mixes_preset_and_shared_settings(self):
+        # Which settings a preset switch will change has to be readable
+        # off the tab name. A tab holding some of each would need every
+        # row read to know, and its name could only say "some of these".
+        from cgm.core import presets
+
+        for label, section, keys in settings_mod.tabs():
+            if section != presets.SECTION:
+                continue
+            owned = set(keys) & presets.PRESET_KEYS
+            with self.subTest(label):
+                self.assertIn(owned, (set(), set(keys)), f"{label} mixes the two")
+
+    def test_placement_note_says_the_preset_owns_it(self):
+        self.assertIn("preset", settings_mod.NOTES["vr placement"])
 
     def test_every_setting_has_a_widget(self):
         # This runs at import too. Here so it fails by name rather than
