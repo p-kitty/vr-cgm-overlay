@@ -115,36 +115,18 @@ GROUPS = {
 }
 
 # A line at the top of one tab, where the tab needs something said about
-# it that no single row does. Keyed by tab rather than by section, so a
-# carved one can say what it is for -- and, for the two modes, that the
-# rows under it do nothing until the switch at the top is on.
+# it that no single row does. One short line, and only where it earns
+# it: the window is read in passing, and what a preset controls is
+# already shown by the tab names rather than said here. Keyed by tab
+# rather than by section, so a carved one can have its own.
 NOTES = {
-    "vr": (
-        "Shared by every preset: which hand, how opaque, and the guide. "
-        "arm_guide draws the arm the other tabs are aiming at, so turn it "
-        "on while you tune and off when you are done."
-    ),
     "vr placement": (
-        "Where the face sits. Everything here and on vr orbit belongs to "
-        "the preset chosen above, and changes when you switch. Judge it "
-        "with the headset on: change a number, press Save, and watch the "
-        "face move. See docs/placement.md for what the numbers mean."
+        "Judge it with the headset on: change, Save, watch the face. "
+        "See docs/placement.md."
     ),
-    "vr orbit": (
-        "Off, the face is bolted to the controller. On, it rides round the "
-        "modelled centreline of your forearm, and offset and rotation_deg "
-        "on the vr placement tab change meaning."
-    ),
-    "average": (
-        "The mean of the history the API sends, about twelve hours. The row "
-        "says how many hours it covers, and shows dashes while there is "
-        "under an hour to average."
-    ),
-    "vr gaze": (
-        "Dims the face while you are not looking at it. The other three do "
-        "nothing while gaze_fade is off, and a reading under "
-        "thresholds.low_mgdl is never faded whatever they say."
-    ),
+    "vr orbit": "With orbit on, offset and rotation_deg change meaning.",
+    "average": "About twelve hours of history. Dashes until there is an hour.",
+    "vr gaze": "Nothing here works while gaze_fade is off. A low is never faded.",
 }
 
 # Settings whose value is one of a short list. A free text box for these

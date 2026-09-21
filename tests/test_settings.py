@@ -76,6 +76,13 @@ class Offered(unittest.TestCase):
         # So the window and the file read in the same order.
         self.assertEqual(settings_mod.sections(), list(config_mod.FIELD_TYPES))
 
+    def test_a_note_is_one_short_line(self):
+        # Asked for: the notes were paragraphs, and a window read in
+        # passing does not get its paragraphs read.
+        for label, note in settings_mod.NOTES.items():
+            with self.subTest(label):
+                self.assertLessEqual(len(note), 90, note)
+
     def test_a_note_is_about_a_tab_that_exists(self):
         labels = {label for label, _section, _keys in settings_mod.tabs()}
         for label, note in settings_mod.NOTES.items():
@@ -104,8 +111,6 @@ class Offered(unittest.TestCase):
             with self.subTest(label):
                 self.assertIn(owned, (set(), set(keys)), f"{label} mixes the two")
 
-    def test_placement_note_says_the_preset_owns_it(self):
-        self.assertIn("preset", settings_mod.NOTES["vr placement"])
 
     def test_every_setting_has_a_widget(self):
         # This runs at import too. Here so it fails by name rather than
