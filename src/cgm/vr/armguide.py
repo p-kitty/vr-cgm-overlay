@@ -20,6 +20,13 @@ circle across the arm is edge-on and invisible from the side, which is
 where a wrist is usually looked at. Each dot is turned to face the head
 instead, so the arc reads from anywhere.
 
+Both describe orbit mode and nothing else. With `orbit` off, `offset`
+is simply where the face sits and there is no circle, so a line and dots
+drawn anyway would look like they mattered while marking nothing. The
+guide is hidden then rather than destroyed: every overlay shares the one
+k_unMaxOverlayCount budget, and a guide that let go of its slots might
+not get them back when orbit is turned on again.
+
 This is a tuning aid, not a feature. It is off unless `vr.arm_guide`
 is on, and it is meant to be deleted once the placement is settled.
 """
@@ -77,8 +84,11 @@ class ArmGuide:
     only the transforms and the ring's width change while tuning.
     """
 
-    def __init__(self, overlay, key_prefix: str, directory: Path) -> None:
+    def __init__(
+        self, overlay, key_prefix: str, directory: Path, *, visible: bool = True
+    ) -> None:
         self._overlay = overlay
+        self._visible = visible
         self._axis = overlay.createOverlay(f"{key_prefix}.armaxis", "Arm axis guide")
         self._markers = [
             overlay.createOverlay(f"{key_prefix}.armdot{i}", f"Orbit marker {i}")
@@ -90,7 +100,6 @@ class ArmGuide:
         # while the guide is up, so one name apiece is enough.
         overlay.setOverlayWidthInMeters(self._axis, AXIS_WIDTH_M)
         hand_over(overlay, self._axis, axis_texture(), directory / "guide-axis.png")
-        overlay.showOverlay(self._axis)
 
         dot = marker_texture()
         middle = MARKER_COUNT // 2
@@ -98,9 +107,27 @@ class ArmGuide:
             scale = TOP_MARKER_SCALE if i == middle else 1.0
             overlay.setOverlayWidthInMeters(handle, MARKER_WIDTH_M * scale)
             hand_over(overlay, handle, dot, directory / f"guide-dot{i}.png")
-            overlay.showOverlay(handle)
 
+        self._show(visible)
         log.info("arm guide on: cyan line is the modelled arm, magenta dots the orbit")
+
+    @property
+    def visible(self) -> bool:
+        return self._visible
+
+    def set_visible(self, visible: bool) -> None:
+        """Show or hide every part at once, keeping the overlays."""
+        if visible == self._visible:
+            return
+        self._visible = visible
+        self._show(visible)
+
+    def _show(self, visible: bool) -> None:
+        for handle in [self._axis, *self._markers]:
+            if visible:
+                self._overlay.showOverlay(handle)
+            else:
+                self._overlay.hideOverlay(handle)
 
     def update(self, index: int, axis_transform, marker_transforms) -> None:
         """Point the guides at the arm the overlay is currently modelling.

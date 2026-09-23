@@ -45,6 +45,9 @@ class FakeOverlay:
     def showOverlay(self, handle) -> None:  # noqa: N802
         self.visible.add(handle)
 
+    def hideOverlay(self, handle) -> None:  # noqa: N802
+        self.visible.discard(handle)
+
     def setOverlayTransformTrackedDeviceRelative(  # noqa: N802
         self, handle, index, transform
     ) -> None:
@@ -85,6 +88,25 @@ class ArmGuideTest(unittest.TestCase):
         self.assertEqual(self.overlay.placed["test.key.armaxis"], (3, "axis"))
         self.assertEqual(self.overlay.placed["test.key.armdot0"], (3, "marker-0"))
         self.assertEqual(len(self.overlay.placed), MARKER_COUNT + 1)
+
+    def test_hiding_hides_every_part_and_keeps_them(self):
+        # Orbit off. The overlays stay: they are in the shared
+        # k_unMaxOverlayCount budget, and one given up might not come back.
+        self.guide.set_visible(False)
+        self.assertFalse(self.guide.visible)
+        self.assertEqual(self.overlay.visible, set())
+        self.assertEqual(self.overlay.destroyed, [])
+
+        self.guide.set_visible(True)
+        self.assertCountEqual(self.overlay.visible, self.keys())
+
+    def test_a_guide_can_start_hidden(self):
+        # Turned on while orbit is off: made, textured, not drawn.
+        overlay = FakeOverlay()
+        guide = ArmGuide(overlay, "other.key", self.directory, visible=False)
+        self.assertFalse(guide.visible)
+        self.assertEqual(len(overlay.created), MARKER_COUNT + 1)
+        self.assertEqual(overlay.visible, set())
 
     def test_closing_destroys_every_one(self):
         # SteamVR keeps the key of an overlay the process never

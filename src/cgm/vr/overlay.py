@@ -56,6 +56,10 @@ ORBIT_SMOOTH_SEC = 0.12
 # glance has settled on it.
 GAZE_SMOOTH_SEC = 0.35
 
+# Said when the guide is on and orbit is not, so an empty guide does not
+# read as one that failed to appear.
+_GUIDE_EMPTY = "arm_guide: nothing to draw (orbit is off)"
+
 _IDENTITY = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
 
 
@@ -636,7 +640,8 @@ class WristOverlay:
                 self._device_name(index),
             )
 
-        if self._orbit or self._gaze or self._guide is not None:
+        guide = self._guide is not None and self._guide.visible
+        if self._orbit or self._gaze or guide:
             pose = self._head_in_controller_space(index)
             if pose is not None:  # else keep what is on screen until it returns
                 head, forward = pose
@@ -646,7 +651,7 @@ class WristOverlay:
                 # gaze angle is measured to wherever it left it.
                 if self._gaze:
                     self._apply_gaze(head, forward)
-                if self._guide is not None:
+                if guide:
                     self._apply_guide(index, head)
         return True
 
@@ -695,6 +700,10 @@ class WristOverlay:
             radius_m,
             limit_deg,
         )
+        if self._guide is not None and enabled != was_on:
+            self._guide.set_visible(enabled)
+            if not enabled:
+                log.info(_GUIDE_EMPTY)
 
     def set_gaze(
         self, enabled: bool, full_deg: float, fade_deg: float, min_alpha: float
@@ -738,13 +747,20 @@ class WristOverlay:
             self._apply_alpha()
 
     def set_arm_guide(self, enabled: bool) -> None:
-        """Show or hide the tuning guides, creating them the first time."""
+        """Turn the tuning guides on or off.
+
+        On is not the same as drawn: the guides describe orbit mode, so
+        they are only shown while it is on. set_orbit shows and hides them
+        from then on, without taking the guide down.
+        """
         if enabled == (self._guide is not None):
             return
         if enabled:
-            self._guide = ArmGuide(self._overlay, OVERLAY_KEY, self._texture_dir)
+            self._guide = ArmGuide(
+                self._overlay, OVERLAY_KEY, self._texture_dir, visible=self._orbit
+            )
             if not self._orbit:
-                log.info("the guides describe orbit mode, which is off")
+                log.info(_GUIDE_EMPTY)
         else:
             self._guide.close()
             self._guide = None

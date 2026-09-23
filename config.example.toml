@@ -217,7 +217,8 @@ width_m = 0.14       # overlay width in metres
 # behaving: a cyan line down the modelled centreline of your forearm,
 # and magenta dots on the circle orbit mode travels. offset is set
 # against the line and orbit_radius_m against the dots, so it serves
-# both and sits above them. Turn it on while tuning and off when you
+# both and sits above them. Both describe orbit mode, so nothing is
+# drawn while orbit is off. Turn it on while tuning and off when you
 # are done. See docs/placement.md.
 arm_guide = false
 
