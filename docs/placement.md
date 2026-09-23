@@ -209,6 +209,12 @@ than vanishing edge-on the way a drawn circle would. The wide dot is the
 top of the wrist, and the arc the dots span is exactly how far
 `orbit_limit_deg` lets the face go.
 
+Both describe orbit mode, so they are only drawn while `orbit` is on.
+With it off, `offset` is simply where the face sits and there is nothing
+to set it against, so the guide draws nothing and the log says
+`arm_guide: nothing to draw (orbit is off)`. Turning `orbit` on while the
+guide is up brings them back within the second, like any other setting.
+
 Now the settings are things you look at:
 
 1. **`offset` X and Y** until the cyan line runs down the middle of your

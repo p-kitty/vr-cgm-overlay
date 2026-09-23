@@ -159,7 +159,7 @@ HINTS = {
     "vr.orbit": "ride around the forearm instead of being bolted to the controller",
     "vr.orbit_radius_m": "how far off the arm's centreline the face floats",
     "vr.orbit_limit_deg": "how far round the arm it may travel, up to 180",
-    "vr.arm_guide": "draw the arm the placement is aiming at, while you tune it",
+    "vr.arm_guide": "draw the arm orbit mode aims at, while you tune it; needs orbit on",
     "vr.gaze_fade": "dim the face while you are not looking at it",
     "vr.gaze_full_deg": "within this of the centre of view: full opacity",
     "vr.gaze_fade_deg": "past this: gaze_min_alpha, fading in between",

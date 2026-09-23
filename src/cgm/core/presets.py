@@ -2,8 +2,8 @@
 
 A watch face on the back of the hand and a watch face on the forearm
 are not the same placement with one number changed. They disagree about
-`offset`, about `rotation_deg`, and about whether the elbow model means
-anything at all, so keeping both in `[vr]` means keeping one of them in
+`offset`, about `rotation_deg`, and about whether the face should orbit
+the arm at all, so keeping both in `[vr]` means keeping one of them in
 a text file somewhere and pasting it back. Worse, the two share key
 names whose meaning depends on the other keys, so a half-applied swap
 is a placement that is wrong in a way neither of them ever was.
@@ -18,7 +18,7 @@ and `presets/wrist.toml` holds the placement keys, and only those:
     [vr]
     offset = [0.0, 0.0, 0.20]
     rotation_deg = [180.0, 70.0, -20.0]
-    elbow_model = true
+    orbit = true
 
 Files rather than a `[vr.presets.wrist]` table under `[vr]`, because
 `cgm.core.config` reads and writes every setting by walking two levels
@@ -30,9 +30,8 @@ this codebase it would be worst to complicate. A preset file is just a
 
 **What belongs in a preset is where the face goes; what belongs in
 config.toml is everything that stays true whichever answer you pick.**
-Your arm is the same arm, so `arm_length_m` and `wrist_m` are not
-per-preset. Which hand you hold the controller in does not change with
-the placement either, and neither does the gaze fade. `PRESET_KEYS`
+Which hand you hold the controller in does not change with the
+placement, and neither does the gaze fade. `PRESET_KEYS`
 below is that line drawn, and it is the only thing here worth arguing
 about.
 
@@ -104,9 +103,8 @@ HEADER = """# A placement preset. config.toml chooses it with `preset = "{name}"
 # and everything in it overrides the same key in config.toml's [vr]
 # section while it is chosen.
 #
-# Only the keys that decide where the face goes belong here. Your body
-# and your hardware -- hand, wrist_m, arm_length_m, the shoulder
-# numbers, opacity, arm_guide and the gaze settings -- stay in
+# Only the keys that decide where the face goes belong here. The rest
+# -- hand, opacity, arm_guide and the gaze settings -- stay in
 # config.toml, shared by every preset.
 """
 
