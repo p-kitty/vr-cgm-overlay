@@ -241,6 +241,10 @@ class FaceWindow:
         # to it, and then draws nothing. The reference has to be held
         # here, on the Python side, for as long as it is on screen.
         self._photo: ImageTk.PhotoImage | None = None
+        # What that photo was made from, and at what scale. The draw loop
+        # hands over a face every second, but the face only changes about
+        # once a minute, so most of what arrives is already on screen.
+        self._source: tuple | None = None
         # What size is currently on screen, so a change can be noticed,
         # and how wide the face behind it is: the unit decides that, so
         # it is taken off the image like the height is.
@@ -313,9 +317,17 @@ class FaceWindow:
         measured off the image rather than tracked, and the window is
         told to forget its geometry whenever it differs -- without that
         Tk keeps the old size and crops or pads the new picture into it.
+
+        A face identical to the one on screen changes nothing. Redrawing
+        it anyway repainted the window every second, on the same machine
+        a game is running on, to show the picture it already showed.
         """
         if self._closed:
             return
+        source = (self._scale, image.mode, image.size, image.tobytes())
+        if source == self._source:
+            return
+        self._source = source
         shown = compose(image, self._scale)
         if shown.size != self._shown:
             self._shown = shown.size
@@ -323,8 +335,12 @@ class FaceWindow:
             self._root.geometry("")
             self._place_marks()
         self._match_corner(shown)
-        self._photo = ImageTk.PhotoImage(shown)
-        self._label.configure(image=self._photo)
+        # The new photo goes up before the old one is let go: dropping
+        # the last reference deletes it in Tk, and a label left holding a
+        # deleted image draws blank until it is given another.
+        photo = ImageTk.PhotoImage(shown)
+        self._label.configure(image=photo)
+        self._photo = photo
 
     def _match_corner(self, shown: Image.Image) -> None:
         """Sit the corner marks on whatever colour the card's corner is.
@@ -355,7 +371,9 @@ class FaceWindow:
         self._root.attributes("-topmost", bool(on_top))
 
     def set_title(self, text: str) -> None:
-        if self._closed:
+        # Asked every second with the same text most of the time. Setting
+        # it again still has Windows redraw the caption and the taskbar.
+        if self._closed or text == self._root.title():
             return
         self._root.title(text)
 
