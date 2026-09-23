@@ -40,6 +40,7 @@ from pathlib import Path
 from PIL import Image
 
 from cgm.core import config as config_mod
+from cgm.core import paths as paths_mod
 from cgm.core import presets as presets_mod
 from cgm.desk import settings as settings_mod
 from cgm.desk.window import FaceWindow, compose, work_area
@@ -493,6 +494,37 @@ def check(path: Path, face: FaceWindow, show: bool) -> None:
     assert answer("Cancel") is False, "Cancel did not mean no"
     assert answer("escape") is False, "Escape did not mean no"
     say("the delete dialog is Tk's", "Delete / Cancel, Escape is Cancel")
+
+    # -- the way to the file --------------------------------------------------
+
+    # Pressed for real, with Explorer stood in for: the path it is handed
+    # is the one this window was opened on, not one worked out again.
+    revealed: list[Path] = []
+    window.reveal = revealed.append
+    folder_button = next(
+        w
+        for w in window._save_button.master.winfo_children()
+        if w.winfo_class() == "TButton" and w.cget("text") == "Open folder"
+    )
+    folder_button.invoke()
+    assert revealed == [path], revealed
+    shown = [
+        w.get()
+        for w in window._save_button.master.winfo_children()
+        if w.winfo_class() == "TEntry"
+    ]
+    assert shown == [str(path.resolve())], shown
+    assert paths_mod.reveal_command(path).endswith(f'"{path.resolve()}"')
+    say("Open folder hands Explorer this file", paths_mod.reveal_command(path))
+
+    def refuse(_path: Path) -> None:
+        raise OSError("no Explorer here")
+
+    window.reveal = refuse
+    folder_button.invoke()
+    assert window._status.cget("text") == "no Explorer here", "the failure was lost"
+    assert window.alive(), "a failed open closed the window"
+    say("a failed open is said, not raised", "on the status line")
 
     if show:
         window._say("a throwaway copy; nothing saved here reaches your config.toml")

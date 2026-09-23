@@ -65,6 +65,7 @@ from pathlib import Path
 from tkinter import simpledialog, ttk
 
 from cgm.core import config as config_mod
+from cgm.core import paths as paths_mod
 from cgm.core import presets as presets_mod
 from cgm.desk.window import beside, position_of, work_area
 
@@ -439,6 +440,7 @@ class SettingsWindow:
             buttons, text="Save", command=self.save, state="disabled"
         )
         self._save_button.pack(side="right", padx=(0, 8))
+        self._build_folder_row(buttons)
 
         # Watched only after every row is built, so filling the boxes in
         # is not itself an edit. What counts as one is any write to any
@@ -511,6 +513,43 @@ class SettingsWindow:
             bar, "delete", self._delete_preset
         )
         self._offer_preset_buttons(True)
+
+    def _build_folder_row(self, bar: ttk.Frame) -> None:
+        """A way to the file itself, and its path in a box to copy.
+
+        The window offers what config.toml holds, not everything around
+        it: the comments that explain each setting, the log, the preset
+        files. In the bundled app all of that sits under %APPDATA%, which
+        Explorer hides, so without this the way there is knowing to type
+        it into the address bar.
+
+        The path is the one this window was opened on, which is the one
+        the run loaded -- `--config` or the default -- rather than worked
+        out again here and possibly differently. It sits in a read-only
+        box rather than a label so it can be selected and copied.
+        """
+        ttk.Button(bar, text="Open folder", command=self._open_folder).pack(
+            side="left"
+        )
+        # Held on self: a variable only the widget refers to is collected
+        # on the way out of here, and the box then shows nothing.
+        self._path_var = tk.StringVar(value=str(self._path.resolve()))
+        ttk.Entry(bar, textvariable=self._path_var, state="readonly").pack(
+            side="left", fill="x", expand=True, padx=(8, 12)
+        )
+
+    # Explorer, as an attribute for the same reason as the two questions
+    # below: tools/check_settings.py presses the button without a window
+    # appearing on the desktop it is run from.
+    reveal = staticmethod(paths_mod.reveal)
+
+    def _open_folder(self) -> None:
+        try:
+            self.reveal(self._path)
+        except OSError as exc:
+            self._say(str(exc))
+            return
+        log.info("opened the folder holding %s", self._path)
 
     # The two questions the buttons ask, as attributes so that
     # tools/check_settings.py can answer them without a modal dialog

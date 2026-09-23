@@ -39,6 +39,13 @@ until Save, because every save is a full re-read and a value half typed
 on the way to `80` is a real setting for as long as it takes to type the
 next digit.
 
+What the window does not show -- the comments that explain each
+setting, the log, the preset files -- is in the folder beside
+`config.toml`. **Open folder**, at the bottom of the window, opens it in
+Explorer with the file selected, and the box beside it holds the full
+path to copy. In the bundled app that folder is under `%APPDATA%`, which
+Explorer hides.
+
 `[vr]` is offered like everything else, with `offset` and
 `rotation_deg` as three boxes each. Placement is still something you
 judge with the headset on: change a number, press Save, watch the face

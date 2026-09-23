@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -38,6 +39,34 @@ class DefaultConfig(unittest.TestCase):
 
     def test_this_process_is_not_the_build(self):
         self.assertFalse(paths.is_frozen())
+
+
+class Reveal(unittest.TestCase):
+    def setUp(self):
+        # A space in it, since that is where quoting goes wrong.
+        made = self.enterContext(tempfile.TemporaryDirectory(prefix="a b "))
+        self.folder = Path(made).resolve()
+
+    def test_an_existing_file_is_selected_in_its_folder(self):
+        config = self.folder / "config.toml"
+        config.write_text("", encoding="utf-8")
+        # Quoted after the comma, which is the form Explorer understands.
+        self.assertEqual(paths.reveal_command(config), f'explorer /select,"{config}"')
+
+    def test_a_file_not_written_yet_opens_its_folder(self):
+        config = self.folder / "config.toml"
+        self.assertEqual(paths.reveal_command(config), f'explorer "{self.folder}"')
+
+    def test_a_folder_not_made_yet_opens_the_nearest_that_is(self):
+        config = self.folder / "vr-cgm-overlay" / "config.toml"
+        self.assertEqual(paths.reveal_command(config), f'explorer "{self.folder}"')
+
+    @unittest.skipUnless(sys.platform == "win32", "Explorer is Windows")
+    def test_reveal_launches_that_command(self):
+        config = self.folder / "config.toml"
+        launched = []
+        paths.reveal(config, launch=launched.append)
+        self.assertEqual(launched, [paths.reveal_command(config)])
 
 
 if __name__ == "__main__":

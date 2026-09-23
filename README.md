@@ -248,7 +248,7 @@ is gone, Windows places the window instead.
 **Click the gear** in the top corner of the face, or right-click
 anywhere on it, for the settings window. It edits `config.toml`, which
 the running app picks up, and refuses values the app could not start
-with.
+with. **Open folder** at the bottom takes you to the file itself.
 
 Placement is under the `vr`, `vr orbit` and `vr gaze` tabs. Adjust it
 with the headset on: change a number, press Save, watch the face move.
