@@ -248,3 +248,27 @@ a neutral grip, so reading it and composing it with `offset` would give
 the same placement across devices. Not done: it needs the render model
 name and a component state per device, and one line in `config.toml` has
 covered it so far.
+
+## Placing the face by grabbing it was tried and turned down
+
+Issue #16 asked for the face to be placed by gripping it with the other
+controller and letting go where it should stay. It was built and tried
+on a Quest 3 through Virtual Desktop on 2026-09-23, and turned down as
+far harder to use than typing the numbers. Typing `offset` and
+`rotation_deg` in the settings window stays the way to place it.
+
+Two versions were tried, and each failed differently:
+
+- **Carried freely**, keeping the pose the face had relative to the
+  grabbing controller when the grip went down. Where it ended up
+  depended on how the hand was held at that moment, turning the wrist
+  swung it through a wide arc, and its angle followed the hand.
+- **On a rail**: X and Y kept, the face at the point on the controller's
+  Z axis nearest the grabbing hand, the angle left alone, and the rail
+  drawn as the guide's cyan line while held. Predictable, and still
+  very awkward.
+
+What was learned and holds either way: the legacy
+`IVRSystem.getControllerState` grip does reach a background overlay app
+through Virtual Desktop, so any later use of a controller button does
+not need SteamVR Input just to be heard.
