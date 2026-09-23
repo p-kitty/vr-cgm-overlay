@@ -18,11 +18,15 @@ not touch.
 The two never share a file, deliberately: trying a build on the same
 machine the code is developed on leaves the development config, its
 log and its window position alone. `--config` still overrides either.
+
+Wherever it ends up, `reveal` opens it in Explorer, because the second
+of those places is one Explorer hides and nobody finds unprompted.
 """
 
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -72,3 +76,35 @@ def example_config(*, frozen: bool | None = None) -> Path:
     if frozen:
         return Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent)) / EXAMPLE_NAME
     return CHECKOUT / EXAMPLE_NAME
+
+
+def reveal_command(path: Path) -> str:
+    """The Explorer command line that shows `path`, selected in its folder.
+
+    A file that is not there yet -- a run that has not saved one -- gets
+    the nearest folder that is, rather than an Explorer that opens on
+    Documents because the thing it was told to select does not exist.
+
+    One string rather than a list on purpose. Explorer reads its own
+    command line and wants `/select,"<path>"`: quoted after the comma,
+    not around the whole switch, which is what `subprocess` would make
+    of a list the moment the path had a space in it.
+    """
+    path = Path(path).resolve()
+    if path.is_file():
+        return f'explorer /select,"{path}"'
+    folder = path.parent
+    while not folder.is_dir() and folder != folder.parent:
+        folder = folder.parent
+    return f'explorer "{folder}"'
+
+
+def reveal(path: Path, *, launch=subprocess.Popen) -> None:
+    """Open Explorer on `path`. OSError if there is no Explorer to open.
+
+    Started and left: Explorer answers 1 whether or not it found
+    anything, so there is no exit code worth waiting for.
+    """
+    if sys.platform != "win32":
+        raise OSError("opening the folder needs Windows")
+    launch(reveal_command(path))
