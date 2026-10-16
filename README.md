@@ -2,7 +2,7 @@
 
 FreeStyle Libre glucose on your desktop and on your wrist in SteamVR, read through LibreLinkUp.
 
-<video src="https://github.com/user-attachments/assets/9efe404e-5690-42d1-820f-5769808571d1" width="480" controls></video>
+<img src="docs/demo.webp" width="480" alt="The overlay in SteamVR">
 
 ![the desktop window](screenshot-window.png)
 
